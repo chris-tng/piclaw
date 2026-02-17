@@ -1,6 +1,6 @@
-# Pibox - Minimal Pi Coding Agent Sandbox
+# PiClaw - Minimal Pi Agent Sandbox
 
-![Pibox](docs/icon-256.png)
+![PiClaw](docs/icon-256.png)
 
 A minimal Docker-based sandbox for running [Pi Coding Agent](https://github.com/badlogic/pi-mono) in an isolated Debian environment, with an optional WhatsApp integration via **piclaw**. Inspired by [agentbox](https://github.com/rcarmo/agentbox) and [nanoclaw](https://github.com/qwibitai/nanoclaw).
 
@@ -62,14 +62,14 @@ By default, `docker-compose.yml` bind-mounts `./workspace`. To use a different p
 
 ```bash
 # Use a directory on an external drive
-echo 'WORKSPACE_PATH=/mnt/data/pibox-workspace' >> .env
+echo 'WORKSPACE_PATH=/mnt/data/piclaw-workspace' >> .env
 make up
 ```
 
 Or override directly:
 
 ```bash
-WORKSPACE_PATH=/mnt/data/pibox-workspace docker compose up -d
+WORKSPACE_PATH=/mnt/data/piclaw-workspace docker compose up -d
 ```
 
 ### Piclaw path overrides
@@ -154,13 +154,13 @@ MIT
 
 ## Container Runtime
 
-Pibox is a standard OCI image and works with any compliant container runtime:
+PiClaw is a standard OCI image and works with any compliant container runtime:
 
 - **Docker** / Docker Desktop — primary development target
 - **Apple Containers** (macOS 26+) — works natively; use the GHCR image or build locally
 - **Podman**, **nerdctl**, etc. — standard `docker compose` equivalents work
 
-The multi-arch image (amd64 + arm64) is published to GHCR on every tag push, so `docker pull ghcr.io/<owner>/pibox:latest` works on both Intel and Apple Silicon.
+The multi-arch image (amd64 + arm64) is published to GHCR on every tag push, so `docker pull ghcr.io/<owner>/piclaw:latest` works on both Intel and Apple Silicon.
 
 ## CI / Release Pipeline
 
