@@ -10,6 +10,7 @@
   "scripts": {
     "start": "bun run src/index.ts",
     "dev": "bun --watch src/index.ts",
+    "build": "tsc",
     "typecheck": "tsc --noEmit",
     "build:web": "cp web/src/app.ts web/static/js/app.js && cp web/src/api.ts web/static/js/api.js",
     "test": "bun test"

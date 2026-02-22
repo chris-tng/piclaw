@@ -5,7 +5,7 @@ REGISTRY ?= ghcr.io
 GHCR_OWNER ?= $(shell whoami)
 GHCR_IMAGE := $(REGISTRY)/$(GHCR_OWNER)/$(IMAGE):$(TAG)
 
-.PHONY: help up down enter build dual-tag tag-ghcr sync-version bump-patch push
+.PHONY: help up down enter build build-piclaw dual-tag tag-ghcr sync-version bump-patch push
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -21,6 +21,9 @@ enter: ## Enter the running container as agent
 
 build: ## Build Docker image
 	docker build -t $(FULL_IMAGE) .
+
+build-piclaw: ## Build piclaw dist + web assets
+	cd piclaw && bun run build && bun run build:web
 
 dual-tag: build ## Tag image as ghcr.io/<user>/<image>:<tag>
 	docker tag $(FULL_IMAGE) $(GHCR_IMAGE)
@@ -43,7 +46,8 @@ bump-patch: ## Bump patch version and create git tag
 	NEW="$$MAJOR.$$MINOR.$$((PATCH + 1))"; \
 	echo $$NEW > VERSION; \
 	$(MAKE) sync-version; \
-	git add VERSION piclaw/package.json; \
+	$(MAKE) build-piclaw; \
+	git add VERSION piclaw/package.json piclaw/dist piclaw/web/static/js; \
 	git commit -m "Bump version to $$NEW"; \
 	git tag "v$$NEW"; \
 	echo "Bumped version: $$OLD -> $$NEW (tagged v$$NEW)"
