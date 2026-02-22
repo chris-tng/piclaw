@@ -5,7 +5,7 @@ REGISTRY ?= ghcr.io
 GHCR_OWNER ?= $(shell whoami)
 GHCR_IMAGE := $(REGISTRY)/$(GHCR_OWNER)/$(IMAGE):$(TAG)
 
-.PHONY: help up down enter build dual-tag tag-ghcr bump-patch push
+.PHONY: help up down enter build dual-tag tag-ghcr sync-version bump-patch push
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -27,6 +27,14 @@ dual-tag: build ## Tag image as ghcr.io/<user>/<image>:<tag>
 
 tag-ghcr: dual-tag ## Convenience alias for dual-tag
 
+sync-version: ## Sync piclaw/package.json version with VERSION
+	@set -e; \
+	VERSION=$$(cat VERSION); \
+	tmp=$$(mktemp); \
+	jq --arg version "$$VERSION" '.version=$$version' piclaw/package.json > $$tmp; \
+	mv $$tmp piclaw/package.json; \
+	echo "Synced piclaw/package.json to version $$VERSION"
+
 bump-patch: ## Bump patch version and create git tag
 	@OLD=$$(cat VERSION); \
 	MAJOR=$$(echo $$OLD | cut -d. -f1); \
@@ -34,7 +42,8 @@ bump-patch: ## Bump patch version and create git tag
 	PATCH=$$(echo $$OLD | cut -d. -f3); \
 	NEW="$$MAJOR.$$MINOR.$$((PATCH + 1))"; \
 	echo $$NEW > VERSION; \
-	git add VERSION; \
+	$(MAKE) sync-version; \
+	git add VERSION piclaw/package.json; \
 	git commit -m "Bump version to $$NEW"; \
 	git tag "v$$NEW"; \
 	echo "Bumped version: $$OLD -> $$NEW (tagged v$$NEW)"

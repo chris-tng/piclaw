@@ -1,6 +1,6 @@
 {
   "name": "piclaw",
-  "version": "0.1.0",
+  "version": "0.1.7",
   "description": "Personal pi coding agent assistant. Lightweight nanoclaw-style orchestrator using Bun and pi.",
   "type": "module",
   "main": "src/index.ts",
@@ -10,7 +10,9 @@
   "scripts": {
     "start": "bun run src/index.ts",
     "dev": "bun --watch src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:web": "cp web/src/app.ts web/static/js/app.js && cp web/src/api.ts web/static/js/api.js",
+    "test": "bun test"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
