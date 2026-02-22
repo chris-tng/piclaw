@@ -348,9 +348,33 @@ export class WebChannel {
     let thoughtBuffer = "";
     let draftBuffer = "";
 
+    const extractToolArgs = (args: unknown): Record<string, unknown> | null => {
+      if (!args) return null;
+      if (typeof args === "string") {
+        try {
+          const parsed = JSON.parse(args);
+          if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      }
+      if (typeof args === "object") {
+        const record = args as Record<string, unknown>;
+        const nested =
+          (record.arguments as Record<string, unknown> | undefined) ||
+          (record.input as Record<string, unknown> | undefined) ||
+          (record.params as Record<string, unknown> | undefined) ||
+          (record.parameters as Record<string, unknown> | undefined) ||
+          (record.args as Record<string, unknown> | undefined) ||
+          (record.payload as Record<string, unknown> | undefined);
+        return nested ?? record;
+      }
+      return null;
+    };
+
     const formatToolTitle = (toolName: string, args: unknown): string => {
-      if (!args || typeof args !== "object") return toolName;
-      const record = args as Record<string, unknown>;
+      const record = extractToolArgs(args);
+      if (!record) return toolName;
       let detail: string | null = null;
 
       const command = record.command;
@@ -360,7 +384,7 @@ export class WebChannel {
         detail = record.commands.filter((item) => typeof item === "string").join(" && ");
       }
 
-      const path = record.path;
+      const path = record.path || record.filePath || record.target;
       if (!detail && typeof path === "string") detail = path;
 
       if (!detail && Array.isArray(record.paths)) {
@@ -412,6 +436,14 @@ export class WebChannel {
               thread_id: threadId,
               agent_id: agentId,
               text: thoughtBuffer,
+            });
+          }
+          if (messageEvent.type === "toolcall_end") {
+            this.broadcastEvent("agent_status", {
+              thread_id: threadId,
+              agent_id: agentId,
+              type: "tool_call",
+              title: formatToolTitle(messageEvent.toolCall.name, messageEvent.toolCall.arguments),
             });
           }
           if (messageEvent.type === "text_start") {

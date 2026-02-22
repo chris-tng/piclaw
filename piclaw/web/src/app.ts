@@ -1343,6 +1343,11 @@ function App() {
                         setAgentPlan('');
                         setAgentThought('');
                     } else {
+                        if (data.type === 'thinking') {
+                            setAgentDraft('');
+                            setAgentPlan('');
+                            setAgentThought('');
+                        }
                         setAgentStatus(data);
                     }
                     return;
