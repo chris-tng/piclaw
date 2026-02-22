@@ -1,6 +1,41 @@
+import { readFileSync } from "fs";
 import { resolve } from "path";
 import { readEnvFile } from "./env.js";
 const envConfig = readEnvFile(["ASSISTANT_NAME", "PUSHOVER_APP_TOKEN", "PUSHOVER_USER_KEY", "PUSHOVER_DEVICE", "PUSHOVER_PRIORITY", "PUSHOVER_SOUND"]);
+function readJsonConfig(filePath) {
+    try {
+        const raw = readFileSync(filePath, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+            return parsed;
+        }
+    }
+    catch {
+        // ignore
+    }
+    return {};
+}
+function pickString(config, keys) {
+    for (const key of keys) {
+        const value = config[key];
+        if (typeof value === "string" && value.trim())
+            return value.trim();
+    }
+    return undefined;
+}
+function pickNumber(config, keys) {
+    for (const key of keys) {
+        const value = config[key];
+        if (typeof value === "number" && Number.isFinite(value))
+            return value;
+        if (typeof value === "string" && value.trim()) {
+            const parsed = parseInt(value, 10);
+            if (!Number.isNaN(parsed))
+                return parsed;
+        }
+    }
+    return undefined;
+}
 export const ASSISTANT_NAME = process.env.ASSISTANT_NAME || envConfig.ASSISTANT_NAME || "PiClaw";
 export const POLL_INTERVAL = 2000;
 export const SCHEDULER_POLL_INTERVAL = 60000;
@@ -9,6 +44,16 @@ export const SCHEDULER_POLL_INTERVAL = 60000;
 export const WORKSPACE_DIR = resolve(process.env.PICLAW_WORKSPACE || "/workspace");
 export const STORE_DIR = resolve(process.env.PICLAW_STORE || `${WORKSPACE_DIR}/.piclaw/store`);
 export const DATA_DIR = resolve(process.env.PICLAW_DATA || `${WORKSPACE_DIR}/.piclaw/data`);
+const PICLAW_CONFIG_PATH = resolve(WORKSPACE_DIR, ".piclaw", "config.json");
+const piclawConfig = readJsonConfig(PICLAW_CONFIG_PATH);
+const pushoverConfig = piclawConfig.pushover && typeof piclawConfig.pushover === "object"
+    ? piclawConfig.pushover
+    : piclawConfig;
+const configAppToken = pickString(pushoverConfig, ["appToken", "app_token", "PUSHOVER_APP_TOKEN"]);
+const configUserKey = pickString(pushoverConfig, ["userKey", "user_key", "PUSHOVER_USER_KEY"]);
+const configDevice = pickString(pushoverConfig, ["device", "PUSHOVER_DEVICE"]);
+const configSound = pickString(pushoverConfig, ["sound", "PUSHOVER_SOUND"]);
+const configPriority = pickNumber(pushoverConfig, ["priority", "PUSHOVER_PRIORITY"]);
 export const AGENT_TIMEOUT = parseInt(process.env.AGENT_TIMEOUT || "600000", 10); // 10min default
 export const IPC_POLL_INTERVAL = 1000;
 const CLI_ARGS = process.argv.slice(2);
@@ -48,8 +93,8 @@ function escapeRegex(str) {
 export const TRIGGER_PATTERN = new RegExp(`(?:^|\\s)@${escapeRegex(ASSISTANT_NAME)}\\b`, "i");
 export const TIMEZONE = process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
 // Pushover notification channel
-export const PUSHOVER_APP_TOKEN = process.env.PUSHOVER_APP_TOKEN || envConfig.PUSHOVER_APP_TOKEN || "";
-export const PUSHOVER_USER_KEY = process.env.PUSHOVER_USER_KEY || envConfig.PUSHOVER_USER_KEY || "";
-export const PUSHOVER_DEVICE = process.env.PUSHOVER_DEVICE || envConfig.PUSHOVER_DEVICE || "";
-export const PUSHOVER_PRIORITY = parseInt(process.env.PUSHOVER_PRIORITY || envConfig.PUSHOVER_PRIORITY || "0", 10);
-export const PUSHOVER_SOUND = process.env.PUSHOVER_SOUND || envConfig.PUSHOVER_SOUND || "";
+export const PUSHOVER_APP_TOKEN = process.env.PUSHOVER_APP_TOKEN || envConfig.PUSHOVER_APP_TOKEN || configAppToken || "";
+export const PUSHOVER_USER_KEY = process.env.PUSHOVER_USER_KEY || envConfig.PUSHOVER_USER_KEY || configUserKey || "";
+export const PUSHOVER_DEVICE = process.env.PUSHOVER_DEVICE || envConfig.PUSHOVER_DEVICE || configDevice || "";
+export const PUSHOVER_PRIORITY = parseInt(process.env.PUSHOVER_PRIORITY || envConfig.PUSHOVER_PRIORITY || (configPriority !== undefined ? String(configPriority) : "0"), 10);
+export const PUSHOVER_SOUND = process.env.PUSHOVER_SOUND || envConfig.PUSHOVER_SOUND || configSound || "";
