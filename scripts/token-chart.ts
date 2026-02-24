@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { readdirSync, statSync, readFileSync } from "fs";
+import { readdirSync, statSync, readFileSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 
 const args = process.argv.slice(2);
@@ -12,6 +12,13 @@ const sessionsCandidate = sessionsArgIndex >= 0 ? args[sessionsArgIndex + 1] : u
 const sessionsDir = sessionsCandidate && !sessionsCandidate.startsWith("--")
   ? sessionsCandidate
   : "/workspace/.piclaw/data/sessions";
+
+const ipcEnabled = args.includes("--ipc");
+const chatJidIndex = args.indexOf("--chat-jid");
+const chatJidCandidate = chatJidIndex >= 0 ? args[chatJidIndex + 1] : undefined;
+const chatJid = chatJidCandidate && !chatJidCandidate.startsWith("--") ? chatJidCandidate : "web:default";
+const dataDir = process.env.PICLAW_DATA || "/workspace/.piclaw/data";
+const messagesDir = join(dataDir, "ipc", "messages");
 
 const now = new Date();
 const start = new Date(now);
@@ -230,4 +237,13 @@ const summaryLines = [
   }),
 ];
 
-process.stdout.write(summaryLines.join("\n"));
+const message = summaryLines.join("\n");
+
+if (ipcEnabled) {
+  mkdirSync(messagesDir, { recursive: true });
+  const outPath = join(messagesDir, `msg_${Date.now()}_tokenchart.json`);
+  writeFileSync(outPath, JSON.stringify({ type: "message", chatJid, text: message }, null, 2));
+  process.stdout.write(outPath);
+} else {
+  process.stdout.write(message);
+}
