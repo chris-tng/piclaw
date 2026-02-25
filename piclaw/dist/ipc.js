@@ -23,7 +23,9 @@ export function startIpcWatcher(deps) {
                         const data = JSON.parse(readFileSync(fp, "utf-8"));
                         if (data.type === "message" && data.chatJid && data.text) {
                             await deps.sendMessage(data.chatJid, data.text);
-                            await deps.sendNudge?.(data.text);
+                            if (data.noNudge !== true) {
+                                await deps.sendNudge?.(data.text);
+                            }
                         }
                         unlinkSync(fp);
                     }
