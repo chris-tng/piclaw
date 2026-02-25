@@ -360,7 +360,7 @@ export class WebChannel {
     };
 
     const buildPreview = (text: string, maxLines: number): { preview: string; totalLines: number } => {
-      const value = (text || "").replace(/\r\n/g, "\n");
+      const value = (text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
       if (!value) return { preview: "", totalLines: 0 };
       const rawLines = value.split("\n");
       const totalLines = rawLines.reduce((acc, line) => acc + countSoftLines(line, PREVIEW_MAX_CHARS_PER_LINE), 0);
