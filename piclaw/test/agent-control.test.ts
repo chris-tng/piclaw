@@ -9,6 +9,7 @@ class StubSession {
   model: any = modelReasoning;
   thinkingLevel: ThinkingLevel = "low";
   reloadCalls = 0;
+  abortCalls = 0;
 
   async setModel(model: any) {
     this.model = model;
@@ -16,6 +17,10 @@ class StubSession {
 
   async reload() {
     this.reloadCalls += 1;
+  }
+
+  async abort() {
+    this.abortCalls += 1;
   }
 
   setThinkingLevel(level: ThinkingLevel) {
@@ -49,6 +54,9 @@ test("parseControlCommand parses model and thinking commands", () => {
   const thinkingCmd = parseControlCommand("/thinking high");
   expect(thinkingCmd?.type).toBe("thinking");
   expect(thinkingCmd && "level" in thinkingCmd ? thinkingCmd.level : null).toBe("high");
+
+  const restartCmd = parseControlCommand("/restart");
+  expect(restartCmd?.type).toBe("restart");
 });
 
 test("applyControlCommand switches model and thinking level", async () => {
@@ -91,6 +99,20 @@ test("applyControlCommand reports unsupported thinking", async () => {
 
   expect(result.status).toBe("error");
   expect(session.thinkingLevel).toBe("off");
+});
+
+test("applyControlCommand restarts agent", async () => {
+  const session = new StubSession();
+
+  const result = await applyControlCommand(session as any, registry, {
+    type: "restart",
+    raw: "/restart",
+  });
+
+  expect(result.status).toBe("success");
+  expect(session.abortCalls).toBe(1);
+  expect(session.reloadCalls).toBe(1);
+  expect(result.message).toContain("Agent restarted");
 });
 
 test("applyControlCommand lists models when /model has no args", async () => {

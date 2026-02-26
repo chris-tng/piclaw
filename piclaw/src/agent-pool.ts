@@ -5,6 +5,10 @@ import {
   type AgentSessionEvent,
   AuthStorage,
   createAgentSession,
+  createBashTool,
+  createEditTool,
+  createReadTool,
+  createWriteTool,
   DefaultResourceLoader,
   getAgentDir,
   ModelRegistry,
@@ -14,6 +18,7 @@ import {
 import { applyControlCommand, type AgentControlCommand, type AgentControlResult } from "./agent-control.js";
 import { AGENT_TIMEOUT, DATA_DIR, SESSIONS_DIR, WORKSPACE_DIR } from "./config.js";
 import { detectChannel } from "./router.js";
+import { createTrackedBashOperations } from "./tools/tracked-bash.js";
 
 export interface AgentOutput {
   status: "success" | "error";
@@ -57,6 +62,7 @@ export class AgentPool {
   private logsDir = join(WORKSPACE_DIR, "logs");
   private createSession?: AgentPoolOptions["createSession"];
   private sessionBinder?: (session: AgentSession, chatJid: string) => Promise<void> | void;
+  private bashOperations = createTrackedBashOperations();
 
   constructor(options: AgentPoolOptions = {}) {
     this.createSession = options.createSession;
@@ -345,6 +351,12 @@ export class AgentPool {
       settingsManager: this.settingsManager,
       resourceLoader,
       sessionManager: SessionManager.continueRecent(WORKSPACE_DIR, chatSessionDir),
+      tools: [
+        createReadTool(WORKSPACE_DIR),
+        createBashTool(WORKSPACE_DIR, { operations: this.bashOperations }),
+        createEditTool(WORKSPACE_DIR),
+        createWriteTool(WORKSPACE_DIR),
+      ],
     });
 
     this.pool.set(chatJid, { session, lastUsed: Date.now() });

@@ -1,6 +1,7 @@
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 import type { Model } from "@mariozechner/pi-ai";
 import type { AgentSession, ModelRegistry } from "@mariozechner/pi-coding-agent";
+import { killTrackedProcesses } from "./process-tracker.js";
 
 export type AgentControlCommand =
   | {
@@ -16,6 +17,10 @@ export type AgentControlCommand =
     }
   | {
       type: "commands";
+      raw: string;
+    }
+  | {
+      type: "restart";
       raw: string;
     };
 
@@ -92,6 +97,13 @@ export function parseControlCommand(text: string, triggerPattern?: RegExp): Agen
     };
   }
 
+  if (command.toLowerCase() === "/restart") {
+    return {
+      type: "restart",
+      raw: cleaned,
+    };
+  }
+
   return null;
 }
 
@@ -106,6 +118,32 @@ export async function applyControlCommand(
   modelRegistry: ModelRegistry,
   command: AgentControlCommand
 ): Promise<AgentControlResult> {
+  if (command.type === "restart") {
+    try {
+      await session.abort();
+    } catch {
+      // Ignore abort failures
+    }
+
+    const killed = killTrackedProcesses();
+
+    try {
+      await session.reload();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        status: "error",
+        message: `Restart failed after killing ${killed} subprocess${killed === 1 ? "" : "es"}: ${message}`,
+      };
+    }
+
+    const killedLabel = killed === 1 ? "1 subprocess" : `${killed} subprocesses`;
+    return {
+      status: "success",
+      message: `Agent restarted. Killed ${killedLabel}.`,
+    };
+  }
+
   if (command.type === "model") {
     modelRegistry.refresh();
 
@@ -214,6 +252,7 @@ export async function applyControlCommand(
 
     addLine("/model", "Select model or list available models");
     addLine("/thinking", "Show or set thinking level");
+    addLine("/restart", "Restart the agent and stop subprocesses");
     addLine("/commands", "List available commands");
 
     const extensionRunner = session.extensionRunner;
