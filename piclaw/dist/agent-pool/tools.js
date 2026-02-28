@@ -2,6 +2,7 @@ import { createBashTool, createEditTool, createReadTool, createWriteTool, } from
 import { createAttachmentTool } from "./attachments.js";
 import { createMessageSearchTool } from "./message-search.js";
 import { createModelListTool } from "./model-list.js";
+import { createModelStateTool } from "./model-state.js";
 import { createModelSwitchTool } from "./model-switch.js";
 import { createThinkingSwitchTool } from "./thinking-switch.js";
 export function createSessionTools(workspaceDir, bashOperations, chatJid, attachments, modelRegistry, getSession) {
@@ -15,6 +16,7 @@ export function createSessionTools(workspaceDir, bashOperations, chatJid, attach
         createAttachmentTool(chatJid, attachments),
         createMessageSearchTool(chatJid),
         createModelListTool(modelRegistry, () => getSession()?.model),
+        createModelStateTool(getSession),
         createModelSwitchTool(getSession, modelRegistry),
         createThinkingSwitchTool(getSession),
     ];

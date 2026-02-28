@@ -20,7 +20,7 @@ test("createSessionTools returns base and custom tools", () => {
   );
 
   expect(tools.length).toBe(4);
-  expect(customTools.length).toBe(5);
+  expect(customTools.length).toBe(6);
   const names = customTools.map((tool) => tool.name).sort();
-  expect(names).toEqual(["attach_file", "list_models", "search_messages", "switch_model", "switch_thinking"]);
+  expect(names).toEqual(["attach_file", "get_model_state", "list_models", "search_messages", "switch_model", "switch_thinking"]);
 });
