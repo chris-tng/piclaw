@@ -1,15 +1,14 @@
 import { mkdirSync } from "fs";
 import { join } from "path";
-import { AuthStorage, ModelRegistry, SettingsManager, getAgentDir, } from "@mariozechner/pi-coding-agent";
+import { AuthStorage, createBashTool, createEditTool, createReadTool, createWriteTool, ModelRegistry, SettingsManager, getAgentDir, } from "@mariozechner/pi-coding-agent";
 import { applyControlCommand } from "./agent-control.js";
 import { AGENT_TIMEOUT, SESSIONS_DIR, WORKSPACE_DIR } from "./config.js";
 import { detectChannel } from "./router.js";
 import { createTrackedBashOperations } from "./tools/tracked-bash.js";
-import { AttachmentRegistry } from "./agent-pool/attachments.js";
+import { getAttachmentRegistry } from "./agent-pool/attachments.js";
 import { writeAgentLog } from "./agent-pool/logging.js";
 import { createDefaultSession, ensureSessionDir } from "./agent-pool/session.js";
 import { executeSlashCommand } from "./agent-pool/slash-command.js";
-import { createSessionTools } from "./agent-pool/tools.js";
 /** How long (ms) an idle session stays cached before being disposed. */
 const IDLE_TTL = 10 * 60 * 1000; // 10 minutes
 const CLEANUP_INTERVAL = 60 * 1000; // check every minute
@@ -31,7 +30,7 @@ export class AgentPool {
     createSession;
     sessionBinder;
     bashOperations = createTrackedBashOperations();
-    attachments = new AttachmentRegistry();
+    attachments = getAttachmentRegistry();
     constructor(options = {}) {
         this.createSession = options.createSession;
         this.authStorage = AuthStorage.create();
@@ -181,13 +180,17 @@ export class AgentPool {
             console.log(`[agent-pool] Session ready for ${chatJid} (pool size: ${this.pool.size})`);
             return session;
         }
-        const { tools, customTools } = createSessionTools(WORKSPACE_DIR, this.bashOperations, chatJid, this.attachments);
+        const tools = [
+            createReadTool(WORKSPACE_DIR),
+            createBashTool(WORKSPACE_DIR, { operations: this.bashOperations }),
+            createEditTool(WORKSPACE_DIR),
+            createWriteTool(WORKSPACE_DIR),
+        ];
         const session = await createDefaultSession(chatJid, {
             authStorage: this.authStorage,
             modelRegistry: this.modelRegistry,
             settingsManager: this.settingsManager,
             tools,
-            customTools,
         });
         this.pool.set(chatJid, { session, lastUsed: Date.now() });
         await this.bindSession(session, chatJid);

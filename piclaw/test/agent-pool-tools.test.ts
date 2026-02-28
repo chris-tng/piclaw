@@ -1,22 +1,62 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { builtinExtensionFactories } from "../src/extensions/index.js";
 
-import { AttachmentRegistry } from "../src/agent-pool/attachments.js";
-import { createSessionTools } from "../src/agent-pool/tools.js";
-import { createTrackedBashOperations } from "../src/tools/tracked-bash.js";
-import { getTestWorkspace } from "./helpers.js";
+function makeFakeApi() {
+  const tools = new Map<string, any>();
+  const commands = new Map<string, any>();
+  return {
+    api: {
+      on() {},
+      registerTool(tool: any) { tools.set(tool.name, tool); },
+      registerCommand(name: string, opts: any) { commands.set(name, opts); },
+      registerShortcut() {},
+      registerFlag() {},
+      getFlag() { return undefined; },
+      registerMessageRenderer() {},
+      sendMessage() {},
+      sendUserMessage() {},
+      appendEntry() {},
+      setSessionName() {},
+      getSessionName() { return undefined; },
+      setLabel() {},
+      exec: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+      getActiveTools: () => [],
+      getAllTools: () => [],
+      setActiveTools() {},
+      getCommands: () => [],
+      setModel: async () => true,
+      getThinkingLevel: () => "off" as any,
+      setThinkingLevel() {},
+      registerProvider() {},
+      unregisterProvider() {},
+    } as unknown as ExtensionAPI,
+    tools,
+    commands,
+  };
+}
 
-test("createSessionTools returns base and custom tools", () => {
-  const ws = getTestWorkspace();
-  const registry = new AttachmentRegistry();
-  const { tools, customTools } = createSessionTools(
-    ws.workspace,
-    createTrackedBashOperations(),
-    "web:default",
-    registry,
-  );
+describe("builtin extension factories", () => {
+  test("register all expected tools and commands", () => {
+    const fake = makeFakeApi();
+    for (const factory of builtinExtensionFactories) {
+      factory(fake.api);
+    }
 
-  expect(tools.length).toBe(4);
-  expect(customTools.length).toBe(2);
-  const names = customTools.map((tool) => tool.name).sort();
-  expect(names).toEqual(["attach_file", "search_messages"]);
+    // Tools from extensions
+    expect(fake.tools.has("attach_file")).toBe(true);
+    expect(fake.tools.has("search_messages")).toBe(true);
+    expect(fake.tools.has("get_model_state")).toBe(true);
+    expect(fake.tools.has("list_models")).toBe(true);
+    expect(fake.tools.has("switch_model")).toBe(true);
+    expect(fake.tools.has("switch_thinking")).toBe(true);
+
+    // Commands from scheduled-tasks
+    expect(fake.commands.has("tasks")).toBe(true);
+    expect(fake.commands.has("scheduled")).toBe(true);
+  });
+
+  test("factories array has expected length", () => {
+    expect(builtinExtensionFactories.length).toBe(4);
+  });
 });

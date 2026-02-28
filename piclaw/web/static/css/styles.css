@@ -1080,18 +1080,31 @@ body {
 
 .agent-thinking-body ul,
 .agent-thinking-body ol {
-    margin: 0;
+    margin: 0.1em 0;
     padding-left: 1.1em;
+    line-height: 1.15;
 }
 
 .agent-thinking-body li {
     margin: 0;
     padding: 0;
-    line-height: 1.1;
+    line-height: 1.15;
 }
 
 .agent-thinking-body li + li {
-    margin-top: 0.15em;
+    margin-top: 0.1em;
+}
+
+.agent-thinking-body li p {
+    margin: 0;
+    padding: 0;
+    line-height: inherit;
+}
+
+.agent-thinking-body li ul,
+.agent-thinking-body li ol {
+    margin: 0;
+    padding-left: 1em;
 }
 
 .agent-thinking-body blockquote {

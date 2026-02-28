@@ -4,6 +4,10 @@ import {
   type AgentSession,
   type AgentSessionEvent,
   AuthStorage,
+  createBashTool,
+  createEditTool,
+  createReadTool,
+  createWriteTool,
   ModelRegistry,
   SettingsManager,
   getAgentDir,
@@ -13,11 +17,10 @@ import { applyControlCommand, type AgentControlCommand, type AgentControlResult 
 import { AGENT_TIMEOUT, SESSIONS_DIR, WORKSPACE_DIR } from "./config.js";
 import { detectChannel } from "./router.js";
 import { createTrackedBashOperations } from "./tools/tracked-bash.js";
-import { AttachmentRegistry, type AttachmentInfo } from "./agent-pool/attachments.js";
+import { getAttachmentRegistry, type AttachmentInfo } from "./agent-pool/attachments.js";
 import { writeAgentLog } from "./agent-pool/logging.js";
 import { createDefaultSession, ensureSessionDir } from "./agent-pool/session.js";
 import { executeSlashCommand } from "./agent-pool/slash-command.js";
-import { createSessionTools } from "./agent-pool/tools.js";
 
 export interface AgentOutput {
   status: "success" | "error";
@@ -75,7 +78,7 @@ export class AgentPool {
   private createSession?: AgentPoolOptions["createSession"];
   private sessionBinder?: (session: AgentSession, chatJid: string) => Promise<void> | void;
   private bashOperations = createTrackedBashOperations();
-  private attachments = new AttachmentRegistry();
+  private attachments = getAttachmentRegistry();
 
   constructor(options: AgentPoolOptions = {}) {
     this.createSession = options.createSession;
@@ -246,18 +249,17 @@ export class AgentPool {
       return session;
     }
 
-    const { tools, customTools } = createSessionTools(
-      WORKSPACE_DIR,
-      this.bashOperations,
-      chatJid,
-      this.attachments,
-    );
+    const tools = [
+      createReadTool(WORKSPACE_DIR),
+      createBashTool(WORKSPACE_DIR, { operations: this.bashOperations }),
+      createEditTool(WORKSPACE_DIR),
+      createWriteTool(WORKSPACE_DIR),
+    ];
     const session = await createDefaultSession(chatJid, {
       authStorage: this.authStorage,
       modelRegistry: this.modelRegistry,
       settingsManager: this.settingsManager,
       tools,
-      customTools,
     });
 
     this.pool.set(chatJid, { session, lastUsed: Date.now() });

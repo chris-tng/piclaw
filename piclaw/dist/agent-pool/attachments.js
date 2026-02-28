@@ -1,7 +1,9 @@
-import { basename, resolve, relative } from "path";
-import { Type } from "@sinclair/typebox";
-import { createMedia } from "../db.js";
-import { WORKSPACE_DIR } from "../config.js";
+/**
+ * Shared attachment registry – tracks pending file attachments per chat.
+ *
+ * The attach_file extension tool registers attachments here; AgentPool
+ * reads them via take() after a prompt completes.
+ */
 export class AttachmentRegistry {
     pending = new Map();
     register(chatJid, info) {
@@ -18,89 +20,11 @@ export class AttachmentRegistry {
         this.pending.delete(chatJid);
     }
 }
-const AttachmentSchema = Type.Object({
-    path: Type.String({ description: "Path to a file inside the workspace." }),
-    name: Type.Optional(Type.String({ description: "Optional display name for the attachment." })),
-    content_type: Type.Optional(Type.String({ description: "Optional MIME type override." })),
-    kind: Type.Optional(Type.Union([Type.Literal("image"), Type.Literal("file")], { description: "Force attachment kind." })),
-});
-function resolveWorkspacePath(inputPath) {
-    if (!inputPath)
-        return null;
-    const resolved = resolve(WORKSPACE_DIR, inputPath);
-    const rel = relative(WORKSPACE_DIR, resolved);
-    if (rel.startsWith("..") || rel.startsWith("/"))
-        return null;
-    return resolved;
-}
-function detectContentType(path, fallback) {
-    if (fallback)
-        return fallback;
-    try {
-        const file = Bun.file(path);
-        if (file.type)
-            return file.type;
-    }
-    catch {
-        // ignore
-    }
-    return "application/octet-stream";
-}
-export function createAttachmentTool(chatJid, registry) {
-    return {
-        name: "attach_file",
-        label: "attach_file",
-        description: "Attach a file from the workspace so the user can download it in the web UI. Returns an attachment handle.",
-        parameters: AttachmentSchema,
-        execute: async (_toolCallId, params, _signal, _onUpdate, _ctx) => {
-            const resolved = resolveWorkspacePath(params.path);
-            if (!resolved) {
-                return {
-                    content: [{ type: "text", text: "Attachment path must be inside the workspace." }],
-                    details: {},
-                };
-            }
-            const file = Bun.file(resolved);
-            if (!(await file.exists())) {
-                return {
-                    content: [{ type: "text", text: `File not found: ${params.path}` }],
-                    details: {},
-                };
-            }
-            const data = new Uint8Array(await file.arrayBuffer());
-            const filename = params.name || basename(resolved);
-            const contentType = detectContentType(resolved, params.content_type);
-            const size = file.size;
-            const kind = params.kind || (contentType.startsWith("image/") ? "image" : "file");
-            const mediaId = createMedia(filename, contentType, data, null, {
-                size,
-                source_path: resolved,
-                kind,
-            });
-            const info = {
-                id: mediaId,
-                name: filename,
-                contentType,
-                size,
-                kind,
-                sourcePath: resolved,
-            };
-            registry.register(chatJid, info);
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: `Attached ${filename} (${Math.round(size / 1024)} KB). You can reference it as attachment:${filename}.`,
-                    },
-                ],
-                details: {
-                    media_id: mediaId,
-                    filename,
-                    content_type: contentType,
-                    size,
-                    kind,
-                },
-            };
-        },
-    };
+// ── Module-level singleton ────────────────────────────────
+// Shared between AgentPool and the file-attachments extension.
+let _instance = null;
+export function getAttachmentRegistry() {
+    if (!_instance)
+        _instance = new AttachmentRegistry();
+    return _instance;
 }

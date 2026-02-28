@@ -4,10 +4,14 @@
  * without any file on disk.
  */
 import type { ExtensionFactory } from "@mariozechner/pi-coding-agent";
+import { fileAttachments } from "./file-attachments.js";
+import { messageSearch } from "./message-search.js";
 import { modelControl } from "./model-control.js";
 import { scheduledTasks } from "./scheduled-tasks.js";
 
 export const builtinExtensionFactories: ExtensionFactory[] = [
+  fileAttachments,
+  messageSearch,
   modelControl,
   scheduledTasks,
 ];

@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { writeFileSync } from "fs";
 import { join } from "path";
 import { getTestWorkspace, setEnv } from "./helpers.js";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 let restoreEnv: (() => void) | null = null;
 
@@ -10,9 +11,46 @@ afterEach(() => {
   restoreEnv = null;
 });
 
+function makeFakeApi() {
+  const tools = new Map<string, any>();
+  return {
+    api: {
+      on() {},
+      registerTool(tool: any) { tools.set(tool.name, tool); },
+      registerCommand() {},
+      registerShortcut() {},
+      registerFlag() {},
+      getFlag() { return undefined; },
+      registerMessageRenderer() {},
+      sendMessage() {},
+      sendUserMessage() {},
+      appendEntry() {},
+      setSessionName() {},
+      getSessionName() { return undefined; },
+      setLabel() {},
+      exec: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+      getActiveTools: () => [],
+      getAllTools: () => [],
+      setActiveTools() {},
+      getCommands: () => [],
+      setModel: async () => true,
+      getThinkingLevel: () => "off" as any,
+      setThinkingLevel() {},
+      registerProvider() {},
+      unregisterProvider() {},
+    } as unknown as ExtensionAPI,
+    tools,
+  };
+}
+
 test("attach_file tool stores media and registers attachment", async () => {
   const ws = getTestWorkspace();
-  restoreEnv = setEnv({ PICLAW_WORKSPACE: ws.workspace, PICLAW_STORE: ws.store, PICLAW_DATA: ws.data });
+  restoreEnv = setEnv({
+    PICLAW_WORKSPACE: ws.workspace,
+    PICLAW_STORE: ws.store,
+    PICLAW_DATA: ws.data,
+    PICLAW_CHAT_JID: "web:default",
+  });
 
   const db = await import("../src/db.js");
   db.initDatabase();
@@ -20,12 +58,16 @@ test("attach_file tool stores media and registers attachment", async () => {
   const filePath = join(ws.workspace, "hello.txt");
   writeFileSync(filePath, "hello", "utf8");
 
-  const { AttachmentRegistry, createAttachmentTool } = await import("../src/agent-pool/attachments.js");
+  const { fileAttachments } = await import("../src/extensions/file-attachments.js");
+  const { getAttachmentRegistry } = await import("../src/agent-pool/attachments.js");
 
-  const registry = new AttachmentRegistry();
-  const tool = createAttachmentTool("web:default", registry);
+  const fake = makeFakeApi();
+  fileAttachments(fake.api);
 
-  const result = await tool.execute("call", { path: "hello.txt" }, undefined, undefined, undefined);
+  const tool = fake.tools.get("attach_file");
+  expect(tool).toBeDefined();
+
+  const result = await tool.execute("call", { path: "hello.txt" });
   const details = result.details as any;
   expect(details.media_id).toBeDefined();
 
@@ -34,6 +76,7 @@ test("attach_file tool stores media and registers attachment", async () => {
   expect(media?.metadata?.size).toBe(5);
   expect(media?.metadata?.kind).toBe("file");
 
+  const registry = getAttachmentRegistry();
   const pending = registry.take("web:default");
   expect(pending.length).toBe(1);
   expect(pending[0].id).toBe(details.media_id);

@@ -26,7 +26,6 @@ export async function createDefaultSession(chatJid, options) {
         resourceLoader,
         sessionManager: SessionManager.continueRecent(WORKSPACE_DIR, chatSessionDir),
         tools: options.tools,
-        customTools: options.customTools,
     });
     return session;
 }
