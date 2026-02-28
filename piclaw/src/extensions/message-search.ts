@@ -204,9 +204,22 @@ async function execute(
   return { content: [{ type: "text", text: `${header}\n${lines.join("\n")}` }], details };
 }
 
+// ── System prompt hint ─────────────────────────────────────
+
+const SEARCH_HINT = [
+  "## Message Search",
+  "Use search_messages to look up previous conversations, find messages by",
+  "keyword, or retrieve messages by hashtag. Supports full-text search,",
+  "#hashtag filtering, and row_id lookup for specific messages.",
+].join("\n");
+
 // ── Factory ───────────────────────────────────────────────
 
 export const messageSearch: ExtensionFactory = (pi: ExtensionAPI) => {
+  pi.on("before_agent_start", async (event) => {
+    return { systemPrompt: `${event.systemPrompt}\n\n${SEARCH_HINT}` };
+  });
+
   pi.registerTool({
     name: "search_messages",
     label: "search_messages",

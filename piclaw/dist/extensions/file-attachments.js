@@ -69,12 +69,25 @@ async function execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
         sourcePath: resolved,
     });
     return {
-        content: [{ type: "text", text: `Attached ${filename} (${Math.round(size / 1024)} KB). You can reference it as attachment:${filename}.` }],
+        content: [{ type: "text", text: `Attached "${filename}" (${Math.round(size / 1024)} KB). A download card will appear in the chat automatically.` }],
         details: { media_id: mediaId, filename, content_type: contentType, size, kind },
     };
 }
+// ── System prompt hint ─────────────────────────────────────
+const ATTACHMENT_HINT = [
+    "## File Attachments",
+    "When you produce a file the user should download (e.g. a generated image,",
+    "CSV, PDF, archive), call attach_file with the workspace path.",
+    "The file will appear as a download card in the chat — you do NOT need to",
+    "paste the file contents into your reply.",
+    "After calling attach_file, mention what you attached in your response",
+    "(e.g. \"Here's the report\") so the user knows to look for the download card below.",
+].join("\n");
 // ── Factory ───────────────────────────────────────────────
 export const fileAttachments = (pi) => {
+    pi.on("before_agent_start", async (event) => {
+        return { systemPrompt: `${event.systemPrompt}\n\n${ATTACHMENT_HINT}` };
+    });
     pi.registerTool({
         name: "attach_file",
         label: "attach_file",

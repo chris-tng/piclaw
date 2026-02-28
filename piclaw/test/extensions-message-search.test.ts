@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { getTestWorkspace, setEnv } from "./helpers.js";
+import { initDatabase, storeMessage, storeChatMetadata } from "../src/db.js";
 
 let restoreEnv: (() => void) | null = null;
 
@@ -47,9 +48,8 @@ describe("message-search extension", () => {
       PICLAW_DATA: ws.data,
       PICLAW_CHAT_JID: "web:test",
     });
-    const db = require("../src/db.js");
-    db.initDatabase();
-    db.storeChatMetadata("web:test", new Date().toISOString(), "Web");
+    initDatabase();
+    storeChatMetadata("web:test", new Date().toISOString(), "Web");
   });
 
   afterEach(() => {
@@ -58,8 +58,7 @@ describe("message-search extension", () => {
   });
 
   function insertMessage(content: string, overrides: Record<string, any> = {}) {
-    const db = require("../src/db.js");
-    db.storeMessage({
+    storeMessage({
       id: `msg-${Math.random()}`,
       chat_jid: "web:test",
       sender: "user",
@@ -177,9 +176,8 @@ describe("message-search extension", () => {
   test("chat_jid 'all' searches across chats", async () => {
     insertMessage("In test chat");
 
-    const db = require("../src/db.js");
-    db.storeChatMetadata("web:other", new Date().toISOString(), "Web");
-    db.storeMessage({
+    storeChatMetadata("web:other", new Date().toISOString(), "Web");
+    storeMessage({
       id: `msg-other-${Math.random()}`,
       chat_jid: "web:other",
       sender: "user",
