@@ -173,16 +173,20 @@ export function WorkspaceExplorer() {
                             const isDir = node.type === 'dir';
                             const expandedDir = isDir && expanded.has(node.path);
                             const caret = isDir ? (expandedDir ? '▾' : '▸') : '';
+                            const caretWidth = 10;
+                            const iconX = x + caretWidth;
+                            const iconY = y - 9;
+                            const textX = iconX + 18;
                             return html`
                                 <g class="workspace-row" onClick=${() => handleSelect(node)}>
                                     <rect x="0" y=${y - 14} width=${TREE_WIDTH} height=${ROW_HEIGHT} class=${`workspace-row-bg ${isSelected ? 'selected' : ''}`} />
-                                    ${caret && html`<text class="workspace-caret" x=${x} y=${y} >${caret}</text>`}
-                                    <g transform=${`translate(${x + (isDir ? 10 : 0)}, ${y - 12})`} class=${`workspace-icon ${isDir ? 'folder' : 'file'}`}>
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    ${caret && html`<text class="workspace-caret" x=${x + 1} y=${y}>${caret}</text>`}
+                                    <g transform=${`translate(${iconX}, ${iconY}) scale(0.6)`} class=${`workspace-icon ${isDir ? 'folder' : 'file'}`}>
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                             ${iconPath(node.type)}
                                         </svg>
                                     </g>
-                                    <text class="workspace-label" x=${x + 26} y=${y}>${node.name}</text>
+                                    <text class="workspace-label" x=${textX} y=${y}>${node.name}</text>
                                 </g>
                             `;
                         })}

@@ -250,6 +250,7 @@ export async function main() {
     startIpcWatcher({
         sendMessage,
         sendNudge,
+        resolveModel: (input) => agentPool.resolveModelInput(input),
     });
     startSchedulerLoop({
         queue,

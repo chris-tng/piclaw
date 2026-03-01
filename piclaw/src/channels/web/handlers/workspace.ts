@@ -1,8 +1,8 @@
 import { statSync, readdirSync, readFileSync } from "fs";
 import path from "path";
-import type { WebChannel } from "../web.js";
-import { WORKSPACE_DIR } from "../../config.js";
-import { createMedia } from "../../db.js";
+import type { WebChannel } from "../../web.js";
+import { WORKSPACE_DIR } from "../../../config.js";
+import { createMedia } from "../../../db.js";
 
 const EXCLUDE_DIRS = new Set([
   "node_modules",
@@ -176,7 +176,7 @@ export function handleWorkspaceTree(_channel: WebChannel, req: Request): Respons
     return new Response(JSON.stringify({ root: tree, truncated: state.truncated }), {
       headers: { "Content-Type": "application/json" },
     });
-  } catch (err) {
+  } catch {
     return new Response(JSON.stringify({ error: "Failed to read workspace" }), { status: 500 });
   }
 }
@@ -255,7 +255,7 @@ export function handleWorkspaceFile(_channel: WebChannel, req: Request): Respons
       }),
       { headers: { "Content-Type": "application/json" } }
     );
-  } catch (err) {
+  } catch {
     return new Response(JSON.stringify({ error: "Failed to read file" }), { status: 500 });
   }
 }
@@ -277,7 +277,7 @@ export function handleWorkspaceRaw(_channel: WebChannel, req: Request): Response
 }
 
 export async function handleWorkspaceAttach(_channel: WebChannel, req: Request): Promise<Response> {
-  let data: { path?: string } = {};
+  let data: { path?: string };
   try {
     data = await req.json();
   } catch {

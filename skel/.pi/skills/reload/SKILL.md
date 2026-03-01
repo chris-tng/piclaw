@@ -11,30 +11,31 @@ the new process takes over on the same port.
 
 ## Steps
 
-1. Upgrade dependencies in the workspace:
+1. Build piclaw, pack a tarball, and install it globally as real files (not symlinks). Bun's `add -g file:` always creates symlinks, so we manually extract and install dependencies:
    ```bash
-   cd /workspace/piclaw/piclaw
-   bun update
+   cd /workspace/piclaw && make build-piclaw
+   cd /workspace/piclaw/piclaw && bun pm pack --destination /tmp
+   TARBALL=$(ls -t /tmp/piclaw-*.tgz | head -1)
+   DEST=/home/agent/.bun/install/global/node_modules/piclaw
+   rm -rf "$DEST"
+   mkdir -p "$DEST"
+   tar -xzf "$TARBALL" -C "$DEST" --strip-components=1
+   rm -f "$TARBALL"
+   cd "$DEST" && bun install --production
    ```
 
-2. Install the updated package globally from a clean directory (avoids lockfile duplication):
-   ```bash
-   cd /tmp
-   bun add -g --no-save file:/workspace/piclaw/piclaw
-   ```
-
-3. Find the running piclaw PID:
+2. Find the running piclaw PID:
    ```bash
    PICLAW_PID=$(pgrep -f 'bun.*piclaw.*--port' | head -1)
    ```
 
-4. Determine the piclaw command line (preserves flags like --port):
+3. Determine the piclaw command line (preserves flags like --port):
    ```bash
    PICLAW_CMD=$(cat /proc/$PICLAW_PID/cmdline | tr '\0' ' ')
    ```
 
-5. Launch the force-restart script as a fully detached process. The script:
-   - Waits briefly so the last response can flush
+4. Launch the force-restart script as a fully detached process. The script:
+   - Does NOT wait for the current pi invocation
    - Sends SIGTERM to piclaw and waits for it to die
    - Starts a new piclaw with the same command line
 
@@ -46,9 +47,8 @@ the new process takes over on the same port.
    shift 1
    PICLAW_CMD="$@"
 
-   # Brief delay to allow the last response to flush
-   echo "[reload] Waiting 3s before restart"
-   sleep 3
+   # Immediate restart (no wait)
+   echo "[reload] Forcing restart (no wait)"
 
    # Kill old piclaw
    echo "[reload] Stopping old piclaw ($PICLAW_PID)..."
@@ -71,15 +71,16 @@ the new process takes over on the same port.
    disown
    ```
 
-6. Confirm the restart script is running:
+5. Confirm the restart script is running:
    ```bash
-   echo "Force restart scheduled. Piclaw will restart shortly."
+   echo "Force restart scheduled. Piclaw will restart immediately."
    ```
 
 ## Important Notes
 
-- The restart script waits briefly before killing the process so the final message can flush.
+- This force restart does NOT wait for the current pi invocation; the current response may be cut off.
 - There will be a brief (~3s) gap where piclaw is down during the restart.
 - The new piclaw inherits the same command-line flags as the old one.
 - WhatsApp session state persists across restarts (stored in SQLite + auth dir).
 - If something goes wrong, check `/tmp/restart-piclaw-force.log`.
+- `bun add -g file:` creates symlinks; the pack+extract approach ensures real file copies.

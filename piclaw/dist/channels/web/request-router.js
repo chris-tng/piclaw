@@ -23,6 +23,18 @@ export async function handleWebRequest(channel, req) {
         const before = channel.parseOptionalInt(url.searchParams.get("before"));
         return channel.handleTimeline(limit, before ?? undefined);
     }
+    if (req.method === "GET" && pathname === "/workspace/tree") {
+        return channel.handleWorkspaceTree(req);
+    }
+    if (req.method === "GET" && pathname === "/workspace/file") {
+        return channel.handleWorkspaceFile(req);
+    }
+    if (req.method === "GET" && pathname === "/workspace/raw") {
+        return channel.handleWorkspaceRaw(req);
+    }
+    if (req.method === "POST" && pathname === "/workspace/attach") {
+        return channel.handleWorkspaceAttach(req);
+    }
     if (req.method === "GET" && pathname.startsWith("/hashtag/")) {
         const tag = decodeURIComponent(pathname.replace("/hashtag/", ""));
         const limit = channel.clampInt(url.searchParams.get("limit"), 50, 1, 100);

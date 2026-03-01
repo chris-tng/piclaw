@@ -16,7 +16,8 @@ function summarizePrompt(prompt, maxLen = 140) {
 function formatTask(row) {
     const next = row.next_run ? `next ${row.next_run}` : "next n/a";
     const summary = summarizePrompt(row.prompt);
-    return `• ${row.id} (${row.status}) — ${row.schedule_type} ${row.schedule_value}, ${next} — ${summary}`;
+    const model = row.model ? ` model ${row.model}` : "";
+    return `• ${row.id} (${row.status}) — ${row.schedule_type} ${row.schedule_value}, ${next}${model} — ${summary}`;
 }
 function listTasks(filter) {
     const db = new Database(getDbPath(), { readonly: true });
@@ -28,12 +29,12 @@ function listTasks(filter) {
         let rows;
         if (filter && STATUS_VALUES.has(filter)) {
             rows = db
-                .query("SELECT id, chat_jid, prompt, schedule_type, schedule_value, next_run, status, created_at FROM scheduled_tasks WHERE status = ? ORDER BY next_run")
+                .query("SELECT id, chat_jid, prompt, model, schedule_type, schedule_value, next_run, status, created_at FROM scheduled_tasks WHERE status = ? ORDER BY next_run")
                 .all(filter);
         }
         else {
             rows = db
-                .query("SELECT id, chat_jid, prompt, schedule_type, schedule_value, next_run, status, created_at FROM scheduled_tasks ORDER BY created_at")
+                .query("SELECT id, chat_jid, prompt, model, schedule_type, schedule_value, next_run, status, created_at FROM scheduled_tasks ORDER BY created_at")
                 .all();
         }
         const header = filter && STATUS_VALUES.has(filter)

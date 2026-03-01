@@ -1,8 +1,8 @@
 import { getDb } from "./connection.js";
 export function createTask(task) {
     const db = getDb();
-    db.prepare(`INSERT INTO scheduled_tasks (id, chat_jid, prompt, schedule_type, schedule_value, next_run, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(task.id, task.chat_jid, task.prompt, task.schedule_type, task.schedule_value, task.next_run, task.status, task.created_at);
+    db.prepare(`INSERT INTO scheduled_tasks (id, chat_jid, prompt, model, schedule_type, schedule_value, next_run, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(task.id, task.chat_jid, task.prompt, task.model ?? null, task.schedule_type, task.schedule_value, task.next_run, task.status, task.created_at);
 }
 export function getTaskById(id) {
     const db = getDb();
@@ -14,6 +14,10 @@ export function updateTask(id, updates) {
     if (updates.prompt !== undefined) {
         fields.push("prompt = ?");
         values.push(updates.prompt);
+    }
+    if (updates.model !== undefined) {
+        fields.push("model = ?");
+        values.push(updates.model);
     }
     if (updates.schedule_type !== undefined) {
         fields.push("schedule_type = ?");

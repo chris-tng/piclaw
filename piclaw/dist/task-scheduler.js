@@ -30,22 +30,53 @@ export async function runScheduledTask(task, deps) {
     const start = Date.now();
     let result = null;
     let error = null;
+    let previousModel = null;
     try {
-        const out = await deps.agentPool.runAgent(task.prompt, task.chat_jid);
-        if (out.status === "error") {
-            error = out.error || "Unknown";
+        if (task.model) {
+            previousModel = await deps.agentPool.getCurrentModelLabel(task.chat_jid);
+            const slash = task.model.indexOf("/");
+            const provider = slash > 0 ? task.model.slice(0, slash) : undefined;
+            const modelId = slash > 0 ? task.model.slice(slash + 1) : task.model;
+            const control = await deps.agentPool.applyControlCommand(task.chat_jid, {
+                type: "model",
+                provider,
+                modelId,
+                raw: `/model ${task.model}`,
+            });
+            if (control.status === "error") {
+                error = `Model switch failed: ${control.message}`;
+            }
         }
-        else if (out.result) {
-            result = out.result;
-            const t = formatOutbound(result, detectChannel(task.chat_jid));
-            if (t) {
-                await deps.sendMessage(task.chat_jid, t);
-                await deps.sendNudge?.(t);
+        if (!error) {
+            const out = await deps.agentPool.runAgent(task.prompt, task.chat_jid);
+            if (out.status === "error") {
+                error = out.error || "Unknown";
+            }
+            else if (out.result) {
+                result = out.result;
+                const t = formatOutbound(result, detectChannel(task.chat_jid));
+                if (t) {
+                    await deps.sendMessage(task.chat_jid, t);
+                    await deps.sendNudge?.(t);
+                }
             }
         }
     }
     catch (e) {
         error = e instanceof Error ? e.message : String(e);
+    }
+    finally {
+        if (task.model && previousModel && previousModel !== task.model) {
+            const slash = previousModel.indexOf("/");
+            const provider = slash > 0 ? previousModel.slice(0, slash) : undefined;
+            const modelId = slash > 0 ? previousModel.slice(slash + 1) : previousModel;
+            await deps.agentPool.applyControlCommand(task.chat_jid, {
+                type: "model",
+                provider,
+                modelId,
+                raw: `/model ${previousModel}`,
+            });
+        }
     }
     logTaskRun({ task_id: task.id, run_at: new Date().toISOString(), duration_ms: Date.now() - start, status: error ? "error" : "success", result, error });
     const nextRun = computeNextRun(task.schedule_type, task.schedule_value);

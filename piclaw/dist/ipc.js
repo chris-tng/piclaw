@@ -49,7 +49,7 @@ export function startIpcWatcher(deps) {
                     const fp = join(tasksDir, file);
                     try {
                         const data = JSON.parse(readFileSync(fp, "utf-8"));
-                        processTaskCommand(data);
+                        await processTaskCommand(data, deps);
                         unlinkSync(fp);
                     }
                     catch (e) {
@@ -70,7 +70,7 @@ export function startIpcWatcher(deps) {
     poll();
     console.log("[ipc] Watcher started");
 }
-function processTaskCommand(data) {
+async function processTaskCommand(data, deps) {
     switch (data.type) {
         case "schedule_task": {
             if (!data.prompt || !data.schedule_type || !data.schedule_value || !data.chatJid)
@@ -96,7 +96,31 @@ function processTaskCommand(data) {
                     return;
                 nextRun = d.toISOString();
             }
-            createTask({ id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, chat_jid: data.chatJid, prompt: data.prompt, schedule_type: data.schedule_type, schedule_value: data.schedule_value, next_run: nextRun, status: "active", created_at: new Date().toISOString() });
+            const requested = typeof data.model === "string" && data.model.trim() ? data.model.trim() : null;
+            let model = null;
+            if (requested) {
+                if (!deps.resolveModel) {
+                    await deps.sendMessage(data.chatJid, `Cannot schedule task: model validation unavailable for "${requested}".`);
+                    return;
+                }
+                const resolved = deps.resolveModel(requested);
+                if (!resolved.model) {
+                    await deps.sendMessage(data.chatJid, `Cannot schedule task: ${resolved.error || "Invalid model."}`);
+                    return;
+                }
+                model = resolved.model;
+            }
+            createTask({
+                id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                chat_jid: data.chatJid,
+                prompt: data.prompt,
+                model,
+                schedule_type: data.schedule_type,
+                schedule_value: data.schedule_value,
+                next_run: nextRun,
+                status: "active",
+                created_at: new Date().toISOString(),
+            });
             break;
         }
         case "pause_task": {

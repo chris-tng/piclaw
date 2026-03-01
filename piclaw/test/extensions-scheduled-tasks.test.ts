@@ -20,6 +20,7 @@ function setupDb() {
       id TEXT PRIMARY KEY,
       chat_jid TEXT NOT NULL,
       prompt TEXT NOT NULL,
+      model TEXT,
       schedule_type TEXT NOT NULL,
       schedule_value TEXT NOT NULL,
       next_run TEXT,
