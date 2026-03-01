@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync } from "fs";
 import { join } from "path";
 import { CronExpressionParser } from "cron-parser";
-import { DATA_DIR, IPC_POLL_INTERVAL, TIMEZONE } from "./config.js";
+import { DATA_DIR, IPC_POLL_INTERVAL, TIMEZONE } from "./core/config.js";
 import { createTask, deleteTask, getTaskById, updateTask } from "./db.js";
 import { createUuid } from "./utils/ids.js";
 let running = false;

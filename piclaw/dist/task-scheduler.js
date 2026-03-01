@@ -1,5 +1,5 @@
 import { CronExpressionParser } from "cron-parser";
-import { SCHEDULER_POLL_INTERVAL, TIMEZONE } from "./config.js";
+import { SCHEDULER_POLL_INTERVAL, TIMEZONE } from "./core/config.js";
 import { getDueTasks, getTaskById, logTaskRun, updateTaskAfterRun } from "./db.js";
 import { detectChannel, formatOutbound } from "./router.js";
 export function computeNextRun(scheduleType, scheduleValue) {

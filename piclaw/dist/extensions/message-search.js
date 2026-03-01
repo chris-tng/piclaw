@@ -7,7 +7,7 @@
  */
 import { Type } from "@sinclair/typebox";
 import { getDb } from "../db.js";
-import { getChatJid } from "../chat-context.js";
+import { getChatJid } from "../core/chat-context.js";
 // ── Schema ────────────────────────────────────────────────
 const SearchMessagesSchema = Type.Object({
     query: Type.Optional(Type.String({ description: "FTS query text (matches message content)." })),

@@ -1,5 +1,5 @@
-import { formatCompactNumber } from "../../agent-control-helpers.js";
-import { killTrackedProcesses } from "../../process-tracker.js";
+import { formatCompactNumber } from "../agent-control-helpers.js";
+import { killTrackedProcesses } from "../../utils/process-tracker.js";
 export async function handleRestart(session, _command) {
     try {
         await session.abort();

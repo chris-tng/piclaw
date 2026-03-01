@@ -1,6 +1,6 @@
 import { supportsXhigh } from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
-import { findModel, parseModelInput } from "../model-utils.js";
+import { findModel, parseModelInput } from "../utils/model-utils.js";
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------

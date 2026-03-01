@@ -1,4 +1,4 @@
-import { runPromptAndCapture } from "../../agent-control-helpers.js";
+import { runPromptAndCapture } from "../agent-control-helpers.js";
 export async function handleQueue(session, command) {
     const queuedText = command.message?.trim();
     const useBatch = command.type === "queue_all";

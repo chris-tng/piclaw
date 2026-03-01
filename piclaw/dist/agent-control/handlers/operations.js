@@ -1,5 +1,5 @@
 import { createTrackedBashOperations } from "../../tools/tracked-bash.js";
-import { formatShellBlock, resolveShellCwd } from "../../agent-control-helpers.js";
+import { formatShellBlock, resolveShellCwd } from "../agent-control-helpers.js";
 const SHELL_OUTPUT_LIMIT = 20000;
 const SHELL_TIMEOUT_SECONDS = 30;
 export async function handleShell(session, command) {

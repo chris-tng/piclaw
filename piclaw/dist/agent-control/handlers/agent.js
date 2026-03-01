@@ -1,5 +1,5 @@
-import { ASSISTANT_AVATAR, ASSISTANT_NAME, setAssistantAvatar, setAssistantName } from "../../config.js";
-import { updateAssistantConfig } from "../../agent-control-helpers.js";
+import { ASSISTANT_AVATAR, ASSISTANT_NAME, setAssistantAvatar, setAssistantName } from "../../core/config.js";
+import { updateAssistantConfig } from "../agent-control-helpers.js";
 export async function handleAgentName(_session, command) {
     if (!command.name) {
         return { status: "success", message: `Agent name: ${ASSISTANT_NAME}` };

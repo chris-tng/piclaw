@@ -1,7 +1,7 @@
 import { mkdirSync } from "fs";
 import { join } from "path";
 import { createAgentSession, DefaultResourceLoader, getAgentDir, SessionManager, } from "@mariozechner/pi-coding-agent";
-import { SESSIONS_DIR, WORKSPACE_DIR } from "../config.js";
+import { SESSIONS_DIR, WORKSPACE_DIR } from "../core/config.js";
 import { builtinExtensionFactories } from "../extensions/index.js";
 export function ensureSessionDir(chatJid) {
     const chatSessionDir = join(SESSIONS_DIR, sanitiseJid(chatJid));

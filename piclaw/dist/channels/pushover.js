@@ -1,4 +1,4 @@
-import { ASSISTANT_NAME } from "../config.js";
+import { ASSISTANT_NAME } from "../core/config.js";
 const PUSHOVER_API = "https://api.pushover.net/1/messages.json";
 export class PushoverChannel {
     opts;

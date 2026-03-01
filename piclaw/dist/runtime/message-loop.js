@@ -1,5 +1,5 @@
 import { getMessagesSince, getNewMessages } from "../db.js";
-import { parseControlCommand } from "../agent-control.js";
+import { parseControlCommand } from "../agent-control/index.js";
 import { detectChannel, formatMessages, formatOutbound } from "../router.js";
 export async function processMessages(chatJid, deps) {
     const since = deps.state.lastAgentTimestamp[chatJid] || "";

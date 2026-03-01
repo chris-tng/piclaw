@@ -2,7 +2,7 @@ import { mkdirSync } from "fs";
 import { join } from "path";
 import makeWASocket, { Browsers, DisconnectReason, makeCacheableSignalKeyStore, useMultiFileAuthState, } from "@whiskeysockets/baileys";
 import qrcode from "qrcode-terminal";
-import { ASSISTANT_NAME, STORE_DIR, WHATSAPP_PHONE } from "../config.js";
+import { ASSISTANT_NAME, STORE_DIR, WHATSAPP_PHONE } from "../core/config.js";
 import { createUuid } from "../utils/ids.js";
 // Minimal pino-compatible logger for baileys (it requires one)
 const silentLogger = {

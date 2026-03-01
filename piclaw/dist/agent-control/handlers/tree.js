@@ -1,4 +1,4 @@
-import { extractTextFromContent, formatCompactNumber, truncateText } from "../../agent-control-helpers.js";
+import { extractTextFromContent, formatCompactNumber, truncateText } from "../agent-control-helpers.js";
 export async function handleTree(session, command) {
     const sessionManager = session.sessionManager;
     const leafId = sessionManager.getLeafId();

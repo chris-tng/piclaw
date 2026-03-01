@@ -1,8 +1,8 @@
 import { mkdirSync } from "fs";
 import { join } from "path";
 import { AuthStorage, createBashTool, createEditTool, createReadTool, createWriteTool, ModelRegistry, SettingsManager, getAgentDir, } from "@mariozechner/pi-coding-agent";
-import { applyControlCommand } from "./agent-control.js";
-import { AGENT_TIMEOUT, SESSIONS_DIR, WORKSPACE_DIR } from "./config.js";
+import { applyControlCommand } from "./agent-control/index.js";
+import { AGENT_TIMEOUT, SESSIONS_DIR, WORKSPACE_DIR } from "./core/config.js";
 import { detectChannel } from "./router.js";
 import { createTrackedBashOperations } from "./tools/tracked-bash.js";
 import { getAttachmentRegistry } from "./agent-pool/attachments.js";
@@ -10,8 +10,8 @@ import { writeAgentLog } from "./agent-pool/logging.js";
 import { createDefaultSession, ensureSessionDir } from "./agent-pool/session.js";
 import { executeSlashCommand } from "./agent-pool/slash-command.js";
 import { recordMessageUsage } from "./agent-pool/usage.js";
-import { resolveModelLabel } from "./model-utils.js";
-import { withChatContext } from "./chat-context.js";
+import { resolveModelLabel } from "./utils/model-utils.js";
+import { withChatContext } from "./core/chat-context.js";
 /** How long (ms) an idle session stays cached before being disposed. */
 const IDLE_TTL = 10 * 60 * 1000; // 10 minutes
 const CLEANUP_INTERVAL = 60 * 1000; // check every minute

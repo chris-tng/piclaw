@@ -1,6 +1,6 @@
 import { spawn } from "child_process";
 import { existsSync } from "fs";
-import { killProcessTree, registerProcess, unregisterProcess } from "../process-tracker.js";
+import { killProcessTree, registerProcess, unregisterProcess } from "../utils/process-tracker.js";
 function resolveShellConfig() {
     if (process.platform === "win32") {
         return { shell: "bash.exe", args: ["-c"] };

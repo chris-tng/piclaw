@@ -1,4 +1,4 @@
-import { THINKING_LEVELS, normalizeModelMatch } from "../../agent-control-helpers.js";
+import { THINKING_LEVELS, normalizeModelMatch } from "../agent-control-helpers.js";
 export async function handleModel(session, modelRegistry, command) {
     modelRegistry.refresh();
     if (!command.modelId) {

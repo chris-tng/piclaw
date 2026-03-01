@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
-import { DATA_DIR } from "./config.js";
+import { DATA_DIR } from "./core/config.js";
 import { createUuid } from "./utils/ids.js";
 import { storeToolOutput, insertToolOutputChunk, getToolOutputById, deleteToolOutputsBefore, searchToolOutputSnippets, } from "./db.js";
 import { buildPreviewLines } from "./utils/preview.js";

@@ -10,9 +10,9 @@
 import { basename, resolve, relative } from "path";
 import { Type } from "@sinclair/typebox";
 import { createMedia } from "../db.js";
-import { WORKSPACE_DIR } from "../config.js";
+import { WORKSPACE_DIR } from "../core/config.js";
 import { getAttachmentRegistry } from "../agent-pool/attachments.js";
-import { getChatJid } from "../chat-context.js";
+import { getChatJid } from "../core/chat-context.js";
 // ── Schema ────────────────────────────────────────────────
 const AttachmentSchema = Type.Object({
     path: Type.String({ description: "Path to a file inside the workspace." }),

@@ -1,4 +1,4 @@
-import { truncateText } from "../../agent-control-helpers.js";
+import { truncateText } from "../agent-control-helpers.js";
 export async function handleSessionName(session, command) {
     if (!command.name) {
         return {

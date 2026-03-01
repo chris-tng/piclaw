@@ -1,4 +1,4 @@
-import { formatCompactNumber, formatCurrency } from "../../agent-control-helpers.js";
+import { formatCompactNumber, formatCurrency } from "../agent-control-helpers.js";
 import { CONTROL_COMMAND_DEFINITIONS } from "../command-registry.js";
 export async function handleState(session, _command) {
     const modelLabel = session.model ? `${session.model.provider}/${session.model.id}` : "none";
