@@ -119,11 +119,10 @@ If either threshold is exceeded, the output is stored and summarized.
   - Stores full output, builds preview, chunks text for FTS, handles cleanup.
 - `src/tools/context-tools.ts`
   - Context-aware bash wrapper, `tool_output_search`, `batch_exec`.
-- `.pi/extensions/context-mode.ts`
-  - Extension that intercepts bash tool results and registers custom tools.
+- Integration: register the tools in your extension or tool list.
 - `src/db.ts`
   - Database schema and FTS operations for tool outputs.
-- `src/config.ts`
+- `src/core/config.ts`
   - Retention and cleanup interval configuration.
 
 ## Typical flow example

@@ -36,7 +36,7 @@ piclaw/src/
 ├── index.ts                 # Entry point
 ├── cli.ts                   # CLI parsing
 ├── runtime.ts               # Service startup orchestration
-├── config.ts                # Env + config.json
+├── core/                    # Env/config + chat context
 ├── router.ts                # Message routing
 ├── agent-pool.ts            # AgentSession pool
 ├── agent-pool/              # Session helpers
@@ -46,6 +46,7 @@ piclaw/src/
 │   └── web/handlers/        # HTTP handlers (agent, posts, media, workspace)
 ├── tools/                   # Bash tracking + optional context wrappers
 ├── db/                      # SQLite schema + accessors
+├── utils/                   # Shared helpers (ids, preview, model utils)
 └── task-scheduler.ts        # Cron/interval scheduling
 ```
 
@@ -67,6 +68,7 @@ Each factory receives an `ExtensionAPI` and registers tools or slash commands vi
 - The agent pool keeps one warm session per chat JID and evicts idle sessions after a TTL.
 - The web UI is the primary interface; the WhatsApp channel is optional.
 - Web and WhatsApp share the same storage and agent pool.
+- Core utilities (config/env/chat context) live in `src/core`; shared helpers live in `src/utils`.
 - Chat context (chat JID + channel) is tracked in AsyncLocalStorage; tools/extensions read from the scoped context (defaults to `web:default` / `web`) rather than env variables.
 - Workspace tree responses are cached briefly (1s) and rate-limited to prevent bursty UI reloads (HTTP 429 when exceeded).
 - The **workspace explorer** is a responsive sidebar (visible on desktop/tablet ≥1024px landscape) that shows an SVG tree of `/workspace`, supports file previews, and lets users attach file reference pills to prompts.
