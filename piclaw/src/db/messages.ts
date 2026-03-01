@@ -12,11 +12,12 @@ interface StoredMessageRow {
   content: string;
   content_blocks: string | null;
   link_previews: string | null;
+  thread_id: number | null;
   timestamp: string;
   is_bot_message: number;
 }
 
-const MESSAGE_COLUMNS = "rowid, chat_jid, sender, sender_name, content, content_blocks, link_previews, timestamp, is_bot_message";
+const MESSAGE_COLUMNS = "rowid, chat_jid, sender, sender_name, content, content_blocks, link_previews, thread_id, timestamp, is_bot_message";
 
 function parseJsonArray(value: string | null | undefined): unknown[] | undefined {
   if (!value) return undefined;
@@ -41,6 +42,7 @@ function buildInteraction(row: StoredMessageRow, mediaIds: number[] = []): Inter
   };
   if (contentBlocks?.length) data.content_blocks = contentBlocks;
   if (linkPreviews?.length) data.link_previews = linkPreviews;
+  if (row.thread_id !== null && row.thread_id !== undefined) data.thread_id = row.thread_id;
   return {
     id: row.rowid,
     timestamp: row.timestamp,
@@ -72,8 +74,8 @@ export function storeMessage(msg: NewMessage): number {
   const linkPreviews = msg.link_previews ? JSON.stringify(msg.link_previews) : null;
 
   db.prepare(
-    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, content_blocks, link_previews, timestamp, is_from_me, is_bot_message)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, content_blocks, link_previews, thread_id, timestamp, is_from_me, is_bot_message)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     msg.id,
     msg.chat_jid,
@@ -82,6 +84,7 @@ export function storeMessage(msg: NewMessage): number {
     msg.content,
     contentBlocks,
     linkPreviews,
+    msg.thread_id ?? null,
     msg.timestamp,
     msg.is_from_me ? 1 : 0,
     msg.is_bot_message ? 1 : 0
@@ -213,7 +216,7 @@ export function searchMessages(chatJid: string, query: string, limit: number, of
   try {
     const rows = db
       .prepare(
-        `SELECT messages.rowid, messages.chat_jid, messages.sender, messages.sender_name, messages.content, messages.content_blocks, messages.link_previews, messages.timestamp, messages.is_bot_message
+        `SELECT messages.rowid, messages.chat_jid, messages.sender, messages.sender_name, messages.content, messages.content_blocks, messages.link_previews, messages.thread_id, messages.timestamp, messages.is_bot_message
          FROM messages
          JOIN messages_fts ON messages_fts.rowid = messages.rowid
          WHERE messages.chat_jid = ? AND messages_fts MATCH ?

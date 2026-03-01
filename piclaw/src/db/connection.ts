@@ -22,6 +22,7 @@ function createSchema(database: Database): void {
       content TEXT,
       content_blocks TEXT,
       link_previews TEXT,
+      thread_id INTEGER,
       timestamp TEXT,
       is_from_me INTEGER,
       is_bot_message INTEGER DEFAULT 0,
@@ -160,16 +161,17 @@ function createSchema(database: Database): void {
 function ensureMessageColumns(database: Database): void {
   const columns = database.prepare("PRAGMA table_info(messages)").all() as Array<{ name: string }>;
   const existing = new Set(columns.map((col) => col.name));
-  const ensureColumn = (name: string) => {
+  const ensureColumn = (name: string, type = "TEXT") => {
     if (existing.has(name)) return;
     try {
-      database.exec(`ALTER TABLE messages ADD COLUMN ${name} TEXT`);
+      database.exec(`ALTER TABLE messages ADD COLUMN ${name} ${type}`);
     } catch {
       // ignore if column already exists or cannot be added
     }
   };
   ensureColumn("content_blocks");
   ensureColumn("link_previews");
+  ensureColumn("thread_id", "INTEGER");
 }
 
 function ensureFts(database: Database): void {

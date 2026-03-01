@@ -1,7 +1,7 @@
 import { getDb } from "./connection.js";
 import { clampWebContent } from "./web-content.js";
 import { attachMediaToMessage, getMediaIdsForMessage } from "./media.js";
-const MESSAGE_COLUMNS = "rowid, chat_jid, sender, sender_name, content, content_blocks, link_previews, timestamp, is_bot_message";
+const MESSAGE_COLUMNS = "rowid, chat_jid, sender, sender_name, content, content_blocks, link_previews, thread_id, timestamp, is_bot_message";
 function parseJsonArray(value) {
     if (!value)
         return undefined;
@@ -28,6 +28,8 @@ function buildInteraction(row, mediaIds = []) {
         data.content_blocks = contentBlocks;
     if (linkPreviews?.length)
         data.link_previews = linkPreviews;
+    if (row.thread_id !== null && row.thread_id !== undefined)
+        data.thread_id = row.thread_id;
     return {
         id: row.rowid,
         timestamp: row.timestamp,
@@ -52,8 +54,8 @@ export function storeMessage(msg) {
     const db = getDb();
     const contentBlocks = msg.content_blocks ? JSON.stringify(msg.content_blocks) : null;
     const linkPreviews = msg.link_previews ? JSON.stringify(msg.link_previews) : null;
-    db.prepare(`INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, content_blocks, link_previews, timestamp, is_from_me, is_bot_message)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(msg.id, msg.chat_jid, msg.sender, msg.sender_name, msg.content, contentBlocks, linkPreviews, msg.timestamp, msg.is_from_me ? 1 : 0, msg.is_bot_message ? 1 : 0);
+    db.prepare(`INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, content_blocks, link_previews, thread_id, timestamp, is_from_me, is_bot_message)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(msg.id, msg.chat_jid, msg.sender, msg.sender_name, msg.content, contentBlocks, linkPreviews, msg.thread_id ?? null, msg.timestamp, msg.is_from_me ? 1 : 0, msg.is_bot_message ? 1 : 0);
     const row = db
         .prepare("SELECT rowid as rowid FROM messages WHERE id = ? AND chat_jid = ?")
         .get(msg.id, msg.chat_jid);
@@ -146,7 +148,7 @@ export function searchMessages(chatJid, query, limit, offset) {
     }
     try {
         const rows = db
-            .prepare(`SELECT messages.rowid, messages.chat_jid, messages.sender, messages.sender_name, messages.content, messages.content_blocks, messages.link_previews, messages.timestamp, messages.is_bot_message
+            .prepare(`SELECT messages.rowid, messages.chat_jid, messages.sender, messages.sender_name, messages.content, messages.content_blocks, messages.link_previews, messages.thread_id, messages.timestamp, messages.is_bot_message
          FROM messages
          JOIN messages_fts ON messages_fts.rowid = messages.rowid
          WHERE messages.chat_jid = ? AND messages_fts MATCH ?

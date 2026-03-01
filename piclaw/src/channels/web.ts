@@ -320,6 +320,7 @@ export class WebChannel {
       is_bot_message: isBot,
       content_blocks: contentBlocks,
       link_previews: options.linkPreviews,
+      thread_id: options.threadId ?? null,
     };
 
     const rowId = storeMessage(msg);

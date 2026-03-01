@@ -15,6 +15,7 @@ export interface NewMessage {
   is_bot_message?: boolean;
   content_blocks?: unknown[];
   link_previews?: unknown[];
+  thread_id?: number | null;
 }
 
 export interface ScheduledTask {
