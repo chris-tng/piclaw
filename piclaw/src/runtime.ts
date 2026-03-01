@@ -296,6 +296,7 @@ export async function main(): Promise<void> {
   startIpcWatcher({
     sendMessage,
     sendNudge,
+    resolveModel: (input) => agentPool.resolveModelInput(input),
   });
 
   startSchedulerLoop({

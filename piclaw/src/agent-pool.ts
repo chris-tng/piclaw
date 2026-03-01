@@ -278,6 +278,36 @@ export class AgentPool {
     return model ? `${model.provider}/${model.id}` : null;
   }
 
+  resolveModelInput(input: string): { model?: string; error?: string } {
+    const trimmed = input.trim();
+    if (!trimmed) return { error: "Model identifier is required." };
+
+    const slash = trimmed.indexOf("/");
+    const provider = slash > 0 ? trimmed.slice(0, slash) : undefined;
+    const modelId = slash > 0 ? trimmed.slice(slash + 1) : trimmed;
+
+    this.modelRegistry.refresh();
+    const models = this.modelRegistry.getAll();
+
+    if (provider) {
+      const match = models.find(
+        (m) =>
+          m.provider.toLowerCase() === provider.toLowerCase() &&
+          m.id.toLowerCase() === modelId.toLowerCase(),
+      );
+      if (!match) return { error: `Model not found: ${provider}/${modelId}.` };
+      return { model: `${match.provider}/${match.id}` };
+    }
+
+    const matches = models.filter((m) => m.id.toLowerCase() === modelId.toLowerCase());
+    if (matches.length === 0) return { error: `Model not found: ${modelId}.` };
+    if (matches.length > 1) {
+      const providers = matches.map((m) => `${m.provider}/${m.id}`).join(", ");
+      return { error: `Model "${modelId}" matches multiple providers: ${providers}. Use provider/modelId.` };
+    }
+    return { model: `${matches[0].provider}/${matches[0].id}` };
+  }
+
   async queueStreamingMessage(
     chatJid: string,
     text: string,

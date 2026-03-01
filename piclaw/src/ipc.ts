@@ -7,6 +7,7 @@ import { createTask, deleteTask, getTaskById, updateTask } from "./db.js";
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
   sendNudge?: (text: string) => Promise<void>;
+  resolveModel?: (input: string) => { model?: string; error?: string };
 }
 
 let running = false;
@@ -48,7 +49,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
           const fp = join(tasksDir, file);
           try {
             const data = JSON.parse(readFileSync(fp, "utf-8"));
-            processTaskCommand(data);
+            await processTaskCommand(data, deps);
             unlinkSync(fp);
           } catch (e) { console.error(`[ipc] Error processing task ${file}:`, e); try { renameSync(fp, join(ipcDir, `error-${file}`)); } catch {} }
         }
@@ -62,7 +63,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
   console.log("[ipc] Watcher started");
 }
 
-function processTaskCommand(data: Record<string, any>): void {
+async function processTaskCommand(data: Record<string, any>, deps: IpcDeps): Promise<void> {
   switch (data.type) {
     case "schedule_task": {
       if (!data.prompt || !data.schedule_type || !data.schedule_value || !data.chatJid) return;
@@ -78,12 +79,49 @@ function processTaskCommand(data: Record<string, any>): void {
         if (isNaN(d.getTime())) return;
         nextRun = d.toISOString();
       }
-      const model = typeof data.model === "string" && data.model.trim() ? data.model.trim() : null;
-      createTask({ id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, chat_jid: data.chatJid, prompt: data.prompt, model, schedule_type: data.schedule_type, schedule_value: data.schedule_value, next_run: nextRun, status: "active", created_at: new Date().toISOString() });
+
+      const requested = typeof data.model === "string" && data.model.trim() ? data.model.trim() : null;
+      let model: string | null = null;
+      if (requested) {
+        if (!deps.resolveModel) {
+          await deps.sendMessage(data.chatJid, `Cannot schedule task: model validation unavailable for "${requested}".`);
+          return;
+        }
+        const resolved = deps.resolveModel(requested);
+        if (!resolved.model) {
+          await deps.sendMessage(data.chatJid, `Cannot schedule task: ${resolved.error || "Invalid model."}`);
+          return;
+        }
+        model = resolved.model;
+      }
+
+      createTask({
+        id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        chat_jid: data.chatJid,
+        prompt: data.prompt,
+        model,
+        schedule_type: data.schedule_type,
+        schedule_value: data.schedule_value,
+        next_run: nextRun,
+        status: "active",
+        created_at: new Date().toISOString(),
+      });
       break;
     }
-    case "pause_task": { const t = data.taskId && getTaskById(data.taskId); if (t) updateTask(data.taskId, { status: "paused" }); break; }
-    case "resume_task": { const t = data.taskId && getTaskById(data.taskId); if (t) updateTask(data.taskId, { status: "active" }); break; }
-    case "cancel_task": { const t = data.taskId && getTaskById(data.taskId); if (t) deleteTask(data.taskId); break; }
+    case "pause_task": {
+      const t = data.taskId && getTaskById(data.taskId);
+      if (t) updateTask(data.taskId, { status: "paused" });
+      break;
+    }
+    case "resume_task": {
+      const t = data.taskId && getTaskById(data.taskId);
+      if (t) updateTask(data.taskId, { status: "active" });
+      break;
+    }
+    case "cancel_task": {
+      const t = data.taskId && getTaskById(data.taskId);
+      if (t) deleteTask(data.taskId);
+      break;
+    }
   }
 }

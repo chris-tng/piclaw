@@ -24,7 +24,7 @@ cat > "$PICLAW_DATA/ipc/tasks/schedule_$(date +%s).json" <<EOF
 EOF
 ```
 
-`model` is optional. When provided, the scheduler switches the session model before running the prompt.
+`model` is optional. When provided, the scheduler validates the model before creating the task and switches the session model before running the prompt. If the model name is ambiguous, use `provider/modelId`.
 
 ## Schedule Types
 
