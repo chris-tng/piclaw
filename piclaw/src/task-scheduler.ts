@@ -41,9 +41,18 @@ export async function runScheduledTask(task: ScheduledTask, deps: SchedulerDeps)
   let result: string | null = null;
   let error: string | null = null;
   try {
-    const out = await deps.agentPool.runAgent(task.prompt, task.chat_jid);
-    if (out.status === "error") { error = out.error || "Unknown"; }
-    else if (out.result) { result = out.result; const t = formatOutbound(result, detectChannel(task.chat_jid)); if (t) { await deps.sendMessage(task.chat_jid, t); await deps.sendNudge?.(t); } }
+    if (task.model) {
+      const control = await deps.agentPool.applySlashCommand(task.chat_jid, `/model ${task.model}`);
+      if (control.status === "error") {
+        error = `Model switch failed: ${control.message}`;
+      }
+    }
+
+    if (!error) {
+      const out = await deps.agentPool.runAgent(task.prompt, task.chat_jid);
+      if (out.status === "error") { error = out.error || "Unknown"; }
+      else if (out.result) { result = out.result; const t = formatOutbound(result, detectChannel(task.chat_jid)); if (t) { await deps.sendMessage(task.chat_jid, t); await deps.sendNudge?.(t); } }
+    }
   } catch (e) { error = e instanceof Error ? e.message : String(e); }
 
   logTaskRun({ task_id: task.id, run_at: new Date().toISOString(), duration_ms: Date.now() - start, status: error ? "error" : "success", result, error });

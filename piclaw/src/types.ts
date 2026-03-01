@@ -21,6 +21,7 @@ export interface ScheduledTask {
   id: string;
   chat_jid: string;
   prompt: string;
+  model?: string | null;
   schedule_type: "cron" | "interval" | "once";
   schedule_value: string;
   next_run: string | null;

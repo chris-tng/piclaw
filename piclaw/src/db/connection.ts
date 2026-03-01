@@ -101,6 +101,7 @@ function createSchema(database: Database): void {
       id TEXT PRIMARY KEY,
       chat_jid TEXT NOT NULL,
       prompt TEXT NOT NULL,
+      model TEXT,
       schedule_type TEXT NOT NULL,
       schedule_value TEXT NOT NULL,
       next_run TEXT,
@@ -179,6 +180,18 @@ function ensureFts(database: Database): void {
   database.exec("PRAGMA user_version = 1;");
 }
 
+function ensureScheduledTaskColumns(database: Database): void {
+  const columns = database.prepare("PRAGMA table_info(scheduled_tasks)").all() as Array<{ name: string }>;
+  const existing = new Set(columns.map((col) => col.name));
+  if (!existing.has("model")) {
+    try {
+      database.exec("ALTER TABLE scheduled_tasks ADD COLUMN model TEXT");
+    } catch {
+      // ignore if column already exists or cannot be added
+    }
+  }
+}
+
 export function initDatabase(): void {
   const dbPath = path.join(STORE_DIR, "messages.db");
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -188,6 +201,7 @@ export function initDatabase(): void {
   db.exec("PRAGMA busy_timeout = 5000;");
   createSchema(db);
   ensureMessageColumns(db);
+  ensureScheduledTaskColumns(db);
   ensureFts(db);
 }
 

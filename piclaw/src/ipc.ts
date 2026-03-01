@@ -78,7 +78,8 @@ function processTaskCommand(data: Record<string, any>): void {
         if (isNaN(d.getTime())) return;
         nextRun = d.toISOString();
       }
-      createTask({ id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, chat_jid: data.chatJid, prompt: data.prompt, schedule_type: data.schedule_type, schedule_value: data.schedule_value, next_run: nextRun, status: "active", created_at: new Date().toISOString() });
+      const model = typeof data.model === "string" && data.model.trim() ? data.model.trim() : null;
+      createTask({ id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, chat_jid: data.chatJid, prompt: data.prompt, model, schedule_type: data.schedule_type, schedule_value: data.schedule_value, next_run: nextRun, status: "active", created_at: new Date().toISOString() });
       break;
     }
     case "pause_task": { const t = data.taskId && getTaskById(data.taskId); if (t) updateTask(data.taskId, { status: "paused" }); break; }

@@ -17,11 +17,14 @@ cat > "$PICLAW_DATA/ipc/tasks/schedule_$(date +%s).json" <<EOF
   "type": "schedule_task",
   "chatJid": "$PICLAW_CHAT_JID",
   "prompt": "Describe what should happen when this task fires",
+  "model": "gpt-5.1-codex-mini",
   "schedule_type": "TYPE",
   "schedule_value": "VALUE"
 }
 EOF
 ```
+
+`model` is optional. When provided, the scheduler switches the session model before running the prompt.
 
 ## Schedule Types
 

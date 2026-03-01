@@ -10,6 +10,7 @@ interface ScheduledTaskRow {
   id: string;
   chat_jid: string;
   prompt: string;
+  model: string | null;
   schedule_type: string;
   schedule_value: string;
   next_run: string | null;
@@ -34,7 +35,8 @@ function summarizePrompt(prompt: string, maxLen = 140): string {
 function formatTask(row: ScheduledTaskRow): string {
   const next = row.next_run ? `next ${row.next_run}` : "next n/a";
   const summary = summarizePrompt(row.prompt);
-  return `• ${row.id} (${row.status}) — ${row.schedule_type} ${row.schedule_value}, ${next} — ${summary}`;
+  const model = row.model ? ` model ${row.model}` : "";
+  return `• ${row.id} (${row.status}) — ${row.schedule_type} ${row.schedule_value}, ${next}${model} — ${summary}`;
 }
 
 function listTasks(filter: string | null): { summary: string; lines: string[] } {
@@ -49,13 +51,13 @@ function listTasks(filter: string | null): { summary: string; lines: string[] } 
     if (filter && STATUS_VALUES.has(filter)) {
       rows = db
         .query(
-          "SELECT id, chat_jid, prompt, schedule_type, schedule_value, next_run, status, created_at FROM scheduled_tasks WHERE status = ? ORDER BY next_run"
+          "SELECT id, chat_jid, prompt, model, schedule_type, schedule_value, next_run, status, created_at FROM scheduled_tasks WHERE status = ? ORDER BY next_run"
         )
         .all(filter) as ScheduledTaskRow[];
     } else {
       rows = db
         .query(
-          "SELECT id, chat_jid, prompt, schedule_type, schedule_value, next_run, status, created_at FROM scheduled_tasks ORDER BY created_at"
+          "SELECT id, chat_jid, prompt, model, schedule_type, schedule_value, next_run, status, created_at FROM scheduled_tasks ORDER BY created_at"
         )
         .all() as ScheduledTaskRow[];
     }

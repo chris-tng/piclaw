@@ -76,6 +76,7 @@ erDiagram
     text id
     text chat_jid
     text prompt
+    text model
     text schedule_type
     text schedule_value
     text next_run
