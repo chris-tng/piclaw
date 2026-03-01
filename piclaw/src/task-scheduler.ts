@@ -43,12 +43,16 @@ export async function runScheduledTask(task: ScheduledTask, deps: SchedulerDeps)
   let previousModel: string | null = null;
   try {
     if (task.model) {
-      const current = await deps.agentPool.applySlashCommand(task.chat_jid, "/model");
-      if (current.status === "success" && current.data?.model) {
-        previousModel = current.data.model;
-      }
-
-      const control = await deps.agentPool.applySlashCommand(task.chat_jid, `/model ${task.model}`);
+      previousModel = await deps.agentPool.getCurrentModelLabel(task.chat_jid);
+      const slash = task.model.indexOf("/");
+      const provider = slash > 0 ? task.model.slice(0, slash) : undefined;
+      const modelId = slash > 0 ? task.model.slice(slash + 1) : task.model;
+      const control = await deps.agentPool.applyControlCommand(task.chat_jid, {
+        type: "model",
+        provider,
+        modelId,
+        raw: `/model ${task.model}`,
+      });
       if (control.status === "error") {
         error = `Model switch failed: ${control.message}`;
       }
@@ -61,8 +65,16 @@ export async function runScheduledTask(task: ScheduledTask, deps: SchedulerDeps)
     }
   } catch (e) { error = e instanceof Error ? e.message : String(e); }
   finally {
-    if (task.model && previousModel) {
-      await deps.agentPool.applySlashCommand(task.chat_jid, `/model ${previousModel}`);
+    if (task.model && previousModel && previousModel !== task.model) {
+      const slash = previousModel.indexOf("/");
+      const provider = slash > 0 ? previousModel.slice(0, slash) : undefined;
+      const modelId = slash > 0 ? previousModel.slice(slash + 1) : previousModel;
+      await deps.agentPool.applyControlCommand(task.chat_jid, {
+        type: "model",
+        provider,
+        modelId,
+        raw: `/model ${previousModel}`,
+      });
     }
   }
 

@@ -272,6 +272,12 @@ export class AgentPool {
     return applyControlCommand(session, this.modelRegistry, command);
   }
 
+  async getCurrentModelLabel(chatJid: string): Promise<string | null> {
+    const session = await this.getOrCreate(chatJid);
+    const model = session.model;
+    return model ? `${model.provider}/${model.id}` : null;
+  }
+
   async queueStreamingMessage(
     chatJid: string,
     text: string,
