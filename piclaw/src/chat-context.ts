@@ -20,9 +20,9 @@ export function getChatContext(): ChatContext | null {
 }
 
 export function getChatJid(defaultValue = "web:default"): string {
-  return storage.getStore()?.chatJid ?? process.env.PICLAW_CHAT_JID ?? defaultValue;
+  return storage.getStore()?.chatJid ?? defaultValue;
 }
 
 export function getChatChannel(defaultValue = "web"): string {
-  return storage.getStore()?.channel ?? process.env.PICLAW_CHANNEL ?? defaultValue;
+  return storage.getStore()?.channel ?? defaultValue;
 }

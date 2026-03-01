@@ -67,6 +67,8 @@ Each factory receives an `ExtensionAPI` and registers tools or slash commands vi
 - The agent pool keeps one warm session per chat JID and evicts idle sessions after a TTL.
 - The web UI is the primary interface; the WhatsApp channel is optional.
 - Web and WhatsApp share the same storage and agent pool.
+- Chat context (chat JID + channel) is tracked in AsyncLocalStorage; tools/extensions read from the scoped context (defaults to `web:default` / `web`) rather than env variables.
+- Workspace tree responses are cached briefly (1s) and rate-limited to prevent bursty UI reloads (HTTP 429 when exceeded).
 - The **workspace explorer** is a responsive sidebar (visible on desktop/tablet ≥1024px landscape) that shows an SVG tree of `/workspace`, supports file previews, and lets users attach file reference pills to prompts.
 - **Multi-turn threading**: when the agent produces multiple turns in a single response, subsequent turns are stored with a `thread_id` pointing to the first turn's message. The UI renders threaded replies indented with a left border.
 - Scheduled tasks are isolated using the **session tree**: before a task runs, the current tree position is saved; after the task, the tree is navigated back. The task's output stays in a side branch without polluting conversation context. If the task uses a different model, it is restored afterwards. See [runtime-flows.md](runtime-flows.md) for details.

@@ -9,8 +9,66 @@ import { contentTypeForPath, detectBinary, formatMtime, isImageFile, isTextFile 
 import { isHiddenPath, resolveWorkspacePath, shouldIgnorePath, toRelativePath } from "./paths.js";
 import { buildTree, compressPaths } from "./tree.js";
 
+type WorkspaceUpdate = { path: string; root: unknown; truncated: boolean };
+
+export function createWorkspaceUpdateThrottle(
+  onUpdate: (updates: WorkspaceUpdate[]) => void,
+  throttleMs = 1000
+) {
+  let lastEmit = 0;
+  let throttleTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingUpdates: Map<string, WorkspaceUpdate> | null = null;
+
+  const emitUpdates = (updates: WorkspaceUpdate[]) => {
+    if (!updates.length) return;
+    lastEmit = Date.now();
+    onUpdate(updates);
+  };
+
+  const schedule = (updates: WorkspaceUpdate[]) => {
+    const now = Date.now();
+    const elapsed = now - lastEmit;
+    if (elapsed >= throttleMs) {
+      emitUpdates(updates);
+      return;
+    }
+    if (!pendingUpdates) pendingUpdates = new Map();
+    for (const update of updates) {
+      pendingUpdates.set(update.path, update);
+    }
+    if (throttleTimer) return;
+    throttleTimer = setTimeout(() => {
+      throttleTimer = null;
+      const merged = pendingUpdates ? Array.from(pendingUpdates.values()) : [];
+      pendingUpdates = null;
+      emitUpdates(merged);
+    }, Math.max(throttleMs - elapsed, 0));
+  };
+
+  const clear = () => {
+    if (throttleTimer) {
+      clearTimeout(throttleTimer);
+      throttleTimer = null;
+    }
+    pendingUpdates = null;
+  };
+
+  return { schedule, clear };
+}
+
 export class WorkspaceService {
   private treeCache = new Map<string, { timestamp: number; result: { status: number; body: unknown } }>();
+  private treeRequestTimes: number[] = [];
+
+  private isTreeRateLimited(): boolean {
+    const windowMs = 2000;
+    const maxRequests = 60;
+    const now = Date.now();
+    this.treeRequestTimes = this.treeRequestTimes.filter((t) => now - t < windowMs);
+    if (this.treeRequestTimes.length >= maxRequests) return true;
+    this.treeRequestTimes.push(now);
+    return false;
+  }
 
   getTree(
     pathParam: string | null,
@@ -27,6 +85,10 @@ export class WorkspaceService {
     const cached = this.treeCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < 1000) {
       return cached.result;
+    }
+
+    if (this.isTreeRateLimited()) {
+      return { status: 429, body: { error: "Workspace tree requests are throttled. Try again shortly." } };
     }
 
     try {
@@ -169,41 +231,12 @@ export class WorkspaceService {
   }
 
   startWatcher(
-    onUpdate: (updates: Array<{ path: string; root: unknown; truncated: boolean }>) => void,
+    onUpdate: (updates: WorkspaceUpdate[]) => void,
     includeHidden: () => boolean
   ): { close: () => Promise<void> } {
     const pending = new Set<string>();
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
-    const throttleMs = 1000;
-    let lastEmit = 0;
-    let throttleTimer: ReturnType<typeof setTimeout> | null = null;
-    let pendingUpdates: Map<string, { path: string; root: unknown; truncated: boolean }> | null = null;
-
-    const emitUpdates = (updates: Array<{ path: string; root: unknown; truncated: boolean }>) => {
-      if (!updates.length) return;
-      lastEmit = Date.now();
-      onUpdate(updates);
-    };
-
-    const scheduleEmit = (updates: Array<{ path: string; root: unknown; truncated: boolean }>) => {
-      const now = Date.now();
-      const elapsed = now - lastEmit;
-      if (elapsed >= throttleMs) {
-        emitUpdates(updates);
-        return;
-      }
-      if (!pendingUpdates) pendingUpdates = new Map();
-      for (const update of updates) {
-        pendingUpdates.set(update.path, update);
-      }
-      if (throttleTimer) return;
-      throttleTimer = setTimeout(() => {
-        throttleTimer = null;
-        const merged = pendingUpdates ? Array.from(pendingUpdates.values()) : [];
-        pendingUpdates = null;
-        emitUpdates(merged);
-      }, Math.max(throttleMs - elapsed, 0));
-    };
+    const throttler = createWorkspaceUpdateThrottle(onUpdate, 1000);
 
     const queuePath = (absPath: string) => {
       if (shouldIgnorePath(absPath)) return;
@@ -217,7 +250,7 @@ export class WorkspaceService {
         const targets = compressPaths(Array.from(pending));
         pending.clear();
         if (!targets.length) return;
-        const updates: Array<{ path: string; root: unknown; truncated: boolean }> = [];
+        const updates: WorkspaceUpdate[] = [];
         for (const relPath of targets) {
           const abs = resolveWorkspacePath(relPath);
           if (!abs) continue;
@@ -230,7 +263,7 @@ export class WorkspaceService {
             // ignore
           }
         }
-        scheduleEmit(updates);
+        throttler.schedule(updates);
       }, 300);
     };
 
@@ -253,12 +286,8 @@ export class WorkspaceService {
           clearTimeout(flushTimer);
           flushTimer = null;
         }
-        if (throttleTimer) {
-          clearTimeout(throttleTimer);
-          throttleTimer = null;
-        }
+        throttler.clear();
         pending.clear();
-        pendingUpdates = null;
         try { await watcher.close(); } catch {}
       },
     };

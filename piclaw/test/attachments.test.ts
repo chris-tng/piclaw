@@ -3,6 +3,7 @@ import { writeFileSync } from "fs";
 import { join } from "path";
 import { getTestWorkspace, setEnv } from "./helpers.js";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { withChatContext } from "../src/chat-context.js";
 
 let restoreEnv: (() => void) | null = null;
 
@@ -49,7 +50,6 @@ test("attach_file tool stores media and registers attachment", async () => {
     PICLAW_WORKSPACE: ws.workspace,
     PICLAW_STORE: ws.store,
     PICLAW_DATA: ws.data,
-    PICLAW_CHAT_JID: "web:default",
   });
 
   const db = await import("../src/db.js");
@@ -67,7 +67,7 @@ test("attach_file tool stores media and registers attachment", async () => {
   const tool = fake.tools.get("attach_file");
   expect(tool).toBeDefined();
 
-  const result = await tool.execute("call", { path: "hello.txt" });
+  const result = await withChatContext("web:default", "web", () => tool.execute("call", { path: "hello.txt" }));
   const details = result.details as any;
   expect(details.filename).toBe("hello.txt");
   expect(details.size).toBe(5);

@@ -354,6 +354,10 @@ export function WorkspaceExplorer({ onFileSelect }) {
             }
             showHiddenRef.current = next;
             setWorkspaceVisibility(true, next).catch(() => {});
+            lastSigRef.current = '';
+            loadTreeFnRef.current?.();
+            const openPaths = Array.from(expandedRef.current || []).filter((p) => p && p !== '.');
+            openPaths.forEach((p) => loadSubtreeRef.current?.(p));
             return next;
         });
     }).current;

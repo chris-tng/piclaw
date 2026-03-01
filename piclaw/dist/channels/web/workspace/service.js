@@ -7,8 +7,59 @@ import { MAX_ATTACH_BYTES, MAX_PREVIEW_BYTES } from "./constants.js";
 import { contentTypeForPath, detectBinary, formatMtime, isImageFile, isTextFile } from "./file-utils.js";
 import { isHiddenPath, resolveWorkspacePath, shouldIgnorePath, toRelativePath } from "./paths.js";
 import { buildTree, compressPaths } from "./tree.js";
+export function createWorkspaceUpdateThrottle(onUpdate, throttleMs = 1000) {
+    let lastEmit = 0;
+    let throttleTimer = null;
+    let pendingUpdates = null;
+    const emitUpdates = (updates) => {
+        if (!updates.length)
+            return;
+        lastEmit = Date.now();
+        onUpdate(updates);
+    };
+    const schedule = (updates) => {
+        const now = Date.now();
+        const elapsed = now - lastEmit;
+        if (elapsed >= throttleMs) {
+            emitUpdates(updates);
+            return;
+        }
+        if (!pendingUpdates)
+            pendingUpdates = new Map();
+        for (const update of updates) {
+            pendingUpdates.set(update.path, update);
+        }
+        if (throttleTimer)
+            return;
+        throttleTimer = setTimeout(() => {
+            throttleTimer = null;
+            const merged = pendingUpdates ? Array.from(pendingUpdates.values()) : [];
+            pendingUpdates = null;
+            emitUpdates(merged);
+        }, Math.max(throttleMs - elapsed, 0));
+    };
+    const clear = () => {
+        if (throttleTimer) {
+            clearTimeout(throttleTimer);
+            throttleTimer = null;
+        }
+        pendingUpdates = null;
+    };
+    return { schedule, clear };
+}
 export class WorkspaceService {
     treeCache = new Map();
+    treeRequestTimes = [];
+    isTreeRateLimited() {
+        const windowMs = 2000;
+        const maxRequests = 60;
+        const now = Date.now();
+        this.treeRequestTimes = this.treeRequestTimes.filter((t) => now - t < windowMs);
+        if (this.treeRequestTimes.length >= maxRequests)
+            return true;
+        this.treeRequestTimes.push(now);
+        return false;
+    }
     getTree(pathParam, depthParam, includeHidden = false) {
         const targetPath = resolveWorkspacePath(pathParam);
         if (!targetPath)
@@ -19,6 +70,9 @@ export class WorkspaceService {
         const cached = this.treeCache.get(cacheKey);
         if (cached && Date.now() - cached.timestamp < 1000) {
             return cached.result;
+        }
+        if (this.isTreeRateLimited()) {
+            return { status: 429, body: { error: "Workspace tree requests are throttled. Try again shortly." } };
         }
         try {
             const state = { count: 0, truncated: false };
@@ -157,37 +211,7 @@ export class WorkspaceService {
     startWatcher(onUpdate, includeHidden) {
         const pending = new Set();
         let flushTimer = null;
-        const throttleMs = 1000;
-        let lastEmit = 0;
-        let throttleTimer = null;
-        let pendingUpdates = null;
-        const emitUpdates = (updates) => {
-            if (!updates.length)
-                return;
-            lastEmit = Date.now();
-            onUpdate(updates);
-        };
-        const scheduleEmit = (updates) => {
-            const now = Date.now();
-            const elapsed = now - lastEmit;
-            if (elapsed >= throttleMs) {
-                emitUpdates(updates);
-                return;
-            }
-            if (!pendingUpdates)
-                pendingUpdates = new Map();
-            for (const update of updates) {
-                pendingUpdates.set(update.path, update);
-            }
-            if (throttleTimer)
-                return;
-            throttleTimer = setTimeout(() => {
-                throttleTimer = null;
-                const merged = pendingUpdates ? Array.from(pendingUpdates.values()) : [];
-                pendingUpdates = null;
-                emitUpdates(merged);
-            }, Math.max(throttleMs - elapsed, 0));
-        };
+        const throttler = createWorkspaceUpdateThrottle(onUpdate, 1000);
         const queuePath = (absPath) => {
             if (shouldIgnorePath(absPath))
                 return;
@@ -219,7 +243,7 @@ export class WorkspaceService {
                         // ignore
                     }
                 }
-                scheduleEmit(updates);
+                throttler.schedule(updates);
             }, 300);
         };
         const watcher = chokidar.watch(WORKSPACE_DIR, {
@@ -239,12 +263,8 @@ export class WorkspaceService {
                     clearTimeout(flushTimer);
                     flushTimer = null;
                 }
-                if (throttleTimer) {
-                    clearTimeout(throttleTimer);
-                    throttleTimer = null;
-                }
+                throttler.clear();
                 pending.clear();
-                pendingUpdates = null;
                 try {
                     await watcher.close();
                 }
