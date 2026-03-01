@@ -5,17 +5,18 @@ export function formatTime(timestamp) {
     if (Number.isNaN(date.getTime())) return timestamp;
     const now = new Date();
     const diffMs = now - date;
+    const diffSec = diffMs / 1000;
     const dayMs = 24 * 60 * 60 * 1000;
 
     if (diffMs < dayMs) {
-        return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        if (diffSec < 60) return 'just now';
+        if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m`;
+        return `${Math.floor(diffSec / 3600)}h`;
     }
-    if (diffMs < 7 * dayMs) {
-        const weekday = date.toLocaleDateString(undefined, { weekday: 'short' });
-        const time = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-        return `${weekday} ${time}`;
-    }
-    return date.toLocaleDateString();
+
+    const datePart = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const timePart = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return `${datePart} ${timePart}`;
 }
 
 export function formatCount(value) {
