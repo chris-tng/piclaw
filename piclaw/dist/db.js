@@ -5,3 +5,4 @@ export { attachMediaToMessage, getMediaIdsForMessage, createMedia, getMediaById,
 export { createTask, getTaskById, updateTask, deleteTask, getDueTasks, updateTaskAfterRun, logTaskRun, getTaskRunLogs, } from "./db/tasks.js";
 export { storeToolOutput, insertToolOutputChunk, getToolOutputById, deleteToolOutputById, deleteToolOutputsBefore, searchToolOutputSnippets, } from "./db/tool-outputs.js";
 export { getRouterState, setRouterState } from "./db/router-state.js";
+export { storeTokenUsage } from "./db/token-usage.js";

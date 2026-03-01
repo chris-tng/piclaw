@@ -1,4 +1,4 @@
-const DEFAULT_WEB_CONTENT_MAX_CHARS = 131_072;
+const DEFAULT_WEB_CONTENT_MAX_CHARS = 262_144;
 const WEB_CONTENT_MAX_CHARS = (() => {
     const raw = Number.parseInt(process.env.PICLAW_WEB_MAX_CONTENT_CHARS || "", 10);
     return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_WEB_CONTENT_MAX_CHARS;

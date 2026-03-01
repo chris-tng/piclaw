@@ -69,7 +69,7 @@ export function getToolOutput(handle) {
 export function searchToolOutput(handle, query, limit = 5) {
     return searchToolOutputSnippets(handle, query, limit);
 }
-export function pruneToolOutputs(maxAgeDays = 7) {
+export function pruneToolOutputs(maxAgeDays = 30) {
     const cutoff = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000).toISOString();
     const rows = deleteToolOutputsBefore(cutoff);
     for (const row of rows) {
@@ -83,7 +83,7 @@ export function pruneToolOutputs(maxAgeDays = 7) {
     return rows.length;
 }
 let cleanupStarted = false;
-export function startToolOutputCleanup(maxAgeDays = 7, intervalMs = 12 * 60 * 60 * 1000) {
+export function startToolOutputCleanup(maxAgeDays = 30, intervalMs = 12 * 60 * 60 * 1000) {
     if (cleanupStarted)
         return;
     cleanupStarted = true;
