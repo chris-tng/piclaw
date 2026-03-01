@@ -1,4 +1,4 @@
-import { deleteMessageByRowId, getMessageByRowId, getMessagesByHashtag, getTimeline, hasOlderMessages, searchMessages, } from "../../db.js";
+import { deleteMessageByRowId, deleteThreadByRowId, getMessageByRowId, getMessagesByHashtag, getTimeline, hasOlderMessages, searchMessages, } from "../../db.js";
 export function getTimelineResponse(chatJid, limit, before) {
     const posts = getTimeline(chatJid, limit, before ?? undefined);
     const oldestId = posts.length > 0 ? posts[0].id : null;
@@ -23,13 +23,17 @@ export function getThreadResponse(chatJid, id) {
         return { status: 404, body: { error: "Thread not found" } };
     return { status: 200, body: { thread: [thread] } };
 }
-export function deletePostResponse(chatJid, id) {
+export function deletePostResponse(chatJid, id, cascade = false) {
     if (!id)
-        return { status: 404, body: { error: "Post not found" } };
-    const deleted = deleteMessageByRowId(chatJid, id);
+        return { status: 404, body: { error: "Post not found" }, deletedIds: [] };
+    const deletedIds = cascade
+        ? deleteThreadByRowId(chatJid, id)
+        : deleteMessageByRowId(chatJid, id)
+            ? [id]
+            : [];
     return {
         status: 200,
-        body: { deleted: deleted ? 1 : 0, ids: deleted ? [id] : [] },
-        deletedId: deleted ? id : undefined,
+        body: { deleted: deletedIds.length, ids: deletedIds },
+        deletedIds,
     };
 }

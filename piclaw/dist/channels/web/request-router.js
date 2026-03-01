@@ -62,7 +62,9 @@ export async function handleWebRequest(channel, req) {
     }
     if (req.method === "DELETE" && pathname.startsWith("/post/")) {
         const id = channel.parseOptionalInt(pathname.replace("/post/", ""));
-        return channel.handleDeletePost(id);
+        const url = new URL(req.url);
+        const cascade = url.searchParams.get("cascade") === "true" || url.searchParams.get("cascade") === "1";
+        return channel.handleDeletePost(id, cascade);
     }
     if (req.method === "POST" && pathname.startsWith("/agent/") && pathname.endsWith("/message")) {
         return channel.handleAgentMessage(req, pathname);

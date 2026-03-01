@@ -107,6 +107,19 @@ export function deleteMessageByRowId(chatJid, rowId) {
     const res = db.prepare("DELETE FROM messages WHERE chat_jid = ? AND rowid = ?").run(chatJid, rowId);
     return res.changes > 0;
 }
+export function deleteThreadByRowId(chatJid, rowId) {
+    const db = getDb();
+    const rows = db
+        .prepare("SELECT rowid FROM messages WHERE chat_jid = ? AND (rowid = ? OR thread_id = ?)")
+        .all(chatJid, rowId, rowId);
+    const ids = Array.from(new Set(rows.map((row) => row.rowid)));
+    if (ids.length === 0)
+        return [];
+    const placeholders = ids.map(() => "?").join(",");
+    db.prepare(`DELETE FROM message_media WHERE message_rowid IN (${placeholders})`).run(...ids);
+    db.prepare(`DELETE FROM messages WHERE chat_jid = ? AND rowid IN (${placeholders})`).run(chatJid, ...ids);
+    return ids;
+}
 export function getTimeline(chatJid, limit, beforeId) {
     const db = getDb();
     const rows = beforeId

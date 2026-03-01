@@ -67,7 +67,9 @@ export class RequestRouterService {
         }
         if (req.method === "DELETE" && pathname.startsWith("/post/")) {
             const id = this.channel.parseOptionalInt(pathname.replace("/post/", ""));
-            return this.channel.handleDeletePost(id);
+            const url = new URL(req.url);
+            const cascade = url.searchParams.get("cascade") === "true" || url.searchParams.get("cascade") === "1";
+            return this.channel.handleDeletePost(id, cascade);
         }
         if (req.method === "POST" && pathname.startsWith("/agent/") && pathname.endsWith("/message")) {
             return this.channel.handleAgentMessage(req, pathname);
