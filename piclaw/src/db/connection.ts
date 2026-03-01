@@ -123,6 +123,28 @@ function createSchema(database: Database): void {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS token_usage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chat_jid TEXT NOT NULL,
+      run_at TEXT NOT NULL,
+      input_tokens INTEGER DEFAULT 0,
+      output_tokens INTEGER DEFAULT 0,
+      cache_read_tokens INTEGER DEFAULT 0,
+      cache_write_tokens INTEGER DEFAULT 0,
+      total_tokens INTEGER DEFAULT 0,
+      cost_input REAL DEFAULT 0,
+      cost_output REAL DEFAULT 0,
+      cost_cache_read REAL DEFAULT 0,
+      cost_cache_write REAL DEFAULT 0,
+      cost_total REAL DEFAULT 0,
+      model TEXT,
+      provider TEXT,
+      api TEXT,
+      turns INTEGER DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_token_usage_chat_jid ON token_usage(chat_jid);
+    CREATE INDEX IF NOT EXISTS idx_token_usage_run_at ON token_usage(run_at);
   `);
 }
 
@@ -154,6 +176,8 @@ export function initDatabase(): void {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
   db = new Database(dbPath);
+  db.exec("PRAGMA journal_mode = WAL;");
+  db.exec("PRAGMA busy_timeout = 5000;");
   createSchema(db);
   ensureMessageColumns(db);
   ensureFts(db);

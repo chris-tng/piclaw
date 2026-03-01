@@ -11,22 +11,29 @@ the new process takes over on the same port.
 
 ## Steps
 
-1. Install the updated package globally. Use the `file:` URL to reference the local workspace and `--no-save` so Bun doesn’t mutate the global manifest:
+1. Upgrade dependencies in the workspace:
    ```bash
+   cd /workspace/piclaw/piclaw
+   bun update
+   ```
+
+2. Install the updated package globally from a clean directory (avoids lockfile duplication):
+   ```bash
+   cd /tmp
    bun add -g --no-save file:/workspace/piclaw/piclaw
    ```
 
-2. Find the running piclaw PID:
+3. Find the running piclaw PID:
    ```bash
    PICLAW_PID=$(pgrep -f 'bun.*piclaw.*--port' | head -1)
    ```
 
-3. Determine the piclaw command line (preserves flags like --port):
+4. Determine the piclaw command line (preserves flags like --port):
    ```bash
    PICLAW_CMD=$(cat /proc/$PICLAW_PID/cmdline | tr '\0' ' ')
    ```
 
-4. Launch the force-restart script as a fully detached process. The script:
+5. Launch the force-restart script as a fully detached process. The script:
    - Does NOT wait for the current pi invocation
    - Sends SIGTERM to piclaw and waits for it to die
    - Starts a new piclaw with the same command line
@@ -63,7 +70,7 @@ the new process takes over on the same port.
    disown
    ```
 
-5. Confirm the restart script is running:
+6. Confirm the restart script is running:
    ```bash
    echo "Force restart scheduled. Piclaw will restart immediately."
    ```

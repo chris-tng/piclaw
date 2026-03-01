@@ -151,8 +151,8 @@ COPY --chown=agent:agent piclaw/skills/ /home/agent/.pi/agent/skills/
 # Ship piclaw orchestrator and install as global binary
 COPY --chown=agent:agent piclaw/ /home/agent/piclaw/
 RUN export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH" && \
-    cd /home/agent/piclaw && bun install --frozen-lockfile 2>/dev/null || bun install && \
-    bun link
+    cd /home/agent/piclaw && bun update && bun install && \
+    cd /tmp && bun add -g --no-save file:/home/agent/piclaw
 
 # Layer 5: Save skeleton
 USER root

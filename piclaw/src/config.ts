@@ -135,7 +135,7 @@ export function setAssistantAvatar(avatar: string): void {
   ASSISTANT_AVATAR = avatar.trim();
 }
 
-export const TOOL_OUTPUT_RETENTION_DAYS = parseInt(process.env.PICLAW_TOOL_OUTPUT_RETENTION_DAYS || "7", 10);
+export const TOOL_OUTPUT_RETENTION_DAYS = parseInt(process.env.PICLAW_TOOL_OUTPUT_RETENTION_DAYS || "30", 10);
 export const TOOL_OUTPUT_CLEANUP_INTERVAL_MS = parseInt(
   process.env.PICLAW_TOOL_OUTPUT_CLEANUP_INTERVAL_MS || String(12 * 60 * 60 * 1000),
   10

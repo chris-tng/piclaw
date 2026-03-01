@@ -39,6 +39,7 @@ export {
   searchToolOutputSnippets,
 } from "./db/tool-outputs.js";
 export { getRouterState, setRouterState } from "./db/router-state.js";
+export { storeTokenUsage } from "./db/token-usage.js";
 export type {
   ChatInfo,
   InteractionContentMeta,

@@ -15,6 +15,7 @@ import {
 
 import { applyControlCommand, type AgentControlCommand, type AgentControlResult } from "./agent-control.js";
 import { AGENT_TIMEOUT, SESSIONS_DIR, WORKSPACE_DIR } from "./config.js";
+import { storeTokenUsage } from "./db.js";
 import { detectChannel } from "./router.js";
 import { createTrackedBashOperations } from "./tools/tracked-bash.js";
 import { getAttachmentRegistry, type AttachmentInfo } from "./agent-pool/attachments.js";
@@ -121,6 +122,52 @@ export class AgentPool {
       // Track turns: each text_start begins a new turn
       let currentTurnText = "";
       let turnCount = 0;
+      const recordUsage = (message: any) => {
+        if (!message || message.role !== "assistant" || !message.usage) return;
+        const usage = message.usage || {};
+        const input = typeof usage.input === "number" ? usage.input : 0;
+        const output = typeof usage.output === "number" ? usage.output : 0;
+        const cacheRead = typeof usage.cacheRead === "number" ? usage.cacheRead : 0;
+        const cacheWrite = typeof usage.cacheWrite === "number" ? usage.cacheWrite : 0;
+        const totalTokens =
+          (typeof usage.totalTokens === "number" && usage.totalTokens) ||
+          (typeof usage.total === "number" && usage.total) ||
+          input + output + cacheRead + cacheWrite;
+        const cost = usage.cost || {};
+        const costInput = typeof cost.input === "number" ? cost.input : 0;
+        const costOutput = typeof cost.output === "number" ? cost.output : 0;
+        const costCacheRead = typeof cost.cacheRead === "number" ? cost.cacheRead : 0;
+        const costCacheWrite = typeof cost.cacheWrite === "number" ? cost.cacheWrite : 0;
+        const costTotal =
+          (typeof cost.total === "number" && cost.total) ||
+          costInput + costOutput + costCacheRead + costCacheWrite;
+        const runAt = message.timestamp
+          ? (() => {
+              const ts = new Date(message.timestamp);
+              return Number.isNaN(ts.getTime()) ? new Date().toISOString() : ts.toISOString();
+            })()
+          : new Date().toISOString();
+
+        storeTokenUsage({
+          chat_jid: chatJid,
+          run_at: runAt,
+          input_tokens: input,
+          output_tokens: output,
+          cache_read_tokens: cacheRead,
+          cache_write_tokens: cacheWrite,
+          total_tokens: totalTokens,
+          cost_input: costInput,
+          cost_output: costOutput,
+          cost_cache_read: costCacheRead,
+          cost_cache_write: costCacheWrite,
+          cost_total: costTotal,
+          model: message.model ?? null,
+          provider: message.provider ?? null,
+          api: message.api ?? null,
+          turns: 1,
+        });
+      };
+
       const onEvent = options.onEvent;
       const onTurnComplete = options.onTurnComplete;
 
@@ -155,6 +202,10 @@ export class AgentPool {
             currentTurnText += event.assistantMessageEvent.delta;
           }
         }
+
+        if (event.type === "message_end") {
+          recordUsage((event as any).message);
+        }
       });
 
       let timedOut = false;
@@ -180,7 +231,9 @@ export class AgentPool {
       }
 
       if (phases.includes("post")) {
-        await this.maybeAutoCompact(session, "post", options.onAutoCompact);
+        void this.maybeAutoCompact(session, "post", options.onAutoCompact).catch((err) => {
+          console.error("[agent-pool] Post auto-compaction failed:", err);
+        });
       }
 
       const duration = Date.now() - startTime;

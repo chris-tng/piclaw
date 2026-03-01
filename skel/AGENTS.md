@@ -33,6 +33,10 @@ Text inside `<internal>` tags is logged but not sent to the user. Use this when 
 
 Files you create are saved in the current working directory. Use this for notes, research, code, or anything that should persist across sessions.
 
+## Data Integrity
+
+- The SQLite database at `/workspace/.piclaw/store/messages.db` must never be deleted. Only repair/migrate it when needed; preserve data.
+
 ## Memory
 
 When you learn something important about the user or their preferences:
@@ -61,5 +65,5 @@ No ## headings. No [links](url). No **double stars**.
 ## Conventions
 
 - Use `make` targets for build/lint/test/format flows when a Makefile exists
-- Install packages with `bun add` (JS/TS) or `brew install` (system tools)
+- Use `bun update` to upgrade dependencies, `bun install` for existing JS/TS installs, and `bun add` only when adding new packages. Avoid `bun link` unless explicitly required. Use `brew install` for system tools
 - Use `sudo apt install` for system-level dependencies not in Homebrew
