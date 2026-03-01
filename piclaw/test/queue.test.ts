@@ -2,6 +2,7 @@ import { describe, test, expect } from "bun:test";
 import "./helpers.js";
 
 import { AgentQueue } from "../src/queue.js";
+import { getRetryDelay, shouldRetry } from "../src/queue/retry-policy.js";
 
 describe("AgentQueue", () => {
   test("executes tasks sequentially", async () => {
@@ -83,5 +84,14 @@ describe("AgentQueue", () => {
     await Bun.sleep(150);
     expect(order).toEqual(["a", "b"]);
     await queue.shutdown(100);
+  });
+
+  test("retry policy helpers", () => {
+    expect(shouldRetry(0, 3, false)).toBe(true);
+    expect(shouldRetry(3, 3, false)).toBe(false);
+    expect(shouldRetry(1, 3, true)).toBe(false);
+    expect(getRetryDelay(1, 1000)).toBe(1000);
+    expect(getRetryDelay(2, 1000)).toBe(2000);
+    expect(getRetryDelay(3, 1000)).toBe(4000);
   });
 });

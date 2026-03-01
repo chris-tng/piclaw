@@ -1,5 +1,4 @@
-const MAX_RETRIES = 3;
-const BASE_RETRY_MS = 5000;
+import { DEFAULT_BASE_RETRY_MS, DEFAULT_MAX_RETRIES, getRetryDelay, shouldRetry } from "./queue/retry-policy.js";
 export class AgentQueue {
     running = false;
     pending = [];
@@ -50,11 +49,11 @@ export class AgentQueue {
         }
     }
     scheduleRetry(item) {
-        if (item.retries >= MAX_RETRIES || this.shuttingDown)
+        if (!shouldRetry(item.retries, DEFAULT_MAX_RETRIES, this.shuttingDown))
             return;
         item.retries++;
-        const delay = BASE_RETRY_MS * Math.pow(2, item.retries - 1);
-        console.log(`[queue] Retry ${item.retries}/${MAX_RETRIES} in ${delay}ms${item.id ? ` (${item.id})` : ""}`);
+        const delay = getRetryDelay(item.retries, DEFAULT_BASE_RETRY_MS);
+        console.log(`[queue] Retry ${item.retries}/${DEFAULT_MAX_RETRIES} in ${delay}ms${item.id ? ` (${item.id})` : ""}`);
         setTimeout(() => {
             if (this.shuttingDown)
                 return;
