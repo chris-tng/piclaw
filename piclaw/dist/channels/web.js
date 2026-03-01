@@ -6,9 +6,10 @@ import { SseHub } from "./web/sse-hub.js";
 import { serveDocsStatic, serveStatic } from "./web/static.js";
 import { clampInt, jsonResponse, parseOptionalInt } from "./web/http-utils.js";
 import { UiBridge } from "./web/ui-bridge.js";
-import { deleteMessageByRowId, getMessageByRowId, getMessageRowIdById, getMessagesByHashtag, getTimeline, hasOlderMessages, replaceMessageContent, searchMessages, } from "../db.js";
+import { getMessageRowIdById, replaceMessageContent, } from "../db.js";
 import { WebChannelState } from "./web/channel-state.js";
 import { storeWebMessage } from "./web/message-store.js";
+import { deletePostResponse, getHashtagResponse, getSearchResponse, getThreadResponse, getTimelineResponse, } from "./web/timeline-service.js";
 const DEFAULT_CHAT_JID = "web:default";
 const DEFAULT_AGENT_ID = "default";
 const STATE_KEY = "last_agent_timestamp_web";
@@ -150,37 +151,27 @@ export class WebChannel {
         return this.json({ status: "ok", visible: this.workspaceVisible, show_hidden: this.workspaceShowHidden });
     }
     handleTimeline(limit, before) {
-        const posts = getTimeline(DEFAULT_CHAT_JID, limit, before ?? undefined);
-        const oldestId = posts.length > 0 ? posts[0].id : null;
-        const hasMore = oldestId !== null && posts.length === limit && hasOlderMessages(DEFAULT_CHAT_JID, oldestId);
-        return this.json({ posts, limit, has_more: hasMore });
+        const result = getTimelineResponse(DEFAULT_CHAT_JID, limit, before);
+        return this.json(result.body, result.status);
     }
     handleHashtag(tag, limit, offset) {
-        const posts = getMessagesByHashtag(DEFAULT_CHAT_JID, tag, limit, offset);
-        return this.json({ hashtag: tag, posts, limit, offset });
+        const result = getHashtagResponse(DEFAULT_CHAT_JID, tag, limit, offset);
+        return this.json(result.body, result.status);
     }
     handleSearch(query, limit, offset) {
-        if (!query)
-            return this.json({ error: "Missing 'q' parameter" }, 400);
-        const results = searchMessages(DEFAULT_CHAT_JID, query, limit, offset);
-        return this.json({ query, results, limit, offset });
+        const result = getSearchResponse(DEFAULT_CHAT_JID, query, limit, offset);
+        return this.json(result.body, result.status);
     }
     handleThread(id) {
-        if (!id)
-            return this.json({ error: "Thread not found" }, 404);
-        const thread = getMessageByRowId(DEFAULT_CHAT_JID, id);
-        if (!thread)
-            return this.json({ error: "Thread not found" }, 404);
-        return this.json({ thread: [thread] });
+        const result = getThreadResponse(DEFAULT_CHAT_JID, id);
+        return this.json(result.body, result.status);
     }
     handleDeletePost(id) {
-        if (!id)
-            return this.json({ error: "Post not found" }, 404);
-        const deleted = deleteMessageByRowId(DEFAULT_CHAT_JID, id);
-        if (deleted) {
-            this.broadcastEvent("interaction_deleted", { ids: [id] });
+        const result = deletePostResponse(DEFAULT_CHAT_JID, id);
+        if (result.deletedId !== undefined) {
+            this.broadcastEvent("interaction_deleted", { ids: [result.deletedId] });
         }
-        return this.json({ deleted: deleted ? 1 : 0, ids: deleted ? [id] : [] });
+        return this.json(result.body, result.status);
     }
     handleSse() {
         return this.sse.handleRequest();
