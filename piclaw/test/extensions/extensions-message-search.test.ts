@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { getTestWorkspace, setEnv } from "../helpers.js";
 import { initDatabase, storeMessage, storeChatMetadata } from "../../src/db.js";
-import { withChatContext } from "../../src/chat-context.js";
+import { withChatContext } from "../../src/core/chat-context.js";
 
 let restoreEnv: (() => void) | null = null;
 

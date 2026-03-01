@@ -36,9 +36,9 @@ test("loads pushover config from .piclaw/config.json", async () => {
     ASSISTANT_NAME: "",
   });
 
-  await importFresh("../src/config.js");
+  await importFresh("../src/core/config.js");
 
-  const cfg = await importFresh<typeof import("../src/config.js")>("../src/config.js");
+  const cfg = await importFresh<typeof import("../src/core/config.js")>("../src/core/config.js");
   expect(cfg.PUSHOVER_APP_TOKEN).toBe("app-token");
   expect(cfg.PUSHOVER_USER_KEY).toBe("user-key");
   expect(cfg.PUSHOVER_DEVICE).toBe("device-1");
@@ -68,7 +68,7 @@ test("env overrides config.json values", async () => {
     PUSHOVER_USER_KEY: "env-user",
   });
 
-  const cfg = await importFresh<typeof import("../src/config.js")>("../src/config.js");
+  const cfg = await importFresh<typeof import("../src/core/config.js")>("../src/core/config.js");
   expect(cfg.PUSHOVER_APP_TOKEN).toBe("env-token");
   expect(cfg.PUSHOVER_USER_KEY).toBe("env-user");
 });

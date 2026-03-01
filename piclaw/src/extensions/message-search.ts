@@ -14,7 +14,7 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 
 import { getDb } from "../db.js";
-import { getChatJid } from "../chat-context.js";
+import { getChatJid } from "../core/chat-context.js";
 
 // ── Schema ────────────────────────────────────────────────
 

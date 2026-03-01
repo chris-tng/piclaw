@@ -16,7 +16,7 @@ import {
   TOOL_OUTPUT_RETENTION_DAYS,
   TOOL_OUTPUT_CLEANUP_INTERVAL_MS,
   WHATSAPP_PHONE,
-} from "./config.js";
+} from "./core/config.js";
 import { initDatabase, storeMessage, storeChatMetadata } from "./db.js";
 import { AgentPool } from "./agent-pool.js";
 import { AgentQueue } from "./queue.js";

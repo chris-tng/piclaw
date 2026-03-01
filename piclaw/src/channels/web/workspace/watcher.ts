@@ -1,7 +1,7 @@
 import path from "path";
 import chokidar from "chokidar";
 
-import { WORKSPACE_DIR } from "../../../config.js";
+import { WORKSPACE_DIR } from "../../../core/config.js";
 import { buildTree, compressPaths } from "./tree.js";
 import { isHiddenPath, resolveWorkspacePath, shouldIgnorePath, toRelativePath } from "./paths.js";
 

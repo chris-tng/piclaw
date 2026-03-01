@@ -2,7 +2,7 @@ import Database from "bun:sqlite";
 import fs from "fs";
 import path from "path";
 
-import { STORE_DIR } from "../config.js";
+import { STORE_DIR } from "../core/config.js";
 
 let db: Database | null = null;
 

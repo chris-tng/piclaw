@@ -1,5 +1,5 @@
 import type { WebChannel } from "../../web.js";
-import { ASSISTANT_AVATAR, ASSISTANT_NAME, TRIGGER_PATTERN } from "../../../config.js";
+import { ASSISTANT_AVATAR, ASSISTANT_NAME, TRIGGER_PATTERN } from "../../../core/config.js";
 import { parseControlCommand } from "../../../agent-control/index.js";
 import {
   normalizeAgentMessagePayload,

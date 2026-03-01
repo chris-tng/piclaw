@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import "../helpers.js";
 
-import { readEnvFile } from "../../src/env.js";
+import { readEnvFile } from "../../src/core/env.js";
 import { writeFileSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";

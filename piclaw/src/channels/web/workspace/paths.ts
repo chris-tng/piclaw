@@ -1,6 +1,6 @@
 import path from "path";
 
-import { WORKSPACE_DIR } from "../../../config.js";
+import { WORKSPACE_DIR } from "../../../core/config.js";
 import { EXCLUDE_DIRS } from "./constants.js";
 
 export function resolveWorkspacePath(input: string | null): string | null {

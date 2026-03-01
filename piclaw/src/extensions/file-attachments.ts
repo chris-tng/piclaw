@@ -17,9 +17,9 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 
 import { createMedia } from "../db.js";
-import { WORKSPACE_DIR } from "../config.js";
+import { WORKSPACE_DIR } from "../core/config.js";
 import { getAttachmentRegistry } from "../agent-pool/attachments.js";
-import { getChatJid } from "../chat-context.js";
+import { getChatJid } from "../core/chat-context.js";
 
 // ── Schema ────────────────────────────────────────────────
 

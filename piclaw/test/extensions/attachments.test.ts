@@ -3,7 +3,7 @@ import { writeFileSync } from "fs";
 import { join } from "path";
 import { getTestWorkspace, setEnv } from "../helpers.js";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { withChatContext } from "../../src/chat-context.js";
+import { withChatContext } from "../../src/core/chat-context.js";
 
 let restoreEnv: (() => void) | null = null;
 

@@ -14,7 +14,7 @@ import {
 } from "@mariozechner/pi-coding-agent";
 
 import { applyControlCommand, type AgentControlCommand, type AgentControlResult } from "./agent-control/index.js";
-import { AGENT_TIMEOUT, SESSIONS_DIR, WORKSPACE_DIR } from "./config.js";
+import { AGENT_TIMEOUT, SESSIONS_DIR, WORKSPACE_DIR } from "./core/config.js";
 import { detectChannel } from "./router.js";
 import { createTrackedBashOperations } from "./tools/tracked-bash.js";
 import { getAttachmentRegistry, type AttachmentInfo } from "./agent-pool/attachments.js";
@@ -23,7 +23,7 @@ import { createDefaultSession, ensureSessionDir } from "./agent-pool/session.js"
 import { executeSlashCommand } from "./agent-pool/slash-command.js";
 import { recordMessageUsage } from "./agent-pool/usage.js";
 import { resolveModelLabel } from "./model-utils.js";
-import { withChatContext } from "./chat-context.js";
+import { withChatContext } from "./core/chat-context.js";
 
 export interface AgentOutput {
   status: "success" | "error";

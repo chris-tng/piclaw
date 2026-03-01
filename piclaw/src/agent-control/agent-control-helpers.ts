@@ -1,8 +1,8 @@
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import type { Model } from "@mariozechner/pi-ai";
 import { existsSync } from "fs";
-import { PICLAW_CONFIG_PATH } from "../config.js";
-import { readJsonConfig, writeJsonConfig } from "../config-store.js";
+import { PICLAW_CONFIG_PATH } from "../core/config.js";
+import { readJsonConfig, writeJsonConfig } from "../core/config-store.js";
 
 export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
 

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { getChatChannel, getChatContext, getChatJid, withChatContext } from "../../src/chat-context.js";
+import { getChatChannel, getChatContext, getChatJid, withChatContext } from "../../src/core/chat-context.js";
 
 test("chat context scopes values", async () => {
   expect(getChatContext()).toBeNull();

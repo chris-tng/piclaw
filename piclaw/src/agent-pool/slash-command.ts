@@ -1,9 +1,9 @@
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 
 import type { AgentControlResult } from "../agent-control/agent-control-types.js";
-import { AGENT_TIMEOUT } from "../config.js";
+import { AGENT_TIMEOUT } from "../core/config.js";
 import { detectChannel } from "../router.js";
-import { withChatContext } from "../chat-context.js";
+import { withChatContext } from "../core/chat-context.js";
 
 export async function executeSlashCommand(
   session: AgentSession,

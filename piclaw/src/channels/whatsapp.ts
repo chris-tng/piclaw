@@ -10,7 +10,7 @@ import makeWASocket, {
 } from "@whiskeysockets/baileys";
 import qrcode from "qrcode-terminal";
 
-import { ASSISTANT_NAME, STORE_DIR, WHATSAPP_PHONE } from "../config.js";
+import { ASSISTANT_NAME, STORE_DIR, WHATSAPP_PHONE } from "../core/config.js";
 import type { OnChatMetadata, OnInboundMessage } from "../types.js";
 import { createUuid } from "../utils/ids.js";
 
