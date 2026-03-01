@@ -14,6 +14,12 @@ export function formatTime(timestamp) {
         return `${Math.floor(diffSec / 3600)}h`;
     }
 
+    if (diffMs < 5 * dayMs) {
+        const weekday = date.toLocaleDateString(undefined, { weekday: 'short' });
+        const time = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        return `${weekday} ${time}`;
+    }
+
     const datePart = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     const timePart = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
     return `${datePart} ${timePart}`;
