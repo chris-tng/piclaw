@@ -182,20 +182,17 @@ Piclaw ships with an encrypted SQLite-backed keychain that can inject secrets in
 
 Entries live in `messages.db` (table `keychain_entries`) encrypted with AES-256-GCM + PBKDF2 (per-entry salt + nonce). Deleting entries uses `PRAGMA secure_delete=ON`.
 
-Add an entry from the repo root:
+Add an entry via the CLI:
 
 ```bash
 PICLAW_KEYCHAIN_KEY="your-master-key" \
-  bun -e 'import { initDatabase } from "./piclaw/src/db.js";
-    import { setKeychainEntry } from "./piclaw/src/secure/keychain.js";
-    initDatabase();
-    await setKeychainEntry({
-      name: "github/foo/bar",
-      type: "token",
-      secret: "ghp_xxx",
-      username: "octo"
-    });'
+  piclaw keychain set github/foo/bar \
+    --type token \
+    --secret "ghp_xxx" \
+    --username "octo"
 ```
+
+(You can still use the low-level API if needed; see `docs/keychain.md`.)
 
 Use entries in tool env maps by prefixing with `keychain:`. The default value is the secret; append `:username` to read the stored username.
 

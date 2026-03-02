@@ -33,7 +33,37 @@ Each entry stores:
 
 ## Adding entries
 
-From the repo root:
+Use the CLI (recommended):
+
+```bash
+PICLAW_KEYCHAIN_KEY="your-master-key" \
+  piclaw keychain set github/foo/bar \
+    --type token \
+    --secret "ghp_xxx" \
+    --username "octo"
+```
+
+Or with a secret file:
+
+```bash
+PICLAW_KEYCHAIN_KEY="your-master-key" \
+  piclaw keychain set github/foo/bar \
+    --type token \
+    --secret-file /path/to/token.txt
+```
+
+You can update an entry by calling `set` again with the same name.
+
+## Listing and deleting
+
+```bash
+PICLAW_KEYCHAIN_KEY="your-master-key" piclaw keychain list
+PICLAW_KEYCHAIN_KEY="your-master-key" piclaw keychain delete github/foo/bar
+```
+
+## Low-level API
+
+If you need direct access, you can call the module directly:
 
 ```bash
 PICLAW_KEYCHAIN_KEY="your-master-key" \
@@ -46,19 +76,6 @@ PICLAW_KEYCHAIN_KEY="your-master-key" \
       secret: "ghp_xxx",
       username: "octo"
     });'
-```
-
-You can update an entry by calling `setKeychainEntry` again with the same name.
-
-## Listing and deleting
-
-```bash
-PICLAW_KEYCHAIN_KEY="your-master-key" \
-  bun -e 'import { initDatabase } from "./piclaw/src/db.js";
-    import { listKeychainEntries, deleteKeychainEntry } from "./piclaw/src/secure/keychain.js";
-    initDatabase();
-    console.log(listKeychainEntries());
-    deleteKeychainEntry("github/foo/bar");'
 ```
 
 ## Using entries in tools
