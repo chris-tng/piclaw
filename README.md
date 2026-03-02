@@ -171,6 +171,45 @@ WORKSPACE_PATH=/mnt/data/piclaw-workspace docker compose up -d
 | `PICLAW_TOOL_OUTPUT_RETENTION_DAYS` | `30` | Retain stored tool outputs |
 | `PICLAW_TOOL_OUTPUT_CLEANUP_INTERVAL_MS` | `43200000` | Cleanup interval |
 
+### Keychain secrets
+
+Piclaw ships with an encrypted SQLite-backed keychain that can inject secrets into tool environment variables. The keychain is disabled unless you provide a master key.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `PICLAW_KEYCHAIN_KEY` | _(empty)_ | Master key for encrypting/decrypting keychain entries |
+| `PICLAW_KEYCHAIN_KEY_FILE` | _(empty)_ | Read master key from a file (trimmed) |
+
+Entries live in `messages.db` (table `keychain_entries`) encrypted with AES-256-GCM + PBKDF2 (per-entry salt + nonce). Deleting entries uses `PRAGMA secure_delete=ON`.
+
+Add an entry from the repo root:
+
+```bash
+PICLAW_KEYCHAIN_KEY="your-master-key" \
+  bun -e 'import { initDatabase } from "./piclaw/src/db.js";
+    import { setKeychainEntry } from "./piclaw/src/secure/keychain.js";
+    initDatabase();
+    await setKeychainEntry({
+      name: "github/foo/bar",
+      type: "token",
+      secret: "ghp_xxx",
+      username: "octo"
+    });'
+```
+
+Use entries in tool env maps by prefixing with `keychain:`. The default value is the secret; append `:username` to read the stored username.
+
+```json
+{
+  "env": {
+    "GITHUB_TOKEN": "keychain:github/foo/bar",
+    "GITHUB_USER": "keychain:github/foo/bar:username"
+  }
+}
+```
+
+See `docs/keychain.md` for details.
+
 ### WhatsApp pairing
 
 If QR pairing fails (headless/server environments), provide a phone number to request a pairing code:

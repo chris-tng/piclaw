@@ -19,6 +19,7 @@
 | `tool_outputs` | Stored tool output summaries |
 | `tool_outputs_fts` | Full‑text index for tool output |
 | `router_state` | Polling cursors |
+| `keychain_entries` | Encrypted secrets for tool env injection |
 
 Attachments and link previews are stored on the message record (`content_blocks`, `link_previews`).
 
@@ -130,6 +131,18 @@ erDiagram
     text key
     text value
   }
+  KEYCHAIN_ENTRIES {
+    int id
+    text name
+    text type
+    blob ciphertext
+    blob nonce
+    blob salt
+    text kdf
+    int kdf_iterations
+    text created_at
+    text updated_at
+  }
 ```
 
 ## Token usage
@@ -155,6 +168,7 @@ erDiagram
 - `media(created_at)` for attachment timelines
 - `message_media(message_rowid)` and `message_media(media_id)` for joins
 - `messages_fts` and `tool_outputs_fts` for full-text search
+- `keychain_entries(type)` for keychain lookups
 
 ## Data paths
 
