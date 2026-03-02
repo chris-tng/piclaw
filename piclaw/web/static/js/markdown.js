@@ -252,7 +252,8 @@ export function renderThinkingMarkdown(text) {
     const safeHtml = restoreAllowedHtmlTags(escaped);
     let html_content = window.marked ? marked.parse(safeHtml) : safeHtml.replace(/\n/g, '<br>');
     html_content = decodeCodeEntities(html_content);
-    html_content = renderMath(html_content);
+    // Avoid math rendering in thought/draft panels to prevent shell $ variables
+    // from being misinterpreted as inline LaTeX.
     return html_content;
 }
 
