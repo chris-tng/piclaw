@@ -130,6 +130,27 @@ function decodeCodeEntities(html) {
         .replace(/<code>([\s\S]*?)<\/code>/g, (match, code) => `<code>${normalize(code)}</code>`);
 }
 
+function decodeTextEntities(html) {
+    if (!html) return html;
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+    const decode = (value) => value
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, '&');
+    let node;
+    while ((node = walker.nextNode())) {
+        if (!node.nodeValue) continue;
+        const next = decode(node.nodeValue);
+        if (next !== node.nodeValue) {
+            node.nodeValue = next;
+        }
+    }
+    return doc.body.innerHTML;
+}
+
 /**
  * Render LaTeX math expressions using KaTeX
  * Handles $$...$$ for display math and $...$ for inline math
@@ -225,6 +246,7 @@ export function renderMarkdown(text, onHashtagClick) {
         : safeHtml.replace(/\n/g, '<br>');
 
     html_content = decodeCodeEntities(html_content);
+    html_content = decodeTextEntities(html_content);
 
     // Render math expressions
     html_content = renderMath(html_content);
@@ -252,6 +274,7 @@ export function renderThinkingMarkdown(text) {
     const safeHtml = restoreAllowedHtmlTags(escaped);
     let html_content = window.marked ? marked.parse(safeHtml) : safeHtml.replace(/\n/g, '<br>');
     html_content = decodeCodeEntities(html_content);
+    html_content = decodeTextEntities(html_content);
     // Avoid math rendering in thought/draft panels to prevent shell $ variables
     // from being misinterpreted as inline LaTeX.
     return html_content;
