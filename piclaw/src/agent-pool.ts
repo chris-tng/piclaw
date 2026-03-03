@@ -130,6 +130,7 @@ export class AgentPool {
 
     try {
       const session = await this.getOrCreate(chatJid);
+      this.pruneOrphanToolResults(session, chatJid);
       console.log(`[agent-pool] Prompting session ${chatJid} (${prompt.length} chars)`);
 
       const tracker = this.createTurnTracker(chatJid, options.onTurnComplete);
@@ -354,6 +355,38 @@ export class AgentPool {
     const model = session.model;
     if (!model) return;
     this.settingsManager.setDefaultModelAndProvider(model.provider, model.id);
+  }
+
+  private pruneOrphanToolResults(session: AgentSession, chatJid: string): void {
+    const messages = (session as any).agent?.state?.messages as Array<Record<string, any>> | undefined;
+    if (!Array.isArray(messages) || messages.length === 0) return;
+
+    const toolCallIds = new Set<string>();
+    for (const msg of messages) {
+      if (msg?.role !== "assistant" || !Array.isArray(msg.content)) continue;
+      for (const block of msg.content) {
+        if (block && block.type === "toolCall" && typeof block.id === "string") {
+          toolCallIds.add(block.id);
+        }
+      }
+    }
+
+    if (toolCallIds.size === 0) return;
+
+    const pruned = messages.filter((msg) => {
+      if (msg?.role !== "toolResult") return true;
+      const id = msg.toolCallId;
+      return typeof id === "string" && toolCallIds.has(id);
+    });
+
+    if (pruned.length !== messages.length) {
+      try {
+        (session as any).agent?.replaceMessages(pruned as any);
+        console.warn(`[agent-pool] Pruned ${messages.length - pruned.length} orphan tool result(s) for ${chatJid}`);
+      } catch (err) {
+        console.warn(`[agent-pool] Failed to prune orphan tool results for ${chatJid}:`, err);
+      }
+    }
   }
 
   private createTurnTracker(

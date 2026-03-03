@@ -64,6 +64,7 @@ export class AgentPool {
         this.attachments.clear(chatJid);
         try {
             const session = await this.getOrCreate(chatJid);
+            this.pruneOrphanToolResults(session, chatJid);
             console.log(`[agent-pool] Prompting session ${chatJid} (${prompt.length} chars)`);
             const tracker = this.createTurnTracker(chatJid, options.onTurnComplete);
             const unsub = this.subscribeToSession(session, chatJid, tracker, options.onEvent);
@@ -263,6 +264,38 @@ export class AgentPool {
         if (!model)
             return;
         this.settingsManager.setDefaultModelAndProvider(model.provider, model.id);
+    }
+    pruneOrphanToolResults(session, chatJid) {
+        const messages = session?.agent?.state?.messages;
+        if (!Array.isArray(messages) || messages.length === 0)
+            return;
+        const toolCallIds = new Set();
+        for (const msg of messages) {
+            if (msg?.role !== "assistant" || !Array.isArray(msg.content))
+                continue;
+            for (const block of msg.content) {
+                if (block && block.type === "toolCall" && typeof block.id === "string") {
+                    toolCallIds.add(block.id);
+                }
+            }
+        }
+        if (toolCallIds.size === 0)
+            return;
+        const pruned = messages.filter((msg) => {
+            if (msg?.role !== "toolResult")
+                return true;
+            const id = msg.toolCallId;
+            return typeof id === "string" && toolCallIds.has(id);
+        });
+        if (pruned.length !== messages.length) {
+            try {
+                session?.agent?.replaceMessages(pruned);
+                console.warn(`[agent-pool] Pruned ${messages.length - pruned.length} orphan tool result(s) for ${chatJid}`);
+            }
+            catch (err) {
+                console.warn(`[agent-pool] Failed to prune orphan tool results for ${chatJid}:`, err);
+            }
+        }
     }
     createTurnTracker(chatJid, onTurnComplete) {
         let currentTurnText = "";
