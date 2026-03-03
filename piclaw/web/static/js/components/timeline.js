@@ -69,6 +69,15 @@ export function Timeline({ posts, hasMore, onLoadMore, onPostClick, onHashtagCli
         }
     }, [hasIntersectionObserver, posts, hasMore, reverse, timelineRef, triggerLoadMore]);
 
+    useEffect(() => {
+        if (!timelineRef?.current) return;
+        if (!hasMore || loadingMore) return;
+        const { scrollHeight, clientHeight } = timelineRef.current;
+        if (scrollHeight <= clientHeight + 1) {
+            triggerLoadMore();
+        }
+    }, [posts, hasMore, loadingMore, timelineRef, triggerLoadMore]);
+
     if (!posts) {
         return html`<div class="loading"><div class="spinner"></div></div>`;
     }
