@@ -1,6 +1,6 @@
-# Piclaw on Azure VM (anonymous setup guide)
+# Piclaw on Azure VM (setup guide)
 
-This is a concise, anonymised checklist for deploying Piclaw on an Azure VM. It avoids hostnames, IPs, and secrets — you can fill those in for your environment.
+This is a concise checklist for deploying Piclaw on an Azure VM.
 
 ## 1) Provision the VM
 
