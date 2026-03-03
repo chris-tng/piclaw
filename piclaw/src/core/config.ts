@@ -4,14 +4,21 @@ import { readEnvFile } from "./env.js";
 import { readJsonConfig } from "./config-store.js";
 
 const envConfig = readEnvFile([
+  "PICLAW_ASSISTANT_NAME",
+  "PICLAW_ASSISTANT_AVATAR",
   "ASSISTANT_NAME",
   "ASSISTANT_AVATAR",
+  "PICLAW_AGENT_TIMEOUT",
+  "AGENT_TIMEOUT",
+  "PICLAW_BACKGROUND_AGENT_TIMEOUT",
+  "AGENT_TIMEOUT_BACKGROUND",
+  "PICLAW_WHATSAPP_PHONE",
+  "WHATSAPP_PHONE",
   "PUSHOVER_APP_TOKEN",
   "PUSHOVER_USER_KEY",
   "PUSHOVER_DEVICE",
   "PUSHOVER_PRIORITY",
   "PUSHOVER_SOUND",
-  "WHATSAPP_PHONE",
   "PICLAW_WEB_TLS_CERT",
   "PICLAW_WEB_TLS_KEY",
 ]);
@@ -82,14 +89,48 @@ const configAssistantAvatar = pickString(assistantConfig, [
   "ASSISTANT_AVATAR",
 ]);
 
-export let ASSISTANT_NAME =
-  process.env.ASSISTANT_NAME || envConfig.ASSISTANT_NAME || configAssistantName || "PiClaw";
-export let ASSISTANT_AVATAR =
-  process.env.ASSISTANT_AVATAR || envConfig.ASSISTANT_AVATAR || configAssistantAvatar || "";
+function warnDeprecatedEnv(oldName: string, newName: string): void {
+  const oldValue = process.env[oldName] ?? envConfig[oldName];
+  const newValue = process.env[newName] ?? envConfig[newName];
+  if (oldValue && !newValue) {
+    console.warn(`[config] ${oldName} is deprecated; use ${newName}.`);
+  }
+}
 
-export const AGENT_TIMEOUT = parseInt(process.env.AGENT_TIMEOUT || "1800000", 10); // 30min default
+warnDeprecatedEnv("ASSISTANT_NAME", "PICLAW_ASSISTANT_NAME");
+warnDeprecatedEnv("ASSISTANT_AVATAR", "PICLAW_ASSISTANT_AVATAR");
+warnDeprecatedEnv("AGENT_TIMEOUT", "PICLAW_AGENT_TIMEOUT");
+warnDeprecatedEnv("AGENT_TIMEOUT_BACKGROUND", "PICLAW_BACKGROUND_AGENT_TIMEOUT");
+
+export let ASSISTANT_NAME =
+  process.env.PICLAW_ASSISTANT_NAME ||
+  envConfig.PICLAW_ASSISTANT_NAME ||
+  process.env.ASSISTANT_NAME ||
+  envConfig.ASSISTANT_NAME ||
+  configAssistantName ||
+  "PiClaw";
+export let ASSISTANT_AVATAR =
+  process.env.PICLAW_ASSISTANT_AVATAR ||
+  envConfig.PICLAW_ASSISTANT_AVATAR ||
+  process.env.ASSISTANT_AVATAR ||
+  envConfig.ASSISTANT_AVATAR ||
+  configAssistantAvatar ||
+  "";
+
+export const AGENT_TIMEOUT = parseInt(
+  process.env.PICLAW_AGENT_TIMEOUT ||
+    envConfig.PICLAW_AGENT_TIMEOUT ||
+    process.env.AGENT_TIMEOUT ||
+    envConfig.AGENT_TIMEOUT ||
+    "1800000",
+  10
+); // 30min default
 export const BACKGROUND_AGENT_TIMEOUT = parseInt(
-  process.env.PICLAW_BACKGROUND_AGENT_TIMEOUT || process.env.AGENT_TIMEOUT_BACKGROUND || "0",
+  process.env.PICLAW_BACKGROUND_AGENT_TIMEOUT ||
+    envConfig.PICLAW_BACKGROUND_AGENT_TIMEOUT ||
+    process.env.AGENT_TIMEOUT_BACKGROUND ||
+    envConfig.AGENT_TIMEOUT_BACKGROUND ||
+    "0",
   10
 );
 export const IPC_POLL_INTERVAL = 1000;
@@ -164,7 +205,13 @@ export const TOOL_OUTPUT_CLEANUP_INTERVAL_MS = parseInt(
   10
 );
 
-export const WHATSAPP_PHONE = process.env.WHATSAPP_PHONE || envConfig.WHATSAPP_PHONE || configWhatsappPhone || "";
+export const WHATSAPP_PHONE =
+  process.env.WHATSAPP_PHONE ||
+  envConfig.WHATSAPP_PHONE ||
+  process.env.PICLAW_WHATSAPP_PHONE ||
+  envConfig.PICLAW_WHATSAPP_PHONE ||
+  configWhatsappPhone ||
+  "";
 
 // Pushover notification channel
 export const PUSHOVER_APP_TOKEN = process.env.PUSHOVER_APP_TOKEN || envConfig.PUSHOVER_APP_TOKEN || configAppToken || "";

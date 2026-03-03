@@ -92,14 +92,17 @@ export async function executeSlashCommand(session, chatJid, rawText) {
         };
         const unsub = session.subscribe(onEvent);
         let timedOut = false;
-        const timeoutId = setTimeout(async () => {
-            timedOut = true;
-            console.error(`[agent-pool] Slash command timeout after ${AGENT_TIMEOUT}ms for ${chatJid}`);
-            try {
-                await session.abort();
-            }
-            catch { }
-        }, AGENT_TIMEOUT);
+        let timeoutId = null;
+        if (AGENT_TIMEOUT > 0) {
+            timeoutId = setTimeout(async () => {
+                timedOut = true;
+                console.error(`[agent-pool] Slash command timeout after ${AGENT_TIMEOUT}ms for ${chatJid}`);
+                try {
+                    await session.abort();
+                }
+                catch { }
+            }, AGENT_TIMEOUT);
+        }
         const channel = detectChannel(chatJid);
         try {
             await withChatContext(chatJid, channel, async () => {
@@ -107,7 +110,8 @@ export async function executeSlashCommand(session, chatJid, rawText) {
             });
         }
         finally {
-            clearTimeout(timeoutId);
+            if (timeoutId)
+                clearTimeout(timeoutId);
             unsub();
         }
         if (timedOut) {

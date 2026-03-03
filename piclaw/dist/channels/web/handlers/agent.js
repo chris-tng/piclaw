@@ -1,4 +1,4 @@
-import { ASSISTANT_AVATAR, ASSISTANT_NAME, TRIGGER_PATTERN } from "../../../core/config.js";
+import { ASSISTANT_AVATAR, ASSISTANT_NAME, BACKGROUND_AGENT_TIMEOUT, TRIGGER_PATTERN } from "../../../core/config.js";
 import { parseControlCommand } from "../../../agent-control/index.js";
 import { normalizeAgentMessagePayload, parseAgentMessageRequest, storeAgentUserMessage, } from "../agent-message-service.js";
 import { getMessagesSince } from "../../../db.js";
@@ -65,7 +65,8 @@ export async function handleAgentMessage(channel, req, pathname, chatJid, defaul
     }
     const steerResult = await channel.agentPool.queueStreamingMessage(chatJid, normalized.content, "steer");
     if (steerResult.queued) {
-        markCommandHandled();
+        channel.queuePendingSteering(chatJid, interaction.timestamp);
+        channel.broadcastEvent("agent_steer_queued", { chat_jid: chatJid });
         return channel.json({
             user_message: interaction,
             thread_id: threadId,
@@ -118,7 +119,10 @@ export async function processChat(channel, chatJid, agentId, threadRootId) {
         onThoughtBuffer: (text, totalLines) => channel.updateThoughtBuffer(turnId, text, totalLines),
         onDraftBuffer: (text, totalLines) => channel.updateDraftBuffer(turnId, text, totalLines),
     });
+    const hasActiveClients = channel.sse.clients.size > 0;
+    const timeoutMs = hasActiveClients ? undefined : BACKGROUND_AGENT_TIMEOUT;
     const output = await channel.agentPool.runAgent(prompt, chatJid, {
+        timeoutMs,
         onAutoCompact: (notice) => {
             const phaseLabel = notice.phase === "pre"
                 ? "Auto-compacting to free context"
@@ -194,6 +198,14 @@ export async function processChat(channel, chatJid, agentId, threadRootId) {
             channelName,
             threadId: resolvedThreadRootId,
         });
+    }
+    const pendingSteerTimestamp = channel.consumePendingSteering(chatJid);
+    if (pendingSteerTimestamp) {
+        const current = channel.state.lastAgentTimestamp[chatJid] || "";
+        if (!current || current < pendingSteerTimestamp) {
+            channel.state.lastAgentTimestamp[chatJid] = pendingSteerTimestamp;
+            channel.saveState();
+        }
     }
     emitter.status({
         thread_id: threadId,

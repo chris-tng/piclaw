@@ -8,7 +8,7 @@ export async function handleAgentName(_session, command) {
     const normalized = trimmed.toLowerCase();
     const nextName = ["clear", "none", "off", "default"].includes(normalized) ? null : trimmed;
     const updated = updateAssistantConfig({ name: nextName });
-    const fallback = process.env.ASSISTANT_NAME || "PiClaw";
+    const fallback = process.env.PICLAW_ASSISTANT_NAME || process.env.ASSISTANT_NAME || "PiClaw";
     const effective = updated.name || fallback;
     setAssistantName(effective);
     return {
@@ -25,7 +25,7 @@ export async function handleAgentAvatar(_session, command) {
     const normalized = trimmed.toLowerCase();
     const nextAvatar = ["clear", "none", "off", "default"].includes(normalized) ? null : trimmed;
     const updated = updateAssistantConfig({ avatar: nextAvatar });
-    const fallback = process.env.ASSISTANT_AVATAR || "";
+    const fallback = process.env.PICLAW_ASSISTANT_AVATAR || process.env.ASSISTANT_AVATAR || "";
     const effective = updated.avatar || fallback;
     setAssistantAvatar(effective);
     return {

@@ -64,7 +64,8 @@ export class AgentPool {
             console.log(`[agent-pool] Prompting session ${chatJid} (${prompt.length} chars)`);
             const tracker = this.createTurnTracker(chatJid, options.onTurnComplete);
             const unsub = this.subscribeToSession(session, chatJid, tracker, options.onEvent);
-            const { timeoutId, timedOutRef } = this.startPromptTimeout(session, chatJid);
+            const timeoutMs = typeof options.timeoutMs === "number" ? options.timeoutMs : AGENT_TIMEOUT;
+            const { timeoutId, timedOutRef } = this.startPromptTimeout(session, chatJid, timeoutMs);
             const channel = detectChannel(chatJid);
             return await withChatContext(chatJid, channel, async () => {
                 const phases = options.autoCompactPhases ?? ["pre", "post"];
@@ -75,7 +76,8 @@ export class AgentPool {
                     await session.prompt(prompt);
                 }
                 finally {
-                    clearTimeout(timeoutId);
+                    if (timeoutId)
+                        clearTimeout(timeoutId);
                     unsub();
                 }
                 if (phases.includes("post")) {
@@ -91,7 +93,7 @@ export class AgentPool {
                 const timedOut = timedOutRef.value;
                 writeAgentLog(this.logsDir, chatJid, duration, timedOut, finalText, null);
                 if (timedOut) {
-                    return { status: "error", result: null, error: `Timed out after ${AGENT_TIMEOUT}ms` };
+                    return { status: "error", result: null, error: `Timed out after ${timeoutMs}ms` };
                 }
                 console.log(`[agent-pool] Done in ${duration}ms (${finalText.length} chars, ${tracker.getTurnCount() + 1} turns, session ${chatJid})`);
                 return {
@@ -260,6 +262,9 @@ export class AgentPool {
     }
     subscribeToSession(session, chatJid, tracker, onEvent) {
         return session.subscribe((event) => {
+            const entry = this.pool.get(chatJid);
+            if (entry)
+                entry.lastUsed = Date.now();
             if (onEvent) {
                 try {
                     onEvent(event);
@@ -274,13 +279,16 @@ export class AgentPool {
             }
         });
     }
-    startPromptTimeout(session, chatJid) {
+    startPromptTimeout(session, chatJid, timeoutMs) {
         const timedOutRef = { value: false };
+        if (!timeoutMs || timeoutMs <= 0) {
+            return { timeoutId: null, timedOutRef };
+        }
         const timeoutId = setTimeout(async () => {
             timedOutRef.value = true;
-            console.error(`[agent-pool] Timeout after ${AGENT_TIMEOUT}ms for ${chatJid}`);
+            console.error(`[agent-pool] Timeout after ${timeoutMs}ms for ${chatJid}`);
             await session.abort();
-        }, AGENT_TIMEOUT);
+        }, timeoutMs);
         return { timeoutId, timedOutRef };
     }
     async bindSession(session, chatJid) {
@@ -328,10 +336,15 @@ export class AgentPool {
     evictIdle() {
         const now = Date.now();
         for (const [jid, entry] of this.pool) {
+            const session = entry.session;
+            if (session.isStreaming || session.isBashRunning || session.isCompacting) {
+                entry.lastUsed = now;
+                continue;
+            }
             if (now - entry.lastUsed > IDLE_TTL) {
                 console.log(`[agent-pool] Evicting idle session ${jid}`);
                 try {
-                    entry.session.dispose();
+                    session.dispose();
                 }
                 catch { }
                 this.pool.delete(jid);

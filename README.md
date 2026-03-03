@@ -161,15 +161,18 @@ WORKSPACE_PATH=/mnt/data/piclaw-workspace docker compose up -d
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `PICLAW_AUTOSTART` | `0` | Set to `1` to auto-start piclaw on container boot |
-| `AGENT_TIMEOUT` | `600000` | Max `pi` invocation time (ms) |
-| `ASSISTANT_NAME` | `PiClaw` | Trigger name (`@PiClaw`) |
-| `ASSISTANT_AVATAR` | _(empty)_ | Avatar URL for web UI |
+| `PICLAW_AGENT_TIMEOUT` | `1800000` | Max `pi` invocation time (ms) |
+| `PICLAW_BACKGROUND_AGENT_TIMEOUT` | `0` | Max background invocation time (ms, `0` disables) |
+| `PICLAW_ASSISTANT_NAME` | `PiClaw` | Trigger name (`@PiClaw`) |
+| `PICLAW_ASSISTANT_AVATAR` | _(empty)_ | Avatar URL for web UI |
 | `PICLAW_WEB_PORT` | `8080` | Web UI port |
 | `PICLAW_WEB_HOST` | `0.0.0.0` | Web UI bind address |
 | `PICLAW_WEB_IDLE_TIMEOUT` | `0` | Drop idle clients (seconds) |
 | `PICLAW_WEB_MAX_CONTENT_CHARS` | `262144` | Max web message size |
 | `PICLAW_TOOL_OUTPUT_RETENTION_DAYS` | `30` | Retain stored tool outputs |
 | `PICLAW_TOOL_OUTPUT_CLEANUP_INTERVAL_MS` | `43200000` | Cleanup interval |
+
+Deprecated env names (still supported): `ASSISTANT_NAME`, `ASSISTANT_AVATAR`, `AGENT_TIMEOUT`, `AGENT_TIMEOUT_BACKGROUND`.
 
 ### Keychain secrets
 
@@ -223,7 +226,7 @@ You can also store it in `/workspace/.piclaw/config.json`:
 
 ### Assistant name & avatar
 
-You can set the web UI name/avatar in `.piclaw/config.json`:
+You can set the web UI name/avatar via `PICLAW_ASSISTANT_NAME` / `PICLAW_ASSISTANT_AVATAR` or in `.piclaw/config.json`:
 
 ```json
 {

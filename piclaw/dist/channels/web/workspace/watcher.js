@@ -130,7 +130,7 @@ export function startWorkspaceWatcher(onUpdate, includeHidden) {
         }
         if (depth === 0)
             return;
-        let entries = [];
+        let entries;
         try {
             entries = readdirSync(dir, { withFileTypes: true });
         }

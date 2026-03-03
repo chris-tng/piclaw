@@ -26,6 +26,7 @@ export class WebChannel {
     workspaceWatcher = null;
     workspaceVisible = false;
     workspaceShowHidden = false;
+    pendingSteering = new Map();
     thoughtBuffers = new Map();
     draftBuffers = new Map();
     expandedPanels = new Map();
@@ -81,6 +82,21 @@ export class WebChannel {
     }
     consumeQueuedFollowupPlaceholder(chatJid) {
         return this.state.consumeFollowupPlaceholder(chatJid);
+    }
+    queuePendingSteering(chatJid, timestamp) {
+        if (!timestamp)
+            return;
+        const existing = this.pendingSteering.get(chatJid) ?? [];
+        existing.push(timestamp);
+        this.pendingSteering.set(chatJid, existing);
+    }
+    consumePendingSteering(chatJid) {
+        const entries = this.pendingSteering.get(chatJid);
+        if (!entries || entries.length === 0)
+            return null;
+        this.pendingSteering.delete(chatJid);
+        entries.sort();
+        return entries[entries.length - 1] ?? null;
     }
     replaceQueuedFollowupPlaceholder(chatJid, rowId, text, mediaIds, contentBlocks, threadId) {
         const updated = replaceMessageContent(chatJid, rowId, text, {
