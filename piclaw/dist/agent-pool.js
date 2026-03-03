@@ -266,7 +266,7 @@ export class AgentPool {
         this.settingsManager.setDefaultModelAndProvider(model.provider, model.id);
     }
     pruneOrphanToolResults(session, chatJid) {
-        const messages = session?.agent?.state?.messages;
+        const messages = session.agent?.state?.messages;
         if (!Array.isArray(messages) || messages.length === 0)
             return;
         const toolCallIds = new Set();
@@ -290,7 +290,7 @@ export class AgentPool {
         const pruned = messages.filter(shouldKeepToolResult);
         if (pruned.length !== messages.length) {
             try {
-                session?.agent?.replaceMessages(pruned);
+                session.agent?.replaceMessages(pruned);
                 console.warn(`[agent-pool] Pruned ${messages.length - pruned.length} orphan tool result(s) for ${chatJid}`);
             }
             catch (err) {
@@ -310,7 +310,7 @@ export class AgentPool {
             if (Array.isArray(content)) {
                 return content
                     .filter((block) => block && block.type === "text")
-                    .map((block) => typeof block.text === "string" ? block.text : "")
+                    .map((block) => (typeof block.text === "string" ? block.text : ""))
                     .join("");
             }
             return "";
