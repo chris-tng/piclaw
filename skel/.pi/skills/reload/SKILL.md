@@ -29,13 +29,12 @@ tar -xzf "$TARBALL" -C "$DEST" --strip-components=1
 rm -f "$TARBALL"
 cd "$DEST" && bun install --production
 
-# 3. Launch restart (detached — survives pi exit)
-#    Reads /tmp/piclaw.pid to find the old process automatically.
-nohup setsid /workspace/.pi/skills/reload/restart-piclaw.sh \
-  </dev/null >>/tmp/restart-piclaw-force.log 2>&1 &
-disown
+# 3. Launch restart (self-detaches + waits for current turn to finish)
+#    Logs stream to /tmp/restart-piclaw-force.log by default.
+PICLAW_RELOAD_LOG=/tmp/restart-piclaw-force.log \
+  /workspace/.pi/skills/reload/restart-piclaw.sh
 
-echo "Reload started. Check /tmp/restart-piclaw-force.log for status."
+echo "Reload scheduled. Check /tmp/restart-piclaw-force.log for status."
 ```
 
 ## How It Works
@@ -51,7 +50,8 @@ The supervisor PID is stored in `/tmp/piclaw-supervisor.pid` so the next reload 
 
 ## Important Notes
 
-- This kills the running piclaw immediately — the current response may be cut off.
+- The script waits (up to 120s) for the active agent turn to finish before killing the old process, then starts the new one under a tiny supervisor.
+- To debug synchronously, run `restart-piclaw.sh --sync ...` or set `PICLAW_RELOAD_ASYNC=0`.
 - The restart script queues a `resume_pending` IPC task. If the IPC tasks directory cannot be created or a resume task already exists, it logs and continues.
 - The new piclaw starts with `piclaw --port 3000` by default. Pass a custom command after `--`:
   `restart-piclaw.sh -- piclaw --port 8080`

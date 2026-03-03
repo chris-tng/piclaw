@@ -1,18 +1,59 @@
 #!/bin/bash
 # Restart piclaw: kill old process, exec into new one.
 #
-# Usage: restart-piclaw.sh [OLD_PID] [-- CMD...]
-#   OLD_PID  PID to kill first (default: read from /tmp/piclaw.pid)
-#   CMD      command to run (default: piclaw --port 3000)
+# Usage: restart-piclaw.sh [--sync|--async] [OLD_PID] [-- CMD...]
+#   --sync       Run in the foreground (no self-detach)
+#   --async      Force async mode (default)
+#   OLD_PID      PID to kill first (default: read from /tmp/piclaw.pid)
+#   CMD          command to run (default: piclaw --port 3000)
 #
-# Launch detached:
-#   nohup setsid /path/to/restart-piclaw.sh </dev/null >>/tmp/restart-piclaw-force.log 2>&1 &
-#
-# Uses exec to replace itself with piclaw, so this script's PID
-# becomes piclaw's PID. Only one process, no wrapper zombies.
+# The script now self-detaches by default, so you can run it directly from
+# /shell or ssh. Logs go to /tmp/restart-piclaw-force.log unless overridden via
+# PICLAW_RELOAD_LOG.
 
 export PATH="/home/agent/.bun/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"
 export BUN_INSTALL="/home/agent/.bun"
+
+LOG_PATH="${PICLAW_RELOAD_LOG:-/tmp/restart-piclaw-force.log}"
+DETACH_DEFAULT="${PICLAW_RELOAD_ASYNC:-1}"
+DETACH_MODE="$DETACH_DEFAULT"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --sync|--no-async)
+      DETACH_MODE=0
+      shift
+      ;;
+    --async)
+      DETACH_MODE=1
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+if [ -n "${PICLAW_RELOAD_SYNC_MODE:-}" ]; then
+  DETACH_MODE=0
+fi
+
+if [ "$DETACH_MODE" = "1" ]; then
+  export PICLAW_RELOAD_SYNC_MODE=1
+  mkdir -p "$(dirname "$LOG_PATH")"
+  LAUNCH_CMD=()
+  if command -v setsid >/dev/null 2>&1; then
+    LAUNCH_CMD+=(setsid)
+  fi
+  if command -v nohup >/dev/null 2>&1; then
+    nohup "${LAUNCH_CMD[@]}" "$0" "$@" </dev/null >>"$LOG_PATH" 2>&1 &
+  else
+    "${LAUNCH_CMD[@]}" "$0" "$@" </dev/null >>"$LOG_PATH" 2>&1 &
+  fi
+  CHILD=$!
+  echo "[reload] Restart scheduled asynchronously (PID $CHILD). Follow $LOG_PATH for progress."
+  exit 0
+fi
 
 PIDFILE=/tmp/piclaw.pid
 LOCKFILE=/tmp/piclaw-restart.lock
@@ -61,10 +102,12 @@ DATA_DIR="${PICLAW_DATA:-/workspace/.piclaw/data}"
 IPC_MESSAGES_DIR="$DATA_DIR/ipc/messages"
 IPC_TASKS_DIR="$DATA_DIR/ipc/tasks"
 NOTIFY_SENT_FILE="/tmp/piclaw-reload-notified"
+INTERNAL_SECRET="${PICLAW_INTERNAL_SECRET:-${PICLAW_WEB_INTERNAL_SECRET:-}}"
 
 COMMAND="$1"
 if ! command -v "$COMMAND" >/dev/null 2>&1; then
   echo "[reload] Command not found: $COMMAND"
+  tidy_lock
   exit 1
 fi
 
@@ -98,6 +141,48 @@ find_port_pid() {
   ss -ltnp "sport = :$PORT" 2>/dev/null | awk -F 'pid=' 'NR>1 {split($2,a,","); print a[1]}' | head -1
 }
 
+wait_for_agent_idle() {
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "[reload] curl not available; skipping agent status wait."
+    return 0
+  fi
+  local url="http://127.0.0.1:$PORT/agent/status"
+  local attempt=0
+  local max_attempts=120
+  local -a headers=()
+  if [ -n "$INTERNAL_SECRET" ]; then
+    headers+=(-H "X-Piclaw-Internal-Secret: $INTERNAL_SECRET")
+  fi
+  while true; do
+    local resp
+    resp=$(curl -fsS --max-time 2 "${headers[@]}" "$url" 2>/dev/null || true)
+    if [ -z "$resp" ]; then
+      if [ -n "$INTERNAL_SECRET" ]; then
+        echo "[reload] Agent status unavailable (curl failed); proceeding."
+      elif [ $attempt -eq 0 ]; then
+        echo "[reload] Agent status unavailable; proceeding without wait."
+      fi
+      return 0
+    fi
+    if echo "$resp" | grep -q '"status":"active"'; then
+      if [ $attempt -eq 0 ]; then
+        echo "[reload] Waiting for active agent turn to finish..."
+      fi
+      attempt=$((attempt + 1))
+      if [ $attempt -ge $max_attempts ]; then
+        echo "[reload] Waited ${max_attempts}s for active turn; continuing reload."
+        return 0
+      fi
+      sleep 1
+      continue
+    fi
+    if [ $attempt -gt 0 ]; then
+      echo "[reload] Active turn finished; continuing reload."
+    fi
+    return 0
+  done
+}
+
 kill_pid() {
   local pid="$1"
   local label="$2"
@@ -116,6 +201,8 @@ kill_pid() {
     fi
   fi
 }
+
+wait_for_agent_idle
 
 # Kill old piclaw
 kill_pid "$OLD_PID" "old piclaw"
@@ -170,7 +257,7 @@ notify_ready() {
     return 0
   fi
   for _ in $(seq 1 40); do
-    if bash -c ":</dev/tcp/127.0.0.1/$PORT" >/dev/null 2>&1; then
+    if bash -c "</dev/tcp/127.0.0.1/$PORT" >/dev/null 2>&1; then
       mkdir -p "$IPC_MESSAGES_DIR"
       cat > "$IPC_MESSAGES_DIR/reload_$(date +%s%N).json" <<EOF
 {"type":"message","chatJid":"web:default","text":"Piclaw reload complete."}

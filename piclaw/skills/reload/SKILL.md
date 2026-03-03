@@ -6,80 +6,55 @@ description: Reinstall piclaw from workspace source and force-restart the runnin
 # Reload Piclaw (force)
 
 Reinstall the piclaw package from workspace source and restart the running process
-immediately (no waiting for the current pi invocation). This is a force hot-reload —
-the new process takes over on the same port.
+immediately. The new process takes over on the same port.
 
 ## Steps
 
-1. Upgrade dependencies in the workspace:
-   ```bash
-   cd /workspace/piclaw/piclaw
-   bun update
-   ```
+Run the following as a **single bash invocation**:
 
-2. Install the updated package globally from a clean directory (avoids lockfile duplication):
-   ```bash
-   cd /tmp
-   bun add -g --no-save file:/workspace/piclaw/piclaw
-   ```
+```bash
+set -e
 
-3. Find the running piclaw PID:
-   ```bash
-   PICLAW_PID=$(pgrep -f 'bun.*piclaw.*--port' | head -1)
-   ```
+# 1. Build
+cd /workspace/piclaw && make build-piclaw
 
-4. Determine the piclaw command line (preserves flags like --port):
-   ```bash
-   PICLAW_CMD=$(cat /proc/$PICLAW_PID/cmdline | tr '\0' ' ')
-   ```
+# 2. Pack and install globally (real files, not symlinks)
+cd /workspace/piclaw/piclaw
+bun pm pack --destination /tmp
+TARBALL=$(ls -t /tmp/piclaw-*.tgz | head -1)
+DEST=/home/agent/.bun/install/global/node_modules/piclaw
+rm -rf "$DEST"
+mkdir -p "$DEST"
+tar -xzf "$TARBALL" -C "$DEST" --strip-components=1
+rm -f "$TARBALL"
+cd "$DEST" && bun install --production
 
-5. Launch the force-restart script as a fully detached process. The script:
-   - Waits briefly so the last response can flush
-   - Sends SIGTERM to piclaw and waits for it to die
-   - Starts a new piclaw with the same command line
+# 3. Launch restart (self-detaches + waits for current turn to finish)
+#    Logs stream to /tmp/restart-piclaw-force.log by default.
+PICLAW_RELOAD_LOG=/tmp/restart-piclaw-force.log \
+  /workspace/.pi/skills/reload/restart-piclaw.sh
 
-   ```bash
-   cat > /tmp/restart-piclaw-force.sh << 'SCRIPT'
-   #!/bin/bash
-   set -e
-   PICLAW_PID=$1
-   shift 1
-   PICLAW_CMD="$@"
+echo "Reload scheduled. Check /tmp/restart-piclaw-force.log for status."
+```
 
-   # Brief delay to allow the last response to flush
-   echo "[reload] Waiting 3s before restart"
-   sleep 3
+## How It Works
 
-   # Kill old piclaw
-   echo "[reload] Stopping old piclaw ($PICLAW_PID)..."
-   kill "$PICLAW_PID" 2>/dev/null || true
-   for i in $(seq 1 10); do
-     kill -0 "$PICLAW_PID" 2>/dev/null || break
-     sleep 0.5
-   done
-   kill -9 "$PICLAW_PID" 2>/dev/null || true
-   sleep 1
+The restart script (`restart-piclaw.sh`):
+1. Reads `/tmp/piclaw.pid` to find the currently running piclaw
+2. Sends SIGTERM and waits up to 5s, then SIGKILL if needed
+3. Writes the child piclaw PID to `/tmp/piclaw.pid`
+4. Queues a `resume_pending` IPC task so interrupted turns can resume after restart (best-effort)
+5. Runs as a lightweight supervisor so it can reap child exits and restart if needed
 
-   # Start new piclaw
-   echo "[reload] Starting new piclaw: $PICLAW_CMD"
-   exec $PICLAW_CMD
-   SCRIPT
-   chmod +x /tmp/restart-piclaw-force.sh
-
-   nohup setsid /tmp/restart-piclaw-force.sh "$PICLAW_PID" $PICLAW_CMD \
-     </dev/null >/tmp/restart-piclaw-force.log 2>&1 &
-   disown
-   ```
-
-6. Confirm the restart script is running:
-   ```bash
-   echo "Force restart scheduled. Piclaw will restart shortly."
-   ```
+The supervisor PID is stored in `/tmp/piclaw-supervisor.pid` so the next reload can terminate it cleanly.
 
 ## Important Notes
 
-- The restart script waits briefly before killing the process so the final message can flush.
-- There will be a brief (~3s) gap where piclaw is down during the restart.
-- The new piclaw inherits the same command-line flags as the old one.
+- The script waits (up to 120s) for the active agent turn to finish before killing the old process, then starts the new one under a tiny supervisor.
+- To debug synchronously, run `restart-piclaw.sh --sync ...` or set `PICLAW_RELOAD_ASYNC=0`.
+- The restart script queues a `resume_pending` IPC task. If the IPC tasks directory cannot be created or a resume task already exists, it logs and continues.
+- The new piclaw starts with `piclaw --port 3000` by default. Pass a custom command after `--`:
+  `restart-piclaw.sh -- piclaw --port 8080`
 - WhatsApp session state persists across restarts (stored in SQLite + auth dir).
-- If something goes wrong, check `/tmp/restart-piclaw-force.log`.
+- Check `/tmp/restart-piclaw-force.log` if something goes wrong.
+- `bun add -g file:` creates symlinks; the pack+extract approach ensures real file copies.
