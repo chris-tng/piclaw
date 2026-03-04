@@ -158,7 +158,11 @@ function decodeTextEntities(html) {
 function renderMath(html_content) {
     if (!window.katex) return html_content;
 
-    const decodeMath = (value) => decodeEntities(value).replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&');
+    const decodeMath = (value) => decodeEntities(value)
+        .replace(/&gt;/g, '>')
+        .replace(/&lt;/g, '<')
+        .replace(/&amp;/g, '&')
+        .replace(/<br\s*\/?\s*>/gi, '\n');
 
     const stripCodeBlocks = (html) => {
         const blocks = [];
