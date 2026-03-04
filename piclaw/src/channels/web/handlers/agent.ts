@@ -278,6 +278,18 @@ export async function processChat(
     channel.state.lastAgentTimestamp[chatJid] = prevCursor;
     channel.state.clearPendingResume(chatJid);
     channel.saveState();
+
+    if (output.error && output.error.includes("already processing")) {
+      trackedEmitter.status({
+        thread_id: threadId,
+        agent_id: agentId,
+        type: "intent",
+        title: "Queued — waiting for current response",
+        turn_id: turnId,
+      });
+      throw new Error(output.error);
+    }
+
     trackedEmitter.status({
       thread_id: threadId,
       agent_id: agentId,
