@@ -1,3 +1,20 @@
+/**
+ * tools/context-tools.ts – Enhanced tool definitions for the pi-agent runtime.
+ *
+ * Wraps the standard bash tool with output-storage logic: when a command
+ * produces output exceeding configurable thresholds, the full output is
+ * stored via tool-output.ts and only a preview is returned to the agent's
+ * context window. This keeps the context lean while preserving searchability.
+ *
+ * Also provides:
+ *   - tool_output_search: lets the agent search stored tool outputs by query.
+ *   - batch_exec: runs multiple shell commands sequentially with summaries.
+ *
+ * Consumers:
+ *   - agent-pool.ts registers these tools on the pi-agent session so the
+ *     agent can invoke "bash", "tool_output_search", and "batch_exec".
+ */
+
 import { existsSync } from "fs";
 import { Type } from "@sinclair/typebox";
 import { createBashTool } from "@mariozechner/pi-coding-agent";

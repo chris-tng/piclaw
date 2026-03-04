@@ -1,27 +1,55 @@
+/**
+ * workspace-search.ts – Full-text search over workspace files using FTS5.
+ *
+ * Indexes text files (markdown, scripts, config) from configurable workspace
+ * directories into the `workspace_fts` and `workspace_files` SQLite tables.
+ * Supports incremental indexing (only re-indexes files whose mtime/size changed)
+ * and scoped search (notes, skills, or all).
+ *
+ * Consumers:
+ *   - extensions/workspace-search.ts exposes searchWorkspace() as a tool
+ *     the agent can invoke to search its own workspace files.
+ *   - agent-control/handlers/info.ts may query workspace search results.
+ */
+
 import fs from "node:fs/promises";
 import path from "node:path";
 
 import { getDb } from "./db.js";
 import { WORKSPACE_DIR } from "./core/config.js";
 
+/** Search scope: restrict to notes/, skills/, or search all indexed roots. */
 export type WorkspaceSearchScope = "notes" | "skills" | "all";
 
+/** Parameters accepted by searchWorkspace(). */
 export type WorkspaceSearchParams = {
+  /** FTS5 query string. */
   query: string;
+  /** Restrict results to a specific scope. */
   scope?: WorkspaceSearchScope | string;
+  /** Maximum number of results to return (default 10, max 50). */
   limit?: number;
+  /** Pagination offset (default 0). */
   offset?: number;
+  /** Whether to re-index before searching (default true). */
   refresh?: boolean;
+  /** Maximum file size in KB to index (default 512). */
   max_kb?: number;
 };
 
+/** A single search result row with snippet and file metadata. */
 export type WorkspaceSearchRow = {
+  /** Relative path from workspace root. */
   path: string;
+  /** FTS5-highlighted snippet around matching terms. */
   snippet: string;
+  /** File size in bytes. */
   size_bytes: number;
+  /** File modification time in epoch milliseconds. */
   mtime_ms: number;
 };
 
+/** Return value from searchWorkspace(). */
 export type WorkspaceSearchResult = {
   rows: WorkspaceSearchRow[];
   limit: number;
