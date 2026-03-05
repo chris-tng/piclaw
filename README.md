@@ -11,7 +11,7 @@ PiClaw is a Docker-based sandbox for running the [Pi Coding Agent](https://githu
 - **Code editor** — built-in CodeMirror 6 with syntax highlighting for 12 languages, search/replace, and save
 - **Persistent storage** — SQLite-backed messages, media, tasks, token usage, and encrypted keychain
 - **Skills** — setup, debugging, Playwright, scheduling, charts, web search, and more
-- **TOTP authentication** — optional login gate with iOS/Android webapp support
+- **Passkeys + TOTP authentication** — optional WebAuthn passkeys with TOTP fallback (iOS/Android webapp support)
 - **WhatsApp** — optional secondary channel
 
 ## Quick Start
@@ -77,6 +77,7 @@ Key environment variables:
 |----------|---------|---------|
 | `PICLAW_WEB_PORT` | `8080` | Web UI port |
 | `PICLAW_WEB_TOTP_SECRET` | _(empty)_ | Base32 TOTP secret; enables login gate |
+| `PICLAW_WEB_PASSKEY_MODE` | `totp-fallback` | Passkey mode: `totp-fallback`, `passkey-only`, or `totp-only` |
 | `PICLAW_ASSISTANT_NAME` | `PiClaw` | Display name in the UI |
 | `PICLAW_KEYCHAIN_KEY` | _(empty)_ | Master key for encrypted secret storage |
 

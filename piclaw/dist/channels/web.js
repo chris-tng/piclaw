@@ -385,7 +385,7 @@ export class WebChannel {
         const allowCredentials = credentials.map((cred) => {
             const transports = cred.transports ? JSON.parse(cred.transports) : undefined;
             return {
-                id: cred.credential_id,
+                id: this.base64UrlToBuffer(cred.credential_id),
                 type: "public-key",
                 transports: Array.isArray(transports) ? transports : undefined,
             };
@@ -478,7 +478,7 @@ export class WebChannel {
         const { rpId } = this.getWebauthnRpInfo(req);
         const existing = getWebauthnCredentialsForRpId(enrollment.user_id, rpId);
         const excludeCredentials = existing.map((cred) => ({
-            id: cred.credential_id,
+            id: this.base64UrlToBuffer(cred.credential_id),
             type: "public-key",
         }));
         const options = await generateRegistrationOptions({

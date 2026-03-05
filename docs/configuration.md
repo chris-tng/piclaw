@@ -53,23 +53,36 @@ Set via environment variables (see above) or in `.piclaw/config.json`:
 }
 ```
 
-## Authentication (TOTP)
+## Authentication (TOTP + passkeys)
 
-You can gate the entire web UI behind a 6-digit TOTP challenge. Static assets needed by iOS/Android webapps (manifest, icons, avatars, `/static/*`) remain public so homescreen shortcuts keep working.
+You can gate the entire web UI behind a 6-digit TOTP challenge and optionally enable WebAuthn passkeys. Static assets needed by iOS/Android webapps (manifest, icons, avatars, `/static/*`) remain public so homescreen shortcuts keep working.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `PICLAW_WEB_TOTP_SECRET` | _(empty)_ | Base32 TOTP secret. When set, `/login` requires a 6-digit code before issuing a `piclaw_session` cookie. Leave unset to keep the UI open. |
+| `PICLAW_WEB_PASSKEY_MODE` | `totp-fallback` | Passkey mode: `totp-fallback`, `passkey-only`, or `totp-only`. |
 | `PICLAW_WEB_TOTP_WINDOW` | `1` | TOTP step skew (number of 30s windows to accept on either side). |
 | `PICLAW_WEB_SESSION_TTL` | `604800` (7 days) | Session cookie lifetime in seconds. |
 | `PICLAW_WEB_INTERNAL_SECRET` / `PICLAW_INTERNAL_SECRET` | _(empty)_ | Shared secret for unattended POST/PATCH calls to `/internal/post`; required when TOTP is enabled and you want automations to keep posting. |
 
-### Setup flow
+### Setup flow (TOTP)
 
 1. Set `PICLAW_WEB_TOTP_SECRET` to a base32 string (e.g. output of `oathtool --totp -b`).
 2. Restart piclaw. Visiting the UI redirects to `/login`.
 3. Enter the 6-digit code from your authenticator app to receive an HTTP-only `piclaw_session` cookie.
 4. Sessions expire automatically after `PICLAW_WEB_SESSION_TTL` seconds or when you delete the cookie.
+
+### Passkey enrolment
+
+1. Sign in with TOTP.
+2. Run `/passkey enrol` in the web UI to get a one-time enrolment link.
+3. Open the link in the same browser and complete the passkey prompt.
+
+### Notes
+
+- Multiple passkeys are supported per user; use `/passkey list` to review and `/passkey delete` to revoke.
+- Passkeys are bound to the hostname used during enrolment (RP ID).
+- Login attempts automatically try passkeys first when supported; TOTP remains as fallback unless you set `PICLAW_WEB_PASSKEY_MODE=passkey-only`.
 
 Internal automation still works via `/internal/post` as long as the request includes the configured secret in the `x-piclaw-internal-secret` header or the `Authorization` header.
 
