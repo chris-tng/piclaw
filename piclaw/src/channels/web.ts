@@ -773,10 +773,12 @@ export class WebChannel {
         startBtn.disabled = true;
       }
 
-      const startEnrollment = async () => {
+      let publicKeyOptions = null;
+
+      const loadOptions = async () => {
         if (!token) return;
         startBtn.disabled = true;
-        statusEl.textContent = 'Requesting passkey options…';
+        statusEl.textContent = 'Preparing passkey options…';
         try {
           const res = await fetch('/auth/webauthn/register/start', {
             method: 'POST',
@@ -785,9 +787,25 @@ export class WebChannel {
           });
           if (!res.ok) throw new Error('Failed to start registration');
           const payload = await res.json();
-          const publicKey = parseOptions(payload.options);
+          publicKeyOptions = parseOptions(payload.options);
+          statusEl.textContent = 'Ready to create passkey.';
+          startBtn.disabled = false;
+        } catch (err) {
+          statusEl.textContent = err && err.message ? err.message : 'Failed to prepare passkey options.';
+          startBtn.disabled = true;
+        }
+      };
+
+      const startEnrollment = async () => {
+        if (!token) return;
+        if (!publicKeyOptions) {
+          statusEl.textContent = 'Passkey options are not ready yet.';
+          return;
+        }
+        startBtn.disabled = true;
+        try {
           statusEl.textContent = 'Waiting for your passkey…';
-          const cred = await navigator.credentials.create({ publicKey });
+          const cred = await navigator.credentials.create({ publicKey: publicKeyOptions });
           if (!cred) throw new Error('Passkey creation cancelled');
           const finish = await fetch('/auth/webauthn/register/finish', {
             method: 'POST',
@@ -797,12 +815,19 @@ export class WebChannel {
           if (!finish.ok) throw new Error('Registration failed');
           statusEl.textContent = 'Passkey registered. You can close this tab.';
         } catch (err) {
-          statusEl.textContent = err && err.message ? err.message : 'Passkey registration failed.';
+          const name = err && err.name ? err.name : '';
+          const message = err && err.message ? err.message : '';
+          const detail = [name, message].filter(Boolean).join(' ').trim();
+          statusEl.textContent = detail ? 'Passkey error: ' + detail : 'Passkey registration failed.';
           startBtn.disabled = false;
         }
       };
 
       startBtn.addEventListener('click', startEnrollment);
+      if (window.PublicKeyCredential && window.isSecureContext && token) {
+        loadOptions();
+      }
+
     </script>
   </body>
 </html>`;
