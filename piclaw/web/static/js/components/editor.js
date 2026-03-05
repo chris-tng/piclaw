@@ -25,6 +25,7 @@ import {
     HighlightStyle,
     syntaxHighlighting,
     indentOnInput,
+    indentUnit,
     tags,
     classHighlighter,
     shell,
@@ -73,8 +74,8 @@ const createStatusPanel = (vimEnabledRef) => {
             const pos = state.selection.main.head;
             const line = state.doc.lineAt(pos);
             const col = pos - line.from + 1;
-            const indentUnit = state.facet(EditorState.indentUnit) || '  ';
-            const indentLabel = indentUnit === '\t' ? 'Tabs' : `Spaces:${indentUnit.length}`;
+            const unit = state.facet(indentUnit) || '  ';
+            const indentLabel = unit === '\t' ? 'Tabs' : `Spaces:${unit.length}`;
             left.textContent = `Ln ${line.number}, Col ${col}`;
             const vimLabel = vimEnabledRef.current ? 'Vim' : 'Insert';
             right.textContent = `${indentLabel} • ${vimLabel}`;

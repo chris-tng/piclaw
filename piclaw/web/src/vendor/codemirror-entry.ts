@@ -20,7 +20,7 @@ export { html } from "@codemirror/lang-html";
 export { yaml } from "@codemirror/lang-yaml";
 export { sql } from "@codemirror/lang-sql";
 export { xml } from "@codemirror/lang-xml";
-export { StreamLanguage, HighlightStyle, syntaxHighlighting, indentOnInput } from "@codemirror/language";
+export { StreamLanguage, HighlightStyle, syntaxHighlighting, indentOnInput, indentUnit } from "@codemirror/language";
 export { tags, classHighlighter } from "@lezer/highlight";
 export { shell } from "@codemirror/legacy-modes/mode/shell";
 export { indentWithTab } from "@codemirror/commands";

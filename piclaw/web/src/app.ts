@@ -999,7 +999,6 @@ function App() {
         }
 
         if (eventType === 'agent_status') {
-            console.log('Agent status:', data);
             if (data.type === 'done' || data.type === 'error') {
                 if (turnId && currentTurnIdRef.current && turnId !== currentTurnIdRef.current) {
                     return;
