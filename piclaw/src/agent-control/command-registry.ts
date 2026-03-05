@@ -18,7 +18,7 @@ export interface ControlCommandDefinition {
 
 /** Metadata for all control commands: name, description, aliases. */
 export const CONTROL_COMMAND_DEFINITIONS: ControlCommandDefinition[] = [
-  { name: "/model", description: "Select model or list available models", aliases: ["/models"] },
+  { name: "/model", description: "Select model or list available models (alias /models)", aliases: ["/models"] },
   { name: "/cycle-model", description: "Cycle to the next available model" },
   { name: "/thinking", description: "Show or set thinking level" },
   { name: "/cycle-thinking", description: "Cycle thinking level" },

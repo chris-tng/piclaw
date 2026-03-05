@@ -67,7 +67,7 @@ Direct commands (no LLM round-trip):
 
 | Command | Purpose |
 |---------|---------|
-| `/model [provider/model]` | Select model or list available models |
+| `/model [provider/model]` (alias `/models`) | Select model or list available models |
 | `/cycle-model [back]` | Cycle to the next available model |
 | `/thinking [level]` | Show or set thinking level |
 | `/cycle-thinking` | Cycle thinking level |
