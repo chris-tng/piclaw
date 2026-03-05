@@ -735,6 +735,23 @@ export class WebChannel {
         return btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, '');
       };
 
+      const parseError = async (res, fallback) => {
+        try {
+          const data = await res.json();
+          const message = data && (data.error || data.detail || data.message);
+          if (message) return message;
+        } catch (err) {
+          // ignore
+        }
+        try {
+          const text = await res.text();
+          if (text) return text;
+        } catch (err) {
+          // ignore
+        }
+        return fallback || ('HTTP ' + res.status);
+      };
+
       const credentialToJSON = (cred) => ({
         id: cred.id,
         rawId: bufferToBase64Url(cred.rawId),
@@ -785,7 +802,10 @@ export class WebChannel {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token })
           });
-          if (!res.ok) throw new Error('Failed to start registration');
+          if (!res.ok) {
+            const detail = await parseError(res, 'Failed to start registration');
+            throw new Error(detail);
+          }
           const payload = await res.json();
           publicKeyOptions = parseOptions(payload.options);
           statusEl.textContent = 'Ready to create passkey.';
@@ -812,7 +832,10 @@ export class WebChannel {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token, credential: credentialToJSON(cred) })
           });
-          if (!finish.ok) throw new Error('Registration failed');
+          if (!finish.ok) {
+            const detail = await parseError(finish, 'Registration failed');
+            throw new Error(detail);
+          }
           statusEl.textContent = 'Passkey registered. You can close this tab.';
         } catch (err) {
           const name = err && err.name ? err.name : '';
