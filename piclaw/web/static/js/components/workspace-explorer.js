@@ -506,23 +506,34 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, onOpenEditor }
         return types.includes('Files');
     };
 
+    const resolveHoverTarget = useCallback((event) => {
+        const row = event?.target?.closest?.('.workspace-row');
+        if (!row) return null;
+        const path = row.dataset.path;
+        const type = row.dataset.type;
+        if (type === 'dir' && path) return path;
+        return null;
+    }, []);
+
     const handleDragEnter = useCallback((event) => {
         if (!isFileDrag(event)) return;
         event.preventDefault();
         dragDepthRef.current += 1;
         if (!dragActiveRef.current) setDragActive(true);
-        const target = resolveDropTargetPath();
+        const hovered = resolveHoverTarget(event);
+        const target = hovered || resolveDropTargetPath();
         setDropTarget(target);
-    }, [resolveDropTargetPath]);
+    }, [resolveDropTargetPath, resolveHoverTarget]);
 
     const handleDragOver = useCallback((event) => {
         if (!isFileDrag(event)) return;
         event.preventDefault();
         if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
         if (!dragActiveRef.current) setDragActive(true);
-        const target = resolveDropTargetPath();
+        const hovered = resolveHoverTarget(event);
+        const target = hovered || resolveDropTargetPath();
         if (dropTargetRef.current !== target) setDropTarget(target);
-    }, [resolveDropTargetPath]);
+    }, [resolveDropTargetPath, resolveHoverTarget]);
 
     const handleDragLeave = useCallback((event) => {
         if (!isFileDrag(event)) return;
@@ -542,7 +553,7 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, onOpenEditor }
         setDropTarget(null);
         const files = Array.from(event?.dataTransfer?.files || []);
         if (files.length === 0) return;
-        const target = resolveDropTargetPath();
+        const target = dropTargetRef.current || resolveDropTargetPath();
         setUploading(true);
         try {
             let lastResult = null;
