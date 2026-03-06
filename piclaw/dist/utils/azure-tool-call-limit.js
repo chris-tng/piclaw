@@ -40,7 +40,7 @@ function findReasoningForCall(item, reasoningItems) {
         }
     }
     if (candidate) {
-        const matched = reasoningItems.find((entry) => entry.id === candidate && !entry.paired);
+        const matched = reasoningItems.find((entry) => entry.id === candidate);
         if (matched) {
             matched.paired = true;
             return matched.index;
