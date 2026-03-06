@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { html, useRef, useState, useEffect, useCallback } from '../vendor/preact-htm.js';
-import { sendAgentMessage, uploadMedia } from '../api.js';
+import { getAgentModels, sendAgentMessage, uploadMedia } from '../api.js';
 import { getLocalStorageItem, setLocalStorageItem } from '../utils/storage.js';
 import { FilePill } from './file-pill.js';
 
@@ -129,7 +129,8 @@ export function ComposeBox({
     const [showSlash, setShowSlash] = useState(false);
     const [switchingModel, setSwitchingModel] = useState(false);
     const [showModelPopup, setShowModelPopup] = useState(false);
-    const [modelDraft, setModelDraft] = useState('');
+    const [modelOptions, setModelOptions] = useState([]);
+    const [loadingModels, setLoadingModels] = useState(false);
     const textareaRef = useRef(null);
     const slashRef = useRef(null);
     const modelPopupRef = useRef(null);
@@ -287,10 +288,9 @@ export function ComposeBox({
         await runModelCommand('/cycle-model');
     };
 
-    const handleApplyModel = async () => {
-        const value = modelDraft.trim();
-        if (!value) return;
-        const ok = await runModelCommand(`/model ${value}`);
+    const handleSelectModel = async (modelLabel) => {
+        if (!modelLabel || switchingModel) return;
+        const ok = await runModelCommand(`/model ${modelLabel}`);
         if (ok) setShowModelPopup(false);
     };
 
@@ -514,7 +514,27 @@ export function ComposeBox({
 
     useEffect(() => {
         if (!showModelPopup) return;
-        setModelDraft(activeModel || '');
+
+        setLoadingModels(true);
+        getAgentModels()
+            .then((payload) => {
+                const models = Array.isArray(payload?.models)
+                    ? payload.models.filter((model) => typeof model === 'string' && model.trim().length > 0)
+                    : [];
+                setModelOptions(models);
+                if (payload?.current && typeof payload.current === 'string') {
+                    if (typeof onModelChange === 'function') {
+                        onModelChange(payload.current);
+                    }
+                }
+            })
+            .catch((error) => {
+                console.warn('Failed to load model list:', error);
+                setModelOptions([]);
+            })
+            .finally(() => {
+                setLoadingModels(false);
+            });
     }, [showModelPopup, activeModel]);
 
     useEffect(() => {
@@ -630,25 +650,27 @@ export function ComposeBox({
                     `}
                     ${showModelPopup && !searchMode && html`
                         <div class="compose-model-popup" ref=${modelPopupRef}>
-                            <div class="compose-model-popup-title">Switch model</div>
-                            <input
-                                class="compose-model-popup-input"
-                                type="text"
-                                placeholder="provider/model-id"
-                                value=${modelDraft}
-                                onInput=${(e) => setModelDraft(e.target.value)}
-                                onKeyDown=${(e) => {
-                                    if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        void handleApplyModel();
-                                    }
-                                    if (e.key === 'Escape') {
-                                        e.preventDefault();
-                                        setShowModelPopup(false);
-                                    }
-                                }}
-                                disabled=${switchingModel}
-                            />
+                            <div class="compose-model-popup-title">Select model</div>
+                            <div class="compose-model-popup-menu" role="menu" aria-label="Model picker">
+                                ${loadingModels && html`
+                                    <div class="compose-model-popup-empty">Loading models…</div>
+                                `}
+                                ${!loadingModels && modelOptions.length === 0 && html`
+                                    <div class="compose-model-popup-empty">No models available.</div>
+                                `}
+                                ${!loadingModels && modelOptions.map((modelLabel) => html`
+                                    <button
+                                        key=${modelLabel}
+                                        type="button"
+                                        role="menuitem"
+                                        class=${`compose-model-popup-item${activeModel === modelLabel ? ' active' : ''}`}
+                                        onClick=${() => { void handleSelectModel(modelLabel); }}
+                                        disabled=${switchingModel}
+                                    >
+                                        ${modelLabel}
+                                    </button>
+                                `)}
+                            </div>
                             <div class="compose-model-popup-actions">
                                 <button
                                     type="button"
@@ -657,14 +679,6 @@ export function ComposeBox({
                                     disabled=${switchingModel}
                                 >
                                     Next model
-                                </button>
-                                <button
-                                    type="button"
-                                    class="compose-model-popup-btn primary"
-                                    onClick=${() => { void handleApplyModel(); }}
-                                    disabled=${switchingModel || !modelDraft.trim()}
-                                >
-                                    Apply
                                 </button>
                             </div>
                         </div>

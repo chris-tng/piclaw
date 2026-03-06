@@ -1205,20 +1205,41 @@ body {
     color: var(--text-secondary);
 }
 
-.compose-model-popup-input {
-    width: 100%;
+.compose-model-popup-menu {
+    max-height: 220px;
+    overflow-y: auto;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     background: var(--bg-primary);
+}
+
+.compose-model-popup-empty {
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 10px 8px;
+}
+
+.compose-model-popup-item {
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: transparent;
     color: var(--text-primary);
     font-family: var(--font-family-mono);
     font-size: 12px;
-    padding: 6px 8px;
+    padding: 7px 8px;
+    cursor: pointer;
 }
 
-.compose-model-popup-input:focus {
+.compose-model-popup-item:hover,
+.compose-model-popup-item:focus-visible {
+    background: var(--bg-hover);
     outline: none;
-    border-color: var(--accent-color);
+}
+
+.compose-model-popup-item.active {
+    color: var(--accent-color);
+    font-weight: 600;
 }
 
 .compose-model-popup-actions {

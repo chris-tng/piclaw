@@ -120,6 +120,14 @@ export async function getAgentContext(chatJid = null) {
 }
 
 /**
+ * Get available models and current selection.
+ */
+export async function getAgentModels(chatJid = null) {
+    const query = chatJid ? `?chat_jid=${encodeURIComponent(chatJid)}` : '';
+    return request(`/agent/models${query}`);
+}
+
+/**
  * Upload media file
  */
 export async function uploadMedia(file) {

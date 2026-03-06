@@ -1295,6 +1295,14 @@ export class WebChannel {
     });
   }
 
+  /** GET /agent/models — return available model labels and current selection. */
+  async handleAgentModels(req: Request): Promise<Response> {
+    const url = new URL(req.url);
+    const chatJid = (url.searchParams.get("chat_jid") || DEFAULT_CHAT_JID).trim() || DEFAULT_CHAT_JID;
+    const payload = await this.agentPool.getAvailableModels(chatJid);
+    return this.json(payload, 200);
+  }
+
   async handleAgentRespond(req: Request): Promise<Response> {
     let data: { request_id?: string; outcome?: unknown };
     try {

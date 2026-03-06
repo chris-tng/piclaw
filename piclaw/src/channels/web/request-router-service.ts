@@ -391,6 +391,10 @@ export class RequestRouterService {
       return this.channel.handleAgentContext(req);
     }
 
+    if (req.method === "GET" && pathname === "/agent/models") {
+      return this.channel.handleAgentModels(req);
+    }
+
     if (req.method === "POST" && pathname === "/agent/respond") {
       return this.channel.handleAgentRespond(req);
     }
