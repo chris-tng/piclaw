@@ -20,6 +20,178 @@ const ALLOWED_HTML_TAGS = new Set([
     'blockquote',
 ]);
 
+const SAFE_TAGS = new Set([
+    'a',
+    'abbr',
+    'blockquote',
+    'br',
+    'code',
+    'div',
+    'em',
+    'hr',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'i',
+    'img',
+    'kbd',
+    'li',
+    'mark',
+    'ol',
+    'p',
+    'pre',
+    's',
+    'span',
+    'strong',
+    'sub',
+    'sup',
+    'table',
+    'tbody',
+    'td',
+    'th',
+    'thead',
+    'tr',
+    'u',
+    'ul',
+    // KaTeX/MathML tags
+    'math',
+    'semantics',
+    'mrow',
+    'mi',
+    'mn',
+    'mo',
+    'mtext',
+    'mspace',
+    'msup',
+    'msub',
+    'msubsup',
+    'mfrac',
+    'msqrt',
+    'mroot',
+    'mtable',
+    'mtr',
+    'mtd',
+    'annotation',
+]);
+
+const GLOBAL_ALLOWED_ATTRS = new Set([
+    'class',
+    'style',
+    'title',
+    'role',
+    'aria-hidden',
+    'aria-label',
+    'aria-expanded',
+    'aria-live',
+    'data-mermaid',
+    'data-hashtag',
+]);
+
+const TAG_ALLOWED_ATTRS = {
+    a: new Set(['href', 'target', 'rel']),
+    img: new Set(['src', 'alt', 'title']),
+};
+
+const SAFE_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', '']);
+
+function escapeHtmlAttr(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/'/g, '&#39;');
+}
+
+export function sanitizeUrl(url, options = {}) {
+    if (!url) return null;
+    const raw = String(url).trim();
+    if (!raw) return null;
+
+    if (raw.startsWith('#') || raw.startsWith('/')) return raw;
+
+    if (raw.startsWith('data:')) {
+        if (options.allowDataImage && /^data:image\//i.test(raw)) {
+            return raw;
+        }
+        return null;
+    }
+
+    if (raw.startsWith('blob:')) return raw;
+
+    try {
+        const parsed = new URL(raw, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+        if (!SAFE_PROTOCOLS.has(parsed.protocol)) return null;
+        return parsed.href;
+    } catch {
+        return null;
+    }
+}
+
+function sanitizeHtml(html) {
+    if (!html) return '';
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const nodes = [];
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_ELEMENT);
+    let node;
+    while ((node = walker.nextNode())) {
+        nodes.push(node);
+    }
+
+    for (const el of nodes) {
+        const tag = el.tagName.toLowerCase();
+        if (!SAFE_TAGS.has(tag)) {
+            const parent = el.parentNode;
+            if (!parent) continue;
+            while (el.firstChild) {
+                parent.insertBefore(el.firstChild, el);
+            }
+            parent.removeChild(el);
+            continue;
+        }
+
+        const allowedAttrs = TAG_ALLOWED_ATTRS[tag] || new Set();
+        for (const attr of Array.from(el.attributes)) {
+            const name = attr.name.toLowerCase();
+            const value = attr.value;
+            if (name.startsWith('on')) {
+                el.removeAttribute(attr.name);
+                continue;
+            }
+            if (name.startsWith('data-') || name.startsWith('aria-')) {
+                continue;
+            }
+            if (allowedAttrs.has(name) || GLOBAL_ALLOWED_ATTRS.has(name)) {
+                if (name === 'href') {
+                    const safe = sanitizeUrl(value);
+                    if (!safe) {
+                        el.removeAttribute(attr.name);
+                    } else {
+                        el.setAttribute(attr.name, safe);
+                        if (tag === 'a' && !el.getAttribute('rel')) {
+                            el.setAttribute('rel', 'noopener noreferrer');
+                        }
+                    }
+                } else if (name === 'src') {
+                    const safe = sanitizeUrl(value, { allowDataImage: tag === 'img' });
+                    if (!safe) {
+                        el.removeAttribute(attr.name);
+                    } else {
+                        el.setAttribute(attr.name, safe);
+                    }
+                }
+                continue;
+            }
+            el.removeAttribute(attr.name);
+        }
+    }
+
+    return doc.body.innerHTML;
+}
+
 /**
  * Decode HTML entities
  */
@@ -86,13 +258,31 @@ function decodeMermaidBlock(text) {
     return decodeEntitiesDeep(text, 5);
 }
 
+function toBase64(value) {
+    const bytes = new TextEncoder().encode(String(value || ''));
+    let binary = '';
+    for (const byte of bytes) {
+        binary += String.fromCharCode(byte);
+    }
+    return btoa(binary);
+}
+
+function fromBase64(value) {
+    const binary = atob(String(value || ''));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return new TextDecoder().decode(bytes);
+}
+
 function injectMermaidBlocks(html, blocks) {
     if (!html || !blocks || blocks.length === 0) return html;
     return html.replace(/@@MERMAID_BLOCK_(\d+)@@/g, (match, idxStr) => {
         const idx = Number(idxStr);
         const raw = blocks[idx] ?? '';
         const decoded = decodeMermaidBlock(raw);
-        const encoded = btoa(unescape(encodeURIComponent(decoded)));
+        const encoded = toBase64(decoded);
         return `<div class="mermaid-container" data-mermaid="${encoded}"><div class="mermaid-loading">Loading diagram...</div></div>`;
     });
 }
@@ -200,7 +390,18 @@ function renderMath(html_content) {
             const rendered = katex.renderToString(decodeMath(tex.trim()), { displayMode: true, throwOnError: false });
             return `${leading}${rendered}`;
         } catch (e) {
-            return `<span class="math-error" title="${e.message}">${match}</span>`;
+            return `<span class="math-error" title="${escapeHtmlAttr(e.message)}">${match}</span>`;
+        }
+    });
+
+    // Process inline math ($...$) with simple guardrails to avoid $$ and whitespace edges.
+    processed = processed.replace(/(^|[^\\$])\$(?!\s)([^\n$]+?)\$/g, (match, leading, tex) => {
+        if (/\s$/.test(tex)) return match;
+        try {
+            const rendered = katex.renderToString(decodeMath(tex), { displayMode: false, throwOnError: false });
+            return `${leading}${rendered}`;
+        } catch (e) {
+            return `${leading}<span class="math-error" title="${escapeHtmlAttr(e.message)}">$${tex}$</span>`;
         }
     });
 
@@ -306,6 +507,9 @@ export function renderMarkdown(text, onHashtagClick) {
     // Inject Mermaid blocks after markdown processing to avoid double-encoding
     html_content = injectMermaidBlocks(html_content, mermaidBlocks);
 
+    // Sanitize HTML output (links/attributes/tags)
+    html_content = sanitizeHtml(html_content);
+
     return html_content;
 }
 
@@ -326,6 +530,7 @@ export function renderThinkingMarkdown(text) {
     html_content = decodeTextEntities(html_content);
     // Avoid math rendering in thought/draft panels to prevent shell $ variables
     // from being misinterpreted as inline LaTeX.
+    html_content = sanitizeHtml(html_content);
     return html_content;
 }
 
@@ -342,14 +547,18 @@ export async function renderMermaidDiagrams(container) {
     for (const el of pending) {
         try {
             const encoded = el.dataset.mermaid;
-            const raw = decodeURIComponent(escape(atob(encoded)));
+            const raw = fromBase64(encoded || '');
             const code = decodeEntitiesDeep(raw, 2);
             const svg = await renderMermaid(code, { ...theme, transparent: true });
             el.innerHTML = svg;
             el.removeAttribute('data-mermaid');
         } catch (e) {
             console.error('Mermaid render error:', e);
-            el.innerHTML = `<pre class="mermaid-error">Diagram error: ${e.message}</pre>`;
+            const pre = document.createElement('pre');
+            pre.className = 'mermaid-error';
+            pre.textContent = `Diagram error: ${e.message}`;
+            el.innerHTML = '';
+            el.appendChild(pre);
             el.removeAttribute('data-mermaid');
         }
     }

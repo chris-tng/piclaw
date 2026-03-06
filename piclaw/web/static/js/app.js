@@ -19,7 +19,7 @@
  *   import anything from this module tree.
  */
 import { html, render, useState, useEffect, useCallback, useRef } from './vendor/preact-htm.js';
-import { getTimeline, getPostsByHashtag, searchPosts, deletePost, getAgents, getAgentThought, setAgentThoughtVisibility, getAgentStatus, getAgentContext, getWorkspaceFile, updateWorkspaceFile } from './api.js';
+import { searchPosts, deletePost, getAgents, getAgentThought, setAgentThoughtVisibility, getAgentStatus, getAgentContext, getWorkspaceFile, updateWorkspaceFile } from './api.js';
 import { ComposeBox } from './components/compose-box.js';
 import { AgentRequestModal, AgentStatus, ConnectionStatus } from './components/status.js';
 import { Timeline } from './components/timeline.js';
@@ -28,6 +28,10 @@ import { WorkspaceEditor } from './components/editor.js';
 import { getLocalStorageBoolean, getLocalStorageNumber, setLocalStorageItem } from './utils/storage.js';
 import { useSseConnection } from './ui/use-sse-connection.js';
 import { useNotifications } from './ui/use-notifications.js';
+import { useTimeline } from './ui/use-timeline.js';
+import { dedupePosts } from './ui/timeline-utils.js';
+import { useAgentState } from './ui/use-agent-state.js';
+import { useSplitters } from './ui/use-splitters.js';
 
 function readSilenceOverride(key, fallback) {
     try {
@@ -101,14 +105,6 @@ function updateThemeColor(dark) {
     }
 }
 
-const dedupePosts = (items) => {
-    const seen = new Set();
-    return (items || []).filter((post) => {
-        if (!post || seen.has(post.id)) return false;
-        seen.add(post.id);
-        return true;
-    });
-};
 
 const estimatePreviewLines = (text, maxCharsPerLine = 160) => {
     const value = String(text || '').replace(/\r\n/g, '\n');
@@ -122,20 +118,38 @@ const estimatePreviewLines = (text, maxCharsPerLine = 160) => {
  * Main App component
  */
 function App() {
-    const [posts, setPosts] = useState(null);
-    const [hasMore, setHasMore] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState('disconnected');
     const [currentHashtag, setCurrentHashtag] = useState(null);
     const [searchQuery, setSearchQuery] = useState(null);
     const [searchOpen, setSearchOpen] = useState(false);
     const [fileRefs, setFileRefs] = useState([]);
-    const [agentStatus, setAgentStatus] = useState(null);
-    const [agentDraft, setAgentDraft] = useState({ text: '', totalLines: 0 });
-    const [agentPlan, setAgentPlan] = useState('');
-    const [agentThought, setAgentThought] = useState({ text: '', totalLines: 0 });
-    const [pendingRequest, setPendingRequest] = useState(null);
-    const [currentTurnId, setCurrentTurnId] = useState(null);
-    const [steerQueuedTurnId, setSteerQueuedTurnId] = useState(null);
+    const {
+        agentStatus,
+        setAgentStatus,
+        agentDraft,
+        setAgentDraft,
+        agentPlan,
+        setAgentPlan,
+        agentThought,
+        setAgentThought,
+        pendingRequest,
+        setPendingRequest,
+        currentTurnId,
+        setCurrentTurnId,
+        steerQueuedTurnId,
+        setSteerQueuedTurnId,
+        lastAgentEventRef,
+        lastSilenceNoticeRef,
+        isAgentRunningRef,
+        draftBufferRef,
+        thoughtBufferRef,
+        pendingRequestRef,
+        stalledPostIdRef,
+        currentTurnIdRef,
+        steerQueuedTurnIdRef,
+        thoughtExpandedRef,
+        draftExpandedRef,
+    } = useAgentState();
     const [agents, setAgents] = useState({});
     const [activeModel, setActiveModel] = useState(null);
     const [contextUsage, setContextUsage] = useState(null);
@@ -157,25 +171,10 @@ function App() {
     const agentsRef = useRef({});
     const userProfileRef = useRef({ name: null, avatar_url: null });
     const viewStateRef = useRef({ currentHashtag: null, searchQuery: null });
-    const hasMoreRef = useRef(false);
-    const loadMoreRef = useRef(null);
-    const loadingMoreRef = useRef(false);
-    const lastBeforeIdRef = useRef(null);
     const timelineRef = useRef(null);
-    const lastAgentEventRef = useRef(null);
-    const lastSilenceNoticeRef = useRef(0);
-    const isAgentRunningRef = useRef(false);
-    const draftBufferRef = useRef('');
-    const thoughtBufferRef = useRef('');
-    const pendingRequestRef = useRef(null);
-    const stalledPostIdRef = useRef(null);
-    const currentTurnIdRef = useRef(null);
-    const steerQueuedTurnIdRef = useRef(null);
     const appShellRef = useRef(null);
     const sidebarWidthRef = useRef(0);
     const editorWidthRef = useRef(0);
-    const thoughtExpandedRef = useRef(false);
-    const draftExpandedRef = useRef(false);
     const lastNotifiedIdRef = useRef(null);
     const lastAgentResponseRef = useRef(null);
     const lastActivityTimerRef = useRef(null);
@@ -415,12 +414,6 @@ function App() {
         }
     }, []);
 
-    const removeStalledPost = useCallback(() => {
-        const stalledId = stalledPostIdRef.current;
-        if (!stalledId) return;
-        setPosts((prev) => (prev ? prev.filter((post) => post.id !== stalledId) : prev));
-        stalledPostIdRef.current = null;
-    }, []);
 
     // Scroll to bottom of timeline (column-reverse: bottom is scrollTop=0)
     const scrollToBottomRef = useRef(null);
@@ -473,6 +466,32 @@ function App() {
         });
     }, []);
 
+    const {
+        posts,
+        setPosts,
+        hasMore,
+        setHasMore,
+        hasMoreRef,
+        loadPosts,
+        refreshTimeline,
+        loadMore,
+        loadMoreRef,
+    } = useTimeline({ preserveTimelineScroll, preserveTimelineScrollTop });
+
+    const removeStalledPost = useCallback(() => {
+        const stalledId = stalledPostIdRef.current;
+        if (!stalledId) return;
+        setPosts((prev) => (prev ? prev.filter((post) => post.id !== stalledId) : prev));
+        stalledPostIdRef.current = null;
+    }, [setPosts]);
+
+    const {
+        handleSplitterMouseDown,
+        handleSplitterTouchStart,
+        handleEditorSplitterMouseDown,
+        handleEditorSplitterTouchStart,
+    } = useSplitters({ appShellRef, sidebarWidthRef, editorWidthRef });
+
     const finalizeStalledResponse = useCallback(() => {
         if (!isAgentRunningRef.current) return;
         isAgentRunningRef.current = false;
@@ -523,9 +542,6 @@ function App() {
         viewStateRef.current = { currentHashtag, searchQuery };
     }, [currentHashtag, searchQuery]);
 
-    useEffect(() => {
-        hasMoreRef.current = hasMore;
-    }, [hasMore]);
 
     useEffect(() => {
         const intervalMs = Math.min(1000, Math.max(100, Math.floor(SILENCE_WARNING_MS / 2)));
@@ -558,35 +574,6 @@ function App() {
     }, [finalizeStalledResponse]);
 
     
-    // Load timeline or hashtag posts
-    const loadPosts = useCallback(async (hashtag = null) => {
-        try {
-            if (hashtag) {
-                const result = await getPostsByHashtag(hashtag);
-                setPosts(result.posts);
-                setHasMore(false);
-            } else {
-                const result = await getTimeline(10);
-                setPosts(result.posts);
-                setHasMore(result.has_more);
-            }
-        } catch (error) {
-            console.error('Failed to load posts:', error);
-        }
-    }, []);
-
-    const refreshTimeline = useCallback(async () => {
-        try {
-            const result = await getTimeline(10);
-            setPosts((prev) => {
-                if (!prev || prev.length === 0) return result.posts;
-                return dedupePosts([...result.posts, ...prev]);
-            });
-            setHasMore((prev) => prev || result.has_more);
-        } catch (error) {
-            console.error('Failed to refresh timeline:', error);
-        }
-    }, []);
 
     const refreshAgentStatus = useCallback(async () => {
         try {
@@ -665,73 +652,21 @@ function App() {
         refreshAgentStatus();
     }, [clearAgentRunState, refreshTimeline, refreshAgentStatus]);
     
-    // Load older messages (prepend)
-    const loadMore = useCallback(async (options = {}) => {
-        if (!posts || posts.length === 0) return;
-        if (loadingMoreRef.current) return;
-        const { preserveScroll = true, preserveMode = 'top', allowRepeat = false } = options;
-        const applyUpdate = (fn) => {
-            if (!preserveScroll) {
-                fn();
-                return;
-            }
-            if (preserveMode === 'top') preserveTimelineScrollTop(fn);
-            else preserveTimelineScroll(fn);
-        };
-        const sortedPosts = posts.slice().sort((a, b) => a.id - b.id);
-        const oldestId = sortedPosts[0]?.id;
-        if (!Number.isFinite(oldestId)) return;
-        if (!allowRepeat && lastBeforeIdRef.current === oldestId) return;
-
-        loadingMoreRef.current = true;
-        lastBeforeIdRef.current = oldestId;
-        try {
-            const result = await getTimeline(10, oldestId);
-            if (result.posts.length > 0) {
-                applyUpdate(() => {
-                    setPosts(prev => dedupePosts([...result.posts, ...(prev || [])]));
-                    setHasMore(result.has_more);
-                });
-            } else {
-                setHasMore(false);
-            }
-        } catch (error) {
-            console.error('Failed to load more posts:', error);
-        } finally {
-            loadingMoreRef.current = false;
-        }
-    }, [posts, preserveTimelineScroll, preserveTimelineScrollTop]);
-
-    useEffect(() => {
-        loadMoreRef.current = loadMore;
-    }, [loadMore]);
     
     // Handle hashtag click
     const handleHashtagClick = useCallback(async (hashtag) => {
         setCurrentHashtag(hashtag);
         setPosts(null); // Show loading
-        try {
-            const result = await getPostsByHashtag(hashtag);
-            setPosts(result.posts);
-            setHasMore(false);
-        } catch (error) {
-            console.error('Failed to load hashtag posts:', error);
-        }
-    }, []);
+        await loadPosts(hashtag);
+    }, [loadPosts]);
     
     // Go back to timeline
     const handleBackToTimeline = useCallback(async () => {
         setCurrentHashtag(null);
         setSearchQuery(null);
         setPosts(null);
-        try {
-            const result = await getTimeline(10);
-            setPosts(result.posts);
-            setHasMore(result.has_more);
-        } catch (error) {
-            console.error('Failed to load timeline:', error);
-        }
-    }, []);
+        await loadPosts();
+    }, [loadPosts]);
 
     // Handle search
     const handleSearch = useCallback(async (query) => {
@@ -1231,137 +1166,6 @@ function App() {
         }, intervalMs);
         return () => clearInterval(interval);
     }, [connectionStatus, isAgentActive, refreshAgentStatus, refreshTimeline]);
-
-    // ── Splitter drag: zero re-renders, direct CSS var manipulation ───────────
-    const handleSplitterMouseDown = useRef((e) => {
-        e.preventDefault();
-        const shell = appShellRef.current;
-        if (!shell) return;
-        const startX = e.clientX;
-        const startW = sidebarWidthRef.current || 280;
-        const splitter = e.currentTarget;
-        splitter.classList.add('dragging');
-        document.body.style.cursor = 'col-resize';
-        document.body.style.userSelect = 'none';
-
-        let lastX = startX;
-        const onMove = (me) => {
-            lastX = me.clientX;
-            const w = Math.min(Math.max(startW + (me.clientX - startX), 160), 600);
-            shell.style.setProperty('--sidebar-width', `${w}px`);
-            sidebarWidthRef.current = w;
-        };
-        const onUp = () => {
-            const w = Math.min(Math.max(startW + (lastX - startX), 160), 600);
-            sidebarWidthRef.current = w;
-            splitter.classList.remove('dragging');
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-            setLocalStorageItem('sidebarWidth', String(Math.round(w)));
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-        };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-    }).current;
-
-    const handleSplitterTouchStart = useRef((e) => {
-        e.preventDefault();
-        const shell = appShellRef.current;
-        if (!shell) return;
-        const touch = e.touches[0];
-        if (!touch) return;
-        const startX = touch.clientX;
-        const startW = sidebarWidthRef.current || 280;
-        const splitter = e.currentTarget;
-        splitter.classList.add('dragging');
-        document.body.style.userSelect = 'none';
-
-        const onMove = (te) => {
-            const t = te.touches[0];
-            if (!t) return;
-            te.preventDefault();
-            const w = Math.min(Math.max(startW + (t.clientX - startX), 160), 600);
-            shell.style.setProperty('--sidebar-width', `${w}px`);
-            sidebarWidthRef.current = w;
-        };
-        const onUp = () => {
-            splitter.classList.remove('dragging');
-            document.body.style.userSelect = '';
-            setLocalStorageItem('sidebarWidth', String(Math.round(sidebarWidthRef.current || startW)));
-            document.removeEventListener('touchmove', onMove);
-            document.removeEventListener('touchend', onUp);
-            document.removeEventListener('touchcancel', onUp);
-        };
-        document.addEventListener('touchmove', onMove, { passive: false });
-        document.addEventListener('touchend', onUp);
-        document.addEventListener('touchcancel', onUp);
-    }).current;
-
-    const handleEditorSplitterMouseDown = useRef((e) => {
-        e.preventDefault();
-        const shell = appShellRef.current;
-        if (!shell) return;
-        const startX = e.clientX;
-        const startW = editorWidthRef.current || sidebarWidthRef.current || 280;
-        const splitter = e.currentTarget;
-        splitter.classList.add('dragging');
-        document.body.style.cursor = 'col-resize';
-        document.body.style.userSelect = 'none';
-
-        let lastX = startX;
-        const onMove = (me) => {
-            lastX = me.clientX;
-            const w = Math.min(Math.max(startW + (me.clientX - startX), 200), 800);
-            shell.style.setProperty('--editor-width', `${w}px`);
-            editorWidthRef.current = w;
-        };
-        const onUp = () => {
-            const w = Math.min(Math.max(startW + (lastX - startX), 200), 800);
-            editorWidthRef.current = w;
-            splitter.classList.remove('dragging');
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-            setLocalStorageItem('editorWidth', String(Math.round(w)));
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-        };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-    }).current;
-
-    const handleEditorSplitterTouchStart = useRef((e) => {
-        e.preventDefault();
-        const shell = appShellRef.current;
-        if (!shell) return;
-        const touch = e.touches[0];
-        if (!touch) return;
-        const startX = touch.clientX;
-        const startW = editorWidthRef.current || sidebarWidthRef.current || 280;
-        const splitter = e.currentTarget;
-        splitter.classList.add('dragging');
-        document.body.style.userSelect = 'none';
-
-        const onMove = (te) => {
-            const t = te.touches[0];
-            if (!t) return;
-            te.preventDefault();
-            const w = Math.min(Math.max(startW + (t.clientX - startX), 200), 800);
-            shell.style.setProperty('--editor-width', `${w}px`);
-            editorWidthRef.current = w;
-        };
-        const onUp = () => {
-            splitter.classList.remove('dragging');
-            document.body.style.userSelect = '';
-            setLocalStorageItem('editorWidth', String(Math.round(editorWidthRef.current || startW)));
-            document.removeEventListener('touchmove', onMove);
-            document.removeEventListener('touchend', onUp);
-            document.removeEventListener('touchcancel', onUp);
-        };
-        document.addEventListener('touchmove', onMove, { passive: false });
-        document.addEventListener('touchend', onUp);
-        document.addEventListener('touchcancel', onUp);
-    }).current;
 
     const toggleWorkspace = useCallback(() => {
         setWorkspaceOpen((prev) => !prev);
