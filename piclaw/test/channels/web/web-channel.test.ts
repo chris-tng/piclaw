@@ -46,7 +46,7 @@ test("web channel timeline and search endpoints", async () => {
   const webMod = await import("../../../src/channels/web.js");
   const web = new (webMod.WebChannel as any)({
     queue: { enqueue: () => {} },
-    agentPool: { runAgent: async () => ({ status: "success", result: "ok" }) },
+    agentPool: { runAgent: async () => ({ status: "success", result: "ok" }), getContextUsageForChat: async () => null },
   });
 
   const timelineRes = await (web as any).handleRequest(new Request("http://test/timeline?limit=2"));
@@ -75,7 +75,7 @@ test("web channel can create a post", async () => {
   const webMod = await import("../../../src/channels/web.js");
   const web = new (webMod.WebChannel as any)({
     queue: { enqueue: () => {} },
-    agentPool: { runAgent: async () => ({ status: "success", result: "ok" }) },
+    agentPool: { runAgent: async () => ({ status: "success", result: "ok" }), getContextUsageForChat: async () => null },
   });
 
   const req = new Request("http://test/post", {
@@ -112,6 +112,7 @@ test("web channel handles /model command without queueing agent", async () => {
         commandHandled = true;
         return { status: "success", message: "Model set to openai/gpt-test." };
       },
+      getContextUsageForChat: async () => null,
     },
   });
 
@@ -152,6 +153,7 @@ test("web channel queues follow-up placeholder for /queue", async () => {
         message: "Queued as a follow-up (one-at-a-time).",
         queued_followup: true,
       }),
+      getContextUsageForChat: async () => null,
     },
   });
 
@@ -186,7 +188,7 @@ test("web channel reports active agent status", async () => {
   const webMod = await import("../../../src/channels/web.js");
   const web = new (webMod.WebChannel as any)({
     queue: { enqueue: () => {} },
-    agentPool: { runAgent: async () => ({ status: "success", result: "ok" }) },
+    agentPool: { runAgent: async () => ({ status: "success", result: "ok" }), getContextUsageForChat: async () => null },
   });
 
   web.updateAgentStatus("web:default", { type: "thinking", title: "Thinking...", turn_id: "turn-1" });
@@ -237,7 +239,7 @@ test("web channel delete post cascades thread replies", async () => {
   const webMod = await import("../../../src/channels/web.js");
   const web = new (webMod.WebChannel as any)({
     queue: { enqueue: () => {} },
-    agentPool: { runAgent: async () => ({ status: "success", result: "ok" }) },
+    agentPool: { runAgent: async () => ({ status: "success", result: "ok" }), getContextUsageForChat: async () => null },
   });
 
   const res = await (web as any).handleRequest(
@@ -269,6 +271,7 @@ test("web channel queues steering without advancing cursor", async () => {
       setSessionBinder: () => {},
       queueStreamingMessage: async () => ({ queued: true }),
       runAgent: async () => ({ status: "success", result: "ok" }),
+      getContextUsageForChat: async () => null,
     },
   });
   web.broadcastEvent = (type: string, data: unknown) => {
@@ -319,6 +322,7 @@ test("processChat advances cursor to pending steering timestamp", async () => {
     agentPool: {
       setSessionBinder: () => {},
       runAgent: async () => ({ status: "success", result: "ok", attachments: [] }),
+      getContextUsageForChat: async () => null,
     },
   });
 
@@ -342,7 +346,7 @@ test("web channel clears stale agent status on load", async () => {
   const webMod = await import("../../../src/channels/web.js");
   const first = new (webMod.WebChannel as any)({
     queue: { enqueue: () => {} },
-    agentPool: { runAgent: async () => ({ status: "success", result: "ok" }) },
+    agentPool: { runAgent: async () => ({ status: "success", result: "ok" }), getContextUsageForChat: async () => null },
   });
 
   first.updateAgentStatus("web:default", { type: "auto_compact", title: "Auto-compacting", turn_id: "turn-42" });
@@ -352,7 +356,7 @@ test("web channel clears stale agent status on load", async () => {
   // actually running in the new process.
   const second = new (webMod.WebChannel as any)({
     queue: { enqueue: () => {} },
-    agentPool: { runAgent: async () => ({ status: "success", result: "ok" }) },
+    agentPool: { runAgent: async () => ({ status: "success", result: "ok" }), getContextUsageForChat: async () => null },
   });
   second.loadState();
   const restored = second.getAgentStatus("web:default");

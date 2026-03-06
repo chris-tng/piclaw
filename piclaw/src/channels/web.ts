@@ -1280,6 +1280,21 @@ export class WebChannel {
     return this.json({ status: "active", data: status, thought, draft });
   }
 
+  /** GET /agent/context — return context window usage for the compose box indicator. */
+  async handleAgentContext(req: Request): Promise<Response> {
+    const url = new URL(req.url);
+    const chatJid = (url.searchParams.get("chat_jid") || DEFAULT_CHAT_JID).trim() || DEFAULT_CHAT_JID;
+    const usage = await this.agentPool.getContextUsageForChat(chatJid);
+    if (!usage) {
+      return this.json({ tokens: null, contextWindow: null, percent: null });
+    }
+    return this.json({
+      tokens: usage.tokens,
+      contextWindow: usage.contextWindow,
+      percent: usage.percent,
+    });
+  }
+
   async handleAgentRespond(req: Request): Promise<Response> {
     let data: { request_id?: string; outcome?: unknown };
     try {

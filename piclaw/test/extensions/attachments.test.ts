@@ -137,6 +137,7 @@ test("web processChat stores attachment content blocks", async () => {
           },
         ],
       }),
+      getContextUsageForChat: async () => null,
     },
   });
 

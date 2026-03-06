@@ -19,7 +19,7 @@
  *   import anything from this module tree.
  */
 import { html, render, useState, useEffect, useCallback, useRef } from './vendor/preact-htm.js';
-import { getTimeline, getPostsByHashtag, searchPosts, deletePost, getAgents, getAgentThought, setAgentThoughtVisibility, getAgentStatus, getWorkspaceFile, updateWorkspaceFile, SSEClient } from './api.js';
+import { getTimeline, getPostsByHashtag, searchPosts, deletePost, getAgents, getAgentThought, setAgentThoughtVisibility, getAgentStatus, getAgentContext, getWorkspaceFile, updateWorkspaceFile, SSEClient } from './api.js';
 import { ComposeBox } from './components/compose-box.js';
 import { AgentRequestModal, AgentStatus, ConnectionStatus } from './components/status.js';
 import { Timeline } from './components/timeline.js';
@@ -135,6 +135,7 @@ function App() {
     const [steerQueuedTurnId, setSteerQueuedTurnId] = useState(null);
     const [agents, setAgents] = useState({});
     const [activeModel, setActiveModel] = useState(null);
+    const [contextUsage, setContextUsage] = useState(null);
     const [notificationsEnabled, setNotificationsEnabled] = useState(false);
     const [notificationPermission, setNotificationPermission] = useState('default');
     const [removingPostIds, setRemovingPostIds] = useState(() => new Set());
@@ -900,6 +901,11 @@ function App() {
         } catch (e) {
             console.warn('Failed to load agents:', e);
         }
+        // Fetch initial context usage for the pie chart indicator
+        try {
+            const ctx = await getAgentContext();
+            if (ctx) setContextUsage(ctx);
+        } catch {}
     }, [applyBranding]);
 
     useEffect(() => {
@@ -1040,6 +1046,8 @@ function App() {
                     // during an SSE gap (agent_response event may have been missed).
                     const { currentHashtag: ah, searchQuery: sq } = viewStateRef.current || {};
                     if (!ah && !sq) refreshTimeline();
+                    // Update context usage indicator from the done event payload
+                    if (data.context_usage) setContextUsage(data.context_usage);
                 }
                 wasAgentActiveRef.current = false;
                 clearAgentRunState();
@@ -1587,6 +1595,7 @@ function App() {
                     onRemoveFileRef=${removeFileRef}
                     onClearFileRefs=${clearFileRefs}
                     activeModel=${activeModel}
+                    contextUsage=${contextUsage}
                     notificationsEnabled=${notificationsEnabled}
                     notificationPermission=${notificationPermission}
                     onToggleNotifications=${handleToggleNotifications}

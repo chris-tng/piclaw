@@ -73,6 +73,7 @@ describe("web agent streaming", () => {
 
         return { status: "success", result: "final response", attachments: [] };
       },
+      getContextUsageForChat: async () => null,
     } as any;
 
     const channel = new WebChannel({ queue: new AgentQueue(), agentPool });

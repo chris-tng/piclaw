@@ -3,6 +3,54 @@ import { html, useRef, useState } from '../vendor/preact-htm.js';
 import { sendAgentMessage, uploadMedia } from '../api.js';
 
 /**
+ * Tiny SVG pie chart showing context window usage.
+ * Green when <75%, amber 75–90%, red >90%. Tooltip shows exact numbers.
+ */
+function ContextPie({ usage }) {
+    const pct = Math.min(100, Math.max(0, usage.percent || 0));
+    const tokens = usage.tokens;
+    const window = usage.contextWindow;
+    const label = tokens != null
+        ? `Context: ${formatK(tokens)} / ${formatK(window)} tokens (${pct.toFixed(0)}%)`
+        : `Context: ${pct.toFixed(0)}%`;
+
+    // Pie arc: SVG circle with stroke-dasharray trick.
+    // Circle circumference = 2πr = 2π×8 ≈ 50.27
+    const r = 8;
+    const circ = 2 * Math.PI * r;
+    const filled = (pct / 100) * circ;
+
+    const color = pct > 90 ? 'var(--context-red, #ef4444)'
+                : pct > 75 ? 'var(--context-amber, #f59e0b)'
+                : 'var(--context-green, #22c55e)';
+
+    return html`
+        <span class="compose-context-pie" title=${label}>
+            <svg width="18" height="18" viewBox="0 0 20 20">
+                <circle cx="10" cy="10" r=${r}
+                    fill="none"
+                    stroke="var(--context-track, rgba(128,128,128,0.2))"
+                    stroke-width="3" />
+                <circle cx="10" cy="10" r=${r}
+                    fill="none"
+                    stroke=${color}
+                    stroke-width="3"
+                    stroke-dasharray=${`${filled} ${circ}`}
+                    stroke-linecap="round"
+                    transform="rotate(-90 10 10)" />
+            </svg>
+        </span>
+    `;
+}
+
+function formatK(n) {
+    if (n == null) return '?';
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(0) + 'K';
+    return String(n);
+}
+
+/**
  * Compose box component
  */
 export function ComposeBox({
@@ -16,6 +64,7 @@ export function ComposeBox({
     onRemoveFileRef,
     onClearFileRefs,
     activeModel = null,
+    contextUsage = null,
     notificationsEnabled = false,
     notificationPermission = 'default',
     onToggleNotifications,
@@ -374,6 +423,9 @@ export function ComposeBox({
                         <span class="compose-model-hint" title=${activeModel}>
                             ${activeModel}
                         </span>
+                    `}
+                    ${!searchMode && contextUsage && contextUsage.percent != null && html`
+                        <${ContextPie} usage=${contextUsage} />
                     `}
                 </div>
                 <div class="compose-actions ${searchMode ? 'search-mode' : ''}">

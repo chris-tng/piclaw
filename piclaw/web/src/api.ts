@@ -111,6 +111,15 @@ export async function getAgentStatus(chatJid = null) {
 }
 
 /**
+ * Get context window usage (tokens, contextWindow, percent).
+ * Returns null fields when the session has no usage data yet.
+ */
+export async function getAgentContext(chatJid = null) {
+    const query = chatJid ? `?chat_jid=${encodeURIComponent(chatJid)}` : '';
+    return request(`/agent/context${query}`);
+}
+
+/**
  * Upload media file
  */
 export async function uploadMedia(file) {
