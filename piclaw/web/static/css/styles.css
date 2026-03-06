@@ -1071,6 +1071,7 @@ body {
 
 .compose-box textarea {
     flex: 1;
+    width: 100%;
     min-height: 36px;
     max-height: 120px;
     border: none;
@@ -1083,6 +1084,8 @@ body {
     padding: 2px var(--spacing-xs) var(--spacing-xs) 2px;
     line-height: 1.4;
     overflow-y: auto;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .compose-box textarea::placeholder {
@@ -1137,11 +1140,17 @@ body {
     text-overflow: ellipsis;
 }
 
-/* Model hint — bottom-left of input, low opacity */
+/* Compose metadata row (model hint + context usage) */
+.compose-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-xs);
+    min-height: 18px;
+    padding: 0 2px 2px 2px;
+}
+
 .compose-model-hint {
-    position: absolute;
-    bottom: 2px;
-    left: 2px;
     font-size: 10px;
     color: var(--text-secondary);
     opacity: var(--model-hint-opacity, 0.85);
@@ -1149,21 +1158,19 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 70%;
     line-height: 1;
     font-family: var(--font-mono, monospace);
     letter-spacing: 0.01em;
+    min-width: 0;
+    flex: 1;
 }
 
-/* Context window usage pie chart — sits after the model hint */
 .compose-context-pie {
-    position: absolute;
-    bottom: 1px;
-    right: 4px;
     line-height: 0;
     opacity: 0.7;
     cursor: default;
     transition: opacity 0.15s;
+    flex-shrink: 0;
 }
 .compose-context-pie:hover {
     opacity: 1;

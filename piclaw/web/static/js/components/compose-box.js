@@ -529,13 +529,17 @@ export function ComposeBox({
                             `)}
                         </div>
                     `}
-                    ${!searchMode && activeModel && html`
-                        <span class="compose-model-hint" title=${activeModel}>
-                            ${activeModel}
-                        </span>
-                    `}
-                    ${!searchMode && contextUsage && contextUsage.percent != null && html`
-                        <${ContextPie} usage=${contextUsage} />
+                    ${!searchMode && (activeModel || (contextUsage && contextUsage.percent != null)) && html`
+                        <div class="compose-meta-row">
+                            ${activeModel && html`
+                                <span class="compose-model-hint" title=${activeModel}>
+                                    ${activeModel}
+                                </span>
+                            `}
+                            ${contextUsage && contextUsage.percent != null && html`
+                                <${ContextPie} usage=${contextUsage} />
+                            `}
+                        </div>
                     `}
                 </div>
                 <div class="compose-actions ${searchMode ? 'search-mode' : ''}">

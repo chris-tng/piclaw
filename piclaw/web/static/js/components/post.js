@@ -187,18 +187,13 @@ function LinkPreview({ preview }) {
 }
 
 /**
- * Remove URLs from text that have previews, but only if at the end
+ * Preserve message text exactly as-authored, even when link previews exist.
+ *
+ * Regression note: we intentionally do not strip URLs from content when a
+ * preview card is shown. Users expect their original text to remain visible.
  */
-function removePreviewedUrls(text, linkPreviews) {
-    if (!linkPreviews?.length) return text;
-
-    let result = text;
-    for (const preview of linkPreviews) {
-        const escapedUrl = preview.url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        // Only remove URL if it's at the end of the text (with optional trailing whitespace)
-        result = result.replace(new RegExp(escapedUrl + '\\s*$', ''), '');
-    }
-    return result.trim();
+export function getDisplayContent(content, _linkPreviews) {
+    return typeof content === 'string' ? content : '';
 }
 
 function extractFileRefs(content) {
@@ -363,8 +358,8 @@ export function Post({ post, onClick, onHashtagClick, agentName, agentAvatarUrl,
         }
         : null;
 
-    // Remove URLs that have previews from the displayed content
-    let displayContent = removePreviewedUrls(data.content, data.link_previews);
+    // Keep original message text even when link previews are available.
+    let displayContent = getDisplayContent(data.content, data.link_previews);
     const { content: cleanedContent, fileRefs } = extractFileRefs(displayContent);
     const { content: cleanedWithAttachments, attachments } = extractAttachmentRefs(cleanedContent);
     displayContent = cleanedWithAttachments;
