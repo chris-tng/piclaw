@@ -2198,7 +2198,6 @@ body {
     flex-shrink: 0;
     width: 100%;
     box-sizing: border-box;
-    overflow: hidden;
 }
 
 .agent-thinking {
@@ -2212,7 +2211,8 @@ body {
     max-width: 100%;
     min-width: 0;
     box-sizing: border-box;
-    overflow: hidden;
+    overflow-x: clip;
+    overflow-y: visible;
     transition: background-color var(--ui-transition-fast), border-color var(--ui-transition-fast);
 }
 
@@ -2247,13 +2247,14 @@ body {
 }
 
 .agent-thinking-body-collapsible {
-    overflow: hidden;
+    overflow-y: hidden;
     max-height: calc(var(--agent-thinking-line-height) * 1em * var(--agent-thinking-collapsed-lines, 8));
     opacity: 0.94;
 }
 
 .agent-thinking[data-expanded="true"] .agent-thinking-body-collapsible {
-    max-height: 70vh;
+    max-height: none;
+    overflow: visible;
     opacity: 1;
 }
 
