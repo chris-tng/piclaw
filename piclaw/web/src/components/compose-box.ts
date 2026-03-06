@@ -127,8 +127,13 @@ export function ComposeBox({
     const [slashMatches, setSlashMatches] = useState([]);
     const [slashIndex, setSlashIndex] = useState(0);
     const [showSlash, setShowSlash] = useState(false);
+    const [switchingModel, setSwitchingModel] = useState(false);
+    const [showModelPopup, setShowModelPopup] = useState(false);
+    const [modelDraft, setModelDraft] = useState('');
     const textareaRef = useRef(null);
     const slashRef = useRef(null);
+    const modelPopupRef = useRef(null);
+    const modelHintRef = useRef(null);
     const dragCounterRef = useRef(0);
     const historyMax = 200;
     const normaliseHistory = (items) => {
@@ -244,6 +249,55 @@ export function ComposeBox({
         const prefix = current && !current.endsWith('\n') ? '\n' : '';
         const next = `${current}${prefix}${snippet}`.trimStart();
         updateValue(next);
+    };
+
+    const extractCurrentModel = (response) => {
+        const fromLabel = response?.command?.model_label;
+        if (fromLabel) return fromLabel;
+        const message = response?.command?.message;
+        if (typeof message === 'string') {
+            const currentMatch = message.match(/•\s+([^\n]+?)\s+\(current\)/);
+            if (currentMatch?.[1]) return currentMatch[1].trim();
+        }
+        return null;
+    };
+
+    const runModelCommand = async (commandText) => {
+        if (searchMode || loading || switchingModel) return;
+
+        setSwitchingModel(true);
+        try {
+            const response = await sendAgentMessage('default', commandText, null, []);
+            const nextModel = extractCurrentModel(response);
+            if (nextModel && typeof onModelChange === 'function') {
+                onModelChange(nextModel);
+            }
+            onPost?.();
+            return true;
+        } catch (error) {
+            console.error('Failed to switch model:', error);
+            alert('Failed to switch model: ' + error.message);
+            return false;
+        } finally {
+            setSwitchingModel(false);
+        }
+    };
+
+    const handleCycleModel = async () => {
+        await runModelCommand('/cycle-model');
+    };
+
+    const handleApplyModel = async () => {
+        const value = modelDraft.trim();
+        if (!value) return;
+        const ok = await runModelCommand(`/model ${value}`);
+        if (ok) setShowModelPopup(false);
+    };
+
+    const toggleModelPopup = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setShowModelPopup((prev) => !prev);
     };
 
     const handleSubmit = async () => {
@@ -458,6 +512,31 @@ export function ComposeBox({
         );
     };
 
+    useEffect(() => {
+        if (!showModelPopup) return;
+        setModelDraft(activeModel || '');
+    }, [showModelPopup, activeModel]);
+
+    useEffect(() => {
+        if (searchMode) setShowModelPopup(false);
+    }, [searchMode]);
+
+    useEffect(() => {
+        if (!showModelPopup) return;
+
+        const onPointerDown = (event) => {
+            const popup = modelPopupRef.current;
+            const hint = modelHintRef.current;
+            const target = event.target;
+            if (popup && popup.contains(target)) return;
+            if (hint && hint.contains(target)) return;
+            setShowModelPopup(false);
+        };
+
+        document.addEventListener('pointerdown', onPointerDown);
+        return () => document.removeEventListener('pointerdown', onPointerDown);
+    }, [showModelPopup]);
+
     // Auto-resize textarea
     const handleInput = (e) => {
         const value = e.target.value;
@@ -532,13 +611,62 @@ export function ComposeBox({
                     ${!searchMode && (activeModel || (contextUsage && contextUsage.percent != null)) && html`
                         <div class="compose-meta-row">
                             ${activeModel && html`
-                                <span class="compose-model-hint" title=${activeModel}>
-                                    ${activeModel}
-                                </span>
+                                <button
+                                    ref=${modelHintRef}
+                                    type="button"
+                                    class="compose-model-hint compose-model-hint-btn"
+                                    title=${switchingModel ? `Switching model…` : `Current model: ${activeModel} (tap to open model picker)`}
+                                    aria-label="Open model picker"
+                                    onClick=${toggleModelPopup}
+                                    disabled=${loading || switchingModel}
+                                >
+                                    ${switchingModel ? 'Switching…' : activeModel}
+                                </button>
                             `}
                             ${contextUsage && contextUsage.percent != null && html`
                                 <${ContextPie} usage=${contextUsage} />
                             `}
+                        </div>
+                    `}
+                    ${showModelPopup && !searchMode && html`
+                        <div class="compose-model-popup" ref=${modelPopupRef}>
+                            <div class="compose-model-popup-title">Switch model</div>
+                            <input
+                                class="compose-model-popup-input"
+                                type="text"
+                                placeholder="provider/model-id"
+                                value=${modelDraft}
+                                onInput=${(e) => setModelDraft(e.target.value)}
+                                onKeyDown=${(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        void handleApplyModel();
+                                    }
+                                    if (e.key === 'Escape') {
+                                        e.preventDefault();
+                                        setShowModelPopup(false);
+                                    }
+                                }}
+                                disabled=${switchingModel}
+                            />
+                            <div class="compose-model-popup-actions">
+                                <button
+                                    type="button"
+                                    class="compose-model-popup-btn"
+                                    onClick=${() => { void handleCycleModel(); }}
+                                    disabled=${switchingModel}
+                                >
+                                    Next model
+                                </button>
+                                <button
+                                    type="button"
+                                    class="compose-model-popup-btn primary"
+                                    onClick=${() => { void handleApplyModel(); }}
+                                    disabled=${switchingModel || !modelDraft.trim()}
+                                >
+                                    Apply
+                                </button>
+                            </div>
                         </div>
                     `}
                 </div>
