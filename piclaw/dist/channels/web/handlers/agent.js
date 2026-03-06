@@ -48,7 +48,7 @@ export async function handleAgentMessage(channel, req, pathname, chatJid, defaul
             channel.saveState();
         }
     };
-    const command = parseControlCommand(normalized.content, TRIGGER_PATTERN);
+    const command = parseControlCommand(content, TRIGGER_PATTERN);
     if (command) {
         const result = await channel.agentPool.applyControlCommand(chatJid, command);
         const formatted = formatOutbound(result.message, "web");
@@ -81,7 +81,7 @@ export async function handleAgentMessage(channel, req, pathname, chatJid, defaul
         return channel.json({ user_message: interaction, thread_id: threadId, command: result }, 201);
     }
     // If message looks like an extension slash command (starts with '/'), execute it directly
-    const trimmed = (normalized.content || "").trim();
+    const trimmed = content.trim();
     if (trimmed.startsWith("/")) {
         channel.lastCommandInteractionId = interaction.id;
         let cmdResult;

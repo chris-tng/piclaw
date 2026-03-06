@@ -113,7 +113,10 @@ export function ComposeBox({
             const fileBlock = fileRefs.length
                 ? `Files:\n${fileRefs.map((path) => `- ${path}`).join('\n')}`
                 : '';
-            const message = [baseContent, fileBlock].filter(Boolean).join('\n\n');
+            const mediaBlock = mediaFiles.length
+                ? `Images:\n${mediaFiles.map((file, index) => `- ${file?.name || `image-${index + 1}`}`).join('\n')}`
+                : '';
+            const message = [baseContent, fileBlock, mediaBlock].filter(Boolean).join('\n\n');
 
             // Send to agent by default
             const response = await sendAgentMessage('default', message, null, mediaIds);
