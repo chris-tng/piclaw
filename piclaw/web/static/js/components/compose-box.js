@@ -25,7 +25,9 @@ export function ComposeBox({
     const [searchText, setSearchText] = useState('');
     const [loading, setLoading] = useState(false);
     const [mediaFiles, setMediaFiles] = useState([]);
+    const [isDragActive, setIsDragActive] = useState(false);
     const textareaRef = useRef(null);
+    const dragCounterRef = useRef(0);
     const historyMax = 200;
     const normaliseHistory = (items) => {
         const seen = new Set();
@@ -214,8 +216,48 @@ export function ComposeBox({
         }
     };
 
+    const addMediaFiles = (files) => {
+        const list = Array.from(files || []).filter((file) => file && file.type && file.type.startsWith('image/'));
+        if (!list.length) return;
+        setMediaFiles((current) => [...current, ...list]);
+    };
+
     const handleFileChange = (e) => {
-        setMediaFiles([...e.target.files]);
+        addMediaFiles(e.target.files);
+        e.target.value = '';
+    };
+
+    const handleDragEnter = (e) => {
+        if (searchMode) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounterRef.current += 1;
+        setIsDragActive(true);
+    };
+
+    const handleDragLeave = (e) => {
+        if (searchMode) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+        if (dragCounterRef.current === 0) setIsDragActive(false);
+    };
+
+    const handleDragOver = (e) => {
+        if (searchMode) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        setIsDragActive(true);
+    };
+
+    const handleDrop = (e) => {
+        if (searchMode) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounterRef.current = 0;
+        setIsDragActive(false);
+        addMediaFiles(e.dataTransfer?.files || []);
     };
 
     const removeMediaFile = (index) => {
@@ -253,7 +295,13 @@ export function ComposeBox({
 
     return html`
         <div class="compose-box">
-            <div class="compose-input-wrapper">
+            <div
+                class=${`compose-input-wrapper${isDragActive ? ' drag-active' : ''}`}
+                onDragEnter=${handleDragEnter}
+                onDragOver=${handleDragOver}
+                onDragLeave=${handleDragLeave}
+                onDrop=${handleDrop}
+            >
                 <div class="compose-input-main">
                     ${!searchMode && (fileRefs.length > 0 || mediaFiles.length > 0) && html`
                         <div class="compose-file-refs">
