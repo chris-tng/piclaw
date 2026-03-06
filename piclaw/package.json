@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
     "build:vendor": "bun build web/src/vendor/codemirror-entry.ts --target=browser --format=esm --minify --outfile web/static/js/vendor/codemirror.js",
-    "build:web": "bun run build:vendor && mkdir -p web/static/js/utils web/static/js/components web/static/js/ui && cp web/src/app.ts web/static/js/app.js && cp web/src/api.ts web/static/js/api.js && cp web/src/markdown.ts web/static/js/markdown.js && cp web/src/utils/format.ts web/static/js/utils/format.js && for f in web/src/components/*.ts; do cp \"$f\" \"web/static/js/components/$(basename \"$f\" .ts).js\"; done && for f in web/src/ui/*.ts; do cp \"$f\" \"web/static/js/ui/$(basename \"$f\" .ts).js\"; done",
+    "build:web": "bun run build:vendor && mkdir -p web/static/js/utils web/static/js/components web/static/js/ui && cp web/src/app.ts web/static/js/app.js && cp web/src/api.ts web/static/js/api.js && cp web/src/markdown.ts web/static/js/markdown.js && for f in web/src/utils/*.ts; do cp \"$f\" \"web/static/js/utils/$(basename \"$f\" .ts).js\"; done && for f in web/src/components/*.ts; do cp \"$f\" \"web/static/js/components/$(basename \"$f\" .ts).js\"; done && for f in web/src/ui/*.ts; do cp \"$f\" \"web/static/js/ui/$(basename \"$f\" .ts).js\"; done",
     "test": "bun test --max-concurrency=1",
     "test:coverage": "bun test --max-concurrency=1 --coverage --coverage-reporter=text --coverage-reporter=lcov"
   },
