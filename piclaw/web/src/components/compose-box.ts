@@ -178,11 +178,13 @@ export function ComposeBox({
     const notificationActive = notificationPermission === 'granted' && notificationsEnabled;
     const notificationTitle = notificationActive ? 'Disable notifications' : 'Enable notifications';
 
+    const MAX_TEXTAREA_HEIGHT = 84;
+
     const resizeTextarea = () => {
         const textarea = textareaRef.current;
         if (!textarea) return;
         textarea.style.height = 'auto';
-        textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+        textarea.style.height = Math.min(textarea.scrollHeight, MAX_TEXTAREA_HEIGHT) + 'px';
     };
 
     /** Update slash autocomplete matches based on current input. */
@@ -628,26 +630,6 @@ export function ComposeBox({
                             `)}
                         </div>
                     `}
-                    ${!searchMode && (activeModel || (contextUsage && contextUsage.percent != null)) && html`
-                        <div class="compose-meta-row">
-                            ${activeModel && html`
-                                <button
-                                    ref=${modelHintRef}
-                                    type="button"
-                                    class="compose-model-hint compose-model-hint-btn"
-                                    title=${switchingModel ? `Switching model…` : `Current model: ${activeModel} (tap to open model picker)`}
-                                    aria-label="Open model picker"
-                                    onClick=${toggleModelPopup}
-                                    disabled=${loading || switchingModel}
-                                >
-                                    ${switchingModel ? 'Switching…' : activeModel}
-                                </button>
-                            `}
-                            ${contextUsage && contextUsage.percent != null && html`
-                                <${ContextPie} usage=${contextUsage} />
-                            `}
-                        </div>
-                    `}
                     ${showModelPopup && !searchMode && html`
                         <div class="compose-model-popup" ref=${modelPopupRef}>
                             <div class="compose-model-popup-title">Select model</div>
@@ -684,7 +666,28 @@ export function ComposeBox({
                         </div>
                     `}
                 </div>
-                <div class="compose-actions ${searchMode ? 'search-mode' : ''}">
+                <div class="compose-footer">
+                    ${!searchMode && (activeModel || (contextUsage && contextUsage.percent != null)) && html`
+                        <div class="compose-meta-row">
+                            ${activeModel && html`
+                                <button
+                                    ref=${modelHintRef}
+                                    type="button"
+                                    class="compose-model-hint compose-model-hint-btn"
+                                    title=${switchingModel ? `Switching model…` : `Current model: ${activeModel} (tap to open model picker)`}
+                                    aria-label="Open model picker"
+                                    onClick=${toggleModelPopup}
+                                    disabled=${loading || switchingModel}
+                                >
+                                    ${switchingModel ? 'Switching…' : activeModel}
+                                </button>
+                            `}
+                            ${contextUsage && contextUsage.percent != null && html`
+                                <${ContextPie} usage=${contextUsage} />
+                            `}
+                        </div>
+                    `}
+                    <div class="compose-actions ${searchMode ? 'search-mode' : ''}">
                     <button
                         class="icon-btn search-toggle"
                         onClick=${searchMode ? onExitSearch : onEnterSearch}

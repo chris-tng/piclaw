@@ -52,6 +52,19 @@ export {
   searchToolOutputSnippets,
 } from "./db/tool-outputs.js";
 export { getRouterState, setRouterState } from "./db/router-state.js";
+export {
+  getChatCursor,
+  getAllChatCursors,
+  setChatCursor,
+  beginChatRun,
+  endChatRun,
+  endChatRunWithError,
+  getFailedRun,
+  clearFailedRun,
+  getInflightRuns,
+  rollbackInflightRun,
+} from "./db/chat-cursors.js";
+export type { InflightRun, FailedRunRecord } from "./db/chat-cursors.js";
 export { storeTokenUsage } from "./db/token-usage.js";
 export {
   DEFAULT_PASSKEY_USER_ID,

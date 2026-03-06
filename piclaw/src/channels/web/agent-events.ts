@@ -264,5 +264,40 @@ export function createStreamingEventHandler(options: StreamingEventHandlerOption
         });
       }
     }
+
+    if (event.type === "auto_compaction_start") {
+      const reason = (event as { reason?: string }).reason;
+      const title = reason === "overflow"
+        ? "Recovering from context overflow"
+        : "Auto-compacting after response";
+      options.emitter.status({
+        ...base,
+        type: "intent",
+        title,
+      });
+    }
+
+    if (event.type === "auto_compaction_end") {
+      const e = event as { errorMessage?: string; willRetry?: boolean; aborted?: boolean };
+      if (e.errorMessage) {
+        options.emitter.status({
+          ...base,
+          type: "error",
+          title: e.errorMessage,
+        });
+      } else if (e.willRetry) {
+        options.emitter.status({
+          ...base,
+          type: "intent",
+          title: "Retrying after auto-compaction",
+        });
+      } else if (e.aborted) {
+        options.emitter.status({
+          ...base,
+          type: "intent",
+          title: "Auto-compaction cancelled",
+        });
+      }
+    }
   };
 }

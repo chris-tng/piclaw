@@ -195,7 +195,9 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, onOpenEditor }
     const loadTree = async () => {
         if (!visibleRef.current) return;
         try {
-            const data = await getWorkspaceTree('', 4, showHiddenRef.current);
+            // Use depth 1 for root to avoid scanning huge workspaces upfront.
+            // Individual folders are expanded on-demand via loadSubtree().
+            const data = await getWorkspaceTree('', 1, showHiddenRef.current);
             const sig = treeSignature(data.root, expandedRef.current, showHiddenRef.current);
             if (sig === lastSigRef.current) {
                 // Structure unchanged – just clear the initial spinner if needed.
@@ -225,7 +227,7 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, onOpenEditor }
         if (pendingSubtreeRef.current.has(path)) return;
         pendingSubtreeRef.current.add(path);
         try {
-            const data = await getWorkspaceTree(path, 3, showHiddenRef.current);
+            const data = await getWorkspaceTree(path, 1, showHiddenRef.current);
             setTree(prev => replaceNodeAtPath(prev, path, data.root));
         } catch (err) {
             setError(err.message || 'Failed to load workspace');
@@ -655,6 +657,9 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, onOpenEditor }
                                             : html`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>`}
                                     </svg>
                                     <span class="workspace-label">${node.name}</span>
+                                    ${isDir && !isOpen && Array.isArray(node.children) && node.children.length > 0 && html`
+                                        <span class="workspace-count">${node.children.length}</span>
+                                    `}
                                 </div>
                             `;
                         })}

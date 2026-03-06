@@ -128,6 +128,7 @@ export function WorkspaceEditor({
     savedAt,
     onSave,
     onClose,
+    onDirtyChange,
 }) {
     const hostRef = useRef(null);
     const viewRef = useRef(null);
@@ -203,6 +204,12 @@ export function WorkspaceEditor({
         const current = view.state.doc.toString();
         setDirty(current !== initialContentRef.current);
     }, []);
+
+    useEffect(() => {
+        if (typeof onDirtyChange === 'function') {
+            onDirtyChange(dirty);
+        }
+    }, [dirty, onDirtyChange]);
 
     const resetContent = useCallback((nextContent) => {
         const view = viewRef.current;

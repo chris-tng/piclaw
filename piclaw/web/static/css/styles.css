@@ -348,6 +348,14 @@ body {
     line-height: 22px;
 }
 
+.workspace-count {
+    font-size: 10px;
+    color: var(--text-secondary);
+    opacity: 0.6;
+    margin-left: 4px;
+    flex-shrink: 0;
+}
+
 /* ── Splitter ── */
 .workspace-splitter {
     display: none;
@@ -995,8 +1003,8 @@ body {
 .compose-input-wrapper {
     flex: 1;
     display: flex;
-    align-items: flex-end;
-    gap: var(--spacing-xs);
+    flex-direction: column;
+    gap: 0;
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
@@ -1073,7 +1081,7 @@ body {
     flex: 1;
     width: 100%;
     min-height: 36px;
-    max-height: 120px;
+    max-height: 84px;
     border: none;
     resize: none;
     font-family: inherit;
@@ -1144,10 +1152,18 @@ body {
 .compose-meta-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: var(--spacing-xs);
     min-height: 18px;
-    padding: 0 2px 2px 2px;
+    padding: 0 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.compose-footer {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--spacing-xs);
 }
 
 .compose-model-hint {
@@ -1284,7 +1300,6 @@ body {
     align-items: center;
     gap: calc(var(--spacing-xs) - 2px);
     margin-right: -2px;
-    margin-bottom: -2px;
 }
 
 .compose-actions.search-mode {
@@ -2256,7 +2271,8 @@ body {
     overflow-wrap: anywhere;
     font-family: inherit;
     line-height: 1.35;
-    padding-bottom: 0.15em;
+    padding-top: 0.15em;
+    padding-bottom: 0.2em;
     max-width: 100%;
     --agent-thinking-line-height: 1.35;
     transition: max-height 0.18s ease, opacity 0.18s ease;
@@ -2264,7 +2280,7 @@ body {
 
 .agent-thinking-body-collapsible {
     overflow-y: hidden;
-    max-height: calc(var(--agent-thinking-line-height) * 1em * var(--agent-thinking-collapsed-lines, 8));
+    max-height: calc((var(--agent-thinking-line-height) * 1em * var(--agent-thinking-collapsed-lines, 8)) + 0.4em);
     opacity: 0.94;
 }
 

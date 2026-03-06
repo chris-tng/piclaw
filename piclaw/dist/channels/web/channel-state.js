@@ -1,19 +1,21 @@
 /**
  * web/channel-state.ts – Persistent state for the web channel.
  *
- * Stores per-chat state like pending resume prompts, steering queue
- * timestamps, and followup modes in the router_state DB table.
+ * After moving cursor positions and failed-run records into the `chat_cursors`
+ * DB table (db/chat-cursors.ts), this class is responsible only for
+ * transient per-chat agent status payloads that the UI polls for.
  *
- * Consumers: channels/web.ts reads/writes state during request handling
- *            and agent run orchestration.
+ * agentStatuses is cleared on every startup (in loadState()), so its
+ * persisted form is only ever used to clean up stale UI state from the
+ * previous process – it is not relied upon for correctness.
+ *
+ * Consumers: channels/web.ts reads/writes state during agent run
+ *            orchestration and SSE broadcasting.
  */
 import { getRouterState, setRouterState } from "../../db.js";
 /** Persistent per-chat state manager for the web channel. */
 export class WebChannelState {
     stateKey;
-    lastAgentTimestamp = {};
-    pendingResumes = {};
-    failedRuns = {};
     agentStatuses = {};
     queuedFollowupPlaceholders = new Map();
     constructor(stateKey) {
@@ -23,69 +25,17 @@ export class WebChannelState {
         const data = getRouterState(this.stateKey);
         try {
             const parsed = data ? JSON.parse(data) : {};
-            if (parsed && typeof parsed === "object" && "lastAgentTimestamp" in parsed) {
-                const record = parsed;
-                this.lastAgentTimestamp = record.lastAgentTimestamp && typeof record.lastAgentTimestamp === "object"
-                    ? record.lastAgentTimestamp
+            this.agentStatuses =
+                parsed && typeof parsed === "object" && typeof parsed.agentStatuses === "object"
+                    ? parsed.agentStatuses
                     : {};
-                this.pendingResumes = record.pendingResumes && typeof record.pendingResumes === "object"
-                    ? record.pendingResumes
-                    : {};
-                this.failedRuns = record.failedRuns && typeof record.failedRuns === "object"
-                    ? record.failedRuns
-                    : {};
-                this.agentStatuses = record.agentStatuses && typeof record.agentStatuses === "object"
-                    ? record.agentStatuses
-                    : {};
-            }
-            else if (parsed && typeof parsed === "object") {
-                this.lastAgentTimestamp = parsed;
-                this.pendingResumes = {};
-                this.failedRuns = {};
-                this.agentStatuses = {};
-            }
-            else {
-                this.lastAgentTimestamp = {};
-                this.pendingResumes = {};
-                this.failedRuns = {};
-                this.agentStatuses = {};
-            }
         }
         catch {
-            this.lastAgentTimestamp = {};
-            this.pendingResumes = {};
-            this.failedRuns = {};
             this.agentStatuses = {};
         }
     }
     save() {
-        setRouterState(this.stateKey, JSON.stringify({
-            lastAgentTimestamp: this.lastAgentTimestamp,
-            pendingResumes: this.pendingResumes,
-            failedRuns: this.failedRuns,
-            agentStatuses: this.agentStatuses,
-        }));
-    }
-    setPendingResume(chatJid, info) {
-        this.pendingResumes[chatJid] = info;
-    }
-    clearPendingResume(chatJid) {
-        delete this.pendingResumes[chatJid];
-    }
-    getPendingResume(chatJid) {
-        return this.pendingResumes[chatJid];
-    }
-    getPendingResumes() {
-        return { ...this.pendingResumes };
-    }
-    setFailedRun(chatJid, info) {
-        this.failedRuns[chatJid] = info;
-    }
-    clearFailedRun(chatJid) {
-        delete this.failedRuns[chatJid];
-    }
-    getFailedRun(chatJid) {
-        return this.failedRuns[chatJid];
+        setRouterState(this.stateKey, JSON.stringify({ agentStatuses: this.agentStatuses }));
     }
     setAgentStatus(chatJid, status) {
         if (!status) {

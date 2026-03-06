@@ -91,10 +91,8 @@ export async function processMessages(chatJid, deps) {
     });
     await deps.whatsapp.setTyping(chatJid, false);
     if (output.status === "error") {
-        deps.state.lastAgentTimestamp[chatJid] = prevCursor;
-        deps.state.saveTimestamps();
         console.error(`[piclaw] Agent error: ${output.error}`);
-        return false;
+        return true;
     }
     if (output.result) {
         const text = formatOutbound(output.result, channel);

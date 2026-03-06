@@ -47,7 +47,6 @@ import { executeSlashCommand } from "./agent-pool/slash-command.js";
 import { recordMessageUsage } from "./agent-pool/usage.js";
 import { resolveModelLabel } from "./utils/model-utils.js";
 import { withChatContext } from "./core/chat-context.js";
-import { clearAutoCompactState, getAutoCompactState, setAutoCompactState } from "./db/auto-compaction.js";
 
 /** Output from an agent run: response text, status, and token usage. */
 export interface AgentOutput {
@@ -63,22 +62,9 @@ export interface TurnOutput {
   attachments: AttachmentInfo[];
 }
 
-/** Notification payload when auto-compaction occurs. */
-export interface AutoCompactNotice {
-  phase: "pre" | "post";
-  status: "start" | "end" | "error";
-  tokens: number;
-  contextWindow: number;
-  percent: number | null;
-  threshold: number;
-  error?: string;
-}
-
 /** Options for AgentPool.runAgent(): chatJid, messages, callbacks. */
 export interface RunAgentOptions {
   onEvent?: (event: AgentSessionEvent) => void;
-  onAutoCompact?: (notice: AutoCompactNotice) => void;
-  autoCompactPhases?: Array<"pre" | "post">;
   /** Called when a turn completes (text_start → next text_start or end). */
   onTurnComplete?: (turn: TurnOutput) => void;
   /** Override the default timeout (ms). Use 0 or a negative value to disable. */
@@ -105,8 +91,6 @@ interface TurnTracker {
 /** How long (ms) an idle session stays cached before being disposed. */
 const IDLE_TTL = 10 * 60 * 1000; // 10 minutes
 const CLEANUP_INTERVAL = 60 * 1000; // check every minute
-const AUTO_COMPACT_COOLDOWN_MS = 60 * 1000; // 1 minute cooldown between auto-compactions
-const AUTO_COMPACT_RUNNING_STALE_MS = 3 * 60 * 1000; // treat "running" state as stale after 3 minutes
 
 /**
  * Manages a pool of persistent AgentSession instances keyed by chat JID.
@@ -167,22 +151,11 @@ export class AgentPool {
 
       const channel = detectChannel(chatJid);
       return await withChatContext(chatJid, channel, async () => {
-        const phases = options.autoCompactPhases ?? ["pre", "post"];
-        if (phases.includes("pre")) {
-          await this.maybeAutoCompact(session, chatJid, "pre", options.onAutoCompact);
-        }
-
         try {
           await session.prompt(prompt);
         } finally {
           if (timeoutId) clearTimeout(timeoutId);
           unsub();
-        }
-
-        if (phases.includes("post")) {
-          void this.maybeAutoCompact(session, chatJid, "post", options.onAutoCompact).catch((err) => {
-            console.error("[agent-pool] Post auto-compaction failed:", err);
-          });
         }
 
         const duration = Date.now() - startTime;
@@ -559,94 +532,6 @@ export class AgentPool {
       await this.sessionBinder(session, chatJid);
     } catch (err) {
       console.error(`[agent-pool] Failed to bind session ${chatJid}:`, err);
-    }
-  }
-
-  private async maybeAutoCompact(
-    session: AgentSession,
-    chatJid: string,
-    phase: "pre" | "post",
-    onAutoCompact?: (notice: AutoCompactNotice) => void
-  ): Promise<void> {
-    if (!session.autoCompactionEnabled) return;
-    if (session.isCompacting) return;
-
-    const now = Date.now();
-    const persistedState = getAutoCompactState(chatJid);
-    if (persistedState) {
-      if (persistedState.status === "running") {
-        const age = persistedState.startedAt ? now - persistedState.startedAt : 0;
-        if (age < AUTO_COMPACT_RUNNING_STALE_MS) {
-          return;
-        }
-        clearAutoCompactState(chatJid);
-      } else if (persistedState.status === "success" && persistedState.phase === phase) {
-        const elapsed = persistedState.updatedAt ? now - persistedState.updatedAt : 0;
-        if (elapsed < AUTO_COMPACT_COOLDOWN_MS) {
-          return;
-        }
-      }
-    }
-
-    const usage = session.getContextUsage();
-    if (!usage || usage.tokens === null || usage.contextWindow <= 0) return;
-    const settings = this.settingsManager.getCompactionSettings();
-    if (!settings.enabled) return;
-
-    const threshold = usage.contextWindow - settings.reserveTokens;
-    if (usage.tokens <= threshold) return;
-
-    const runStartedAt = Date.now();
-
-    const noticeBase: AutoCompactNotice = {
-      phase,
-      status: "start",
-      tokens: usage.tokens,
-      contextWindow: usage.contextWindow,
-      percent: usage.percent ?? null,
-      threshold,
-    };
-
-    setAutoCompactState(chatJid, {
-      status: "running",
-      phase,
-      startedAt: runStartedAt,
-      updatedAt: runStartedAt,
-      tokens: usage.tokens,
-      contextWindow: usage.contextWindow,
-      percent: usage.percent ?? null,
-      threshold,
-    });
-
-    onAutoCompact?.(noticeBase);
-
-    try {
-      await session.compact();
-      setAutoCompactState(chatJid, {
-        status: "success",
-        phase,
-        startedAt: runStartedAt,
-        updatedAt: Date.now(),
-        tokens: usage.tokens,
-        contextWindow: usage.contextWindow,
-        percent: usage.percent ?? null,
-        threshold,
-      });
-      onAutoCompact?.({ ...noticeBase, status: "end" });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setAutoCompactState(chatJid, {
-        status: "error",
-        phase,
-        startedAt: runStartedAt,
-        updatedAt: Date.now(),
-        tokens: usage.tokens,
-        contextWindow: usage.contextWindow,
-        percent: usage.percent ?? null,
-        threshold,
-        error: message,
-      });
-      onAutoCompact?.({ ...noticeBase, status: "error", error: message });
     }
   }
 

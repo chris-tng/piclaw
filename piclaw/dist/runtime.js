@@ -150,6 +150,9 @@ export async function main() {
     process.on("SIGINT", () => shutdown("SIGINT"));
     web = new WebChannel({ queue, agentPool });
     await web.start();
+    // Recover any runs that were interrupted by a crash or kill signal.
+    // Must run after start() (queue is ready) but before new messages arrive.
+    web.recoverInflightRuns();
     if (PUSHOVER_APP_TOKEN && PUSHOVER_USER_KEY) {
         pushover = new PushoverChannel({
             appToken: PUSHOVER_APP_TOKEN,
@@ -208,9 +211,8 @@ export async function main() {
             const chatJid = typeof data.chatJid === "string" && data.chatJid.trim()
                 ? data.chatJid.trim()
                 : "web:default";
-            const prevTimestamp = typeof data.prevTimestamp === "string" ? data.prevTimestamp : undefined;
             const threadRootId = typeof data.threadRootId === "number" ? data.threadRootId : null;
-            web.resumeChat(chatJid, prevTimestamp, threadRootId);
+            web.resumeChat(chatJid, threadRootId);
         },
         resumePending: async (data) => {
             const chatJid = typeof data?.chatJid === "string" && data.chatJid.trim()

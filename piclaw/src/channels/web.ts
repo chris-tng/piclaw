@@ -74,6 +74,14 @@ import {
   getWebauthnCredentialById,
   storeWebauthnCredential,
   updateWebauthnCredentialCounter,
+  getAllChatCursors,
+  getChatCursor,
+  setChatCursor,
+  getFailedRun,
+  clearFailedRun,
+  getInflightRuns,
+  rollbackInflightRun,
+  getDb,
 } from "../db.js";
 import type { InteractionRow } from "../db.js";
 import { WebChannelState } from "./web/channel-state.js";
@@ -277,45 +285,74 @@ export class WebChannel {
     return getMessageRowIdById(chatJid, messageId);
   }
 
-  resumeChat(chatJid: string, prevTimestamp?: string, threadRootId?: number | null): void {
-    if (typeof prevTimestamp === "string") {
-      this.state.lastAgentTimestamp[chatJid] = prevTimestamp;
-      this.saveState();
-    }
+  resumeChat(chatJid: string, threadRootId?: number | null): void {
     this.queue.enqueue(async () => {
       await this.processChat(chatJid, DEFAULT_AGENT_ID, threadRootId ?? undefined);
     }, `resume:${chatJid}:${Date.now()}`);
   }
 
   skipFailedOnModelSwitch(chatJid: string): void {
-    const failed = this.state.getFailedRun(chatJid);
+    const failed = getFailedRun(chatJid);
     if (!failed) return;
-    const current = this.state.lastAgentTimestamp[chatJid] || "";
-    if (!current || current < failed.failedTimestamp) {
-      this.state.lastAgentTimestamp[chatJid] = failed.failedTimestamp;
+    const current = getChatCursor(chatJid);
+    if (!current || current < failed.failedTs) {
+      setChatCursor(chatJid, failed.failedTs);
     }
-    this.state.clearFailedRun(chatJid);
-    this.state.clearPendingResume(chatJid);
-    this.saveState();
+    clearFailedRun(chatJid);
   }
 
-  resumePendingChats(chatJid?: string): void {
-    const pending = this.state.getPendingResumes();
-    const entries = chatJid && chatJid !== "all" ? { [chatJid]: pending[chatJid] } : pending;
+  /**
+   * Check for inflight run markers left by a previous process that was killed
+   * mid-turn. Rolls back all cursors in a single transaction (all-or-nothing),
+   * then enqueues a retry for each. Only enqueues if the transaction succeeds –
+   * if the rollback fails the inflight markers remain and will be retried on
+   * the next startup.
+   *
+   * Called once at startup before the queue starts processing.
+   */
+  recoverInflightRuns(): void {
+    const inflights = getInflightRuns();
+    if (inflights.length === 0) return;
 
-    for (const [jid, info] of Object.entries(entries)) {
-      if (!info) continue;
-      const prevTimestamp = typeof info.prevTimestamp === "string" ? info.prevTimestamp : "";
-      const messages = getMessagesSince(jid, prevTimestamp, ASSISTANT_NAME);
-      if (messages.length === 0) {
-        this.state.clearPendingResume(jid);
-        continue;
-      }
-      const threadRootId = info.threadRootId ?? getMessageRowIdById(jid, info.messageId);
-      this.resumeChat(jid, prevTimestamp, threadRootId ?? undefined);
+    try {
+      getDb().transaction(() => {
+        for (const inflight of inflights) {
+          rollbackInflightRun(inflight.chatJid, inflight.prevTs);
+        }
+      })();
+    } catch (err) {
+      console.error("[web] Failed to roll back inflight runs; will retry on next startup:", err);
+      return;
     }
 
-    this.saveState();
+    for (const inflight of inflights) {
+      console.log(`[web] Recovering interrupted run for ${inflight.chatJid} (started ${inflight.startedAt})`);
+      this.queue.enqueue(async () => {
+        await this.processChat(inflight.chatJid, DEFAULT_AGENT_ID);
+      }, `inflight-recovery:${inflight.chatJid}`);
+    }
+  }
+
+  /**
+   * Scan all known chats (or a specific one) for messages that arrived after
+   * their stored cursor and enqueue processChat() for each with pending work.
+   * Called after a restart via the resume_pending IPC.
+   */
+  resumePendingChats(chatJid?: string): void {
+    const cursors = getAllChatCursors();
+    const jids = chatJid && chatJid !== "all"
+      ? [chatJid]
+      : Object.keys(cursors);
+
+    for (const jid of jids) {
+      const since = cursors[jid];
+      if (since === undefined) continue; // No cursor → never processed, skip
+      const messages = getMessagesSince(jid, since, ASSISTANT_NAME);
+      if (messages.length === 0) continue;
+      this.queue.enqueue(async () => {
+        await this.processChat(jid, DEFAULT_AGENT_ID);
+      }, `resume:${jid}:${Date.now()}`);
+    }
   }
 
   loadState(): void {

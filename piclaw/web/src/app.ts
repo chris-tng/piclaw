@@ -165,6 +165,7 @@ function App() {
     const [editorSaving, setEditorSaving] = useState(false);
     const [editorSaveError, setEditorSaveError] = useState(null);
     const [editorSavedAt, setEditorSavedAt] = useState(null);
+    const [editorDirty, setEditorDirty] = useState(false);
     const [userProfile, setUserProfile] = useState({ name: 'You', avatar_url: null, avatar_background: null });
     const hasConnectedOnceRef = useRef(false);
     const wasAgentActiveRef = useRef(false); // tracks active→idle transition for timeline refresh
@@ -1192,39 +1193,57 @@ function App() {
 
     const EDITOR_MAX_BYTES = 256 * 1024;
 
+    const findNodeByPath = (node, targetPath) => {
+        if (!node) return null;
+        if (node.path === targetPath) return node;
+        const children = Array.isArray(node.children) ? node.children : null;
+        if (!children) return null;
+        for (const child of children) {
+            const found = findNodeByPath(child, targetPath);
+            if (found) return found;
+        }
+        return null;
+    };
+
+    const loadEditorFile = useCallback(async (path) => {
+        const data = await getWorkspaceFile(path, EDITOR_MAX_BYTES, 'edit');
+        if (data?.error) {
+            setEditorState({ open: true, path, content: '', loading: false, error: data.error, mtime: null, size: null });
+            return;
+        }
+        if (data?.kind && data.kind !== 'text') {
+            setEditorState({ open: true, path, content: '', loading: false, error: 'File is not editable', mtime: data.mtime, size: data.size });
+            return;
+        }
+        setEditorState({
+            open: true,
+            path,
+            content: data?.text || '',
+            loading: false,
+            error: null,
+            mtime: data?.mtime || null,
+            size: data?.size || null,
+        });
+    }, []);
+
     const openEditor = useCallback(async (path) => {
         if (!path) return;
         setEditorSaveError(null);
         setEditorSavedAt(null);
+        setEditorDirty(false);
         setEditorState({ open: true, path, content: '', loading: true, error: null, mtime: null, size: null });
         try {
-            const data = await getWorkspaceFile(path, EDITOR_MAX_BYTES, 'edit');
-            if (data?.error) {
-                setEditorState({ open: true, path, content: '', loading: false, error: data.error, mtime: null, size: null });
-                return;
-            }
-            if (data?.kind && data.kind !== 'text') {
-                setEditorState({ open: true, path, content: '', loading: false, error: 'File is not editable', mtime: data.mtime, size: data.size });
-                return;
-            }
-            setEditorState({
-                open: true,
-                path,
-                content: data?.text || '',
-                loading: false,
-                error: null,
-                mtime: data?.mtime || null,
-                size: data?.size || null,
-            });
+            await loadEditorFile(path);
         } catch (err) {
             setEditorState({ open: true, path, content: '', loading: false, error: err.message || 'Failed to load file', mtime: null, size: null });
         }
-    }, []);
+    }, [loadEditorFile]);
 
     const closeEditor = useCallback(() => {
         setEditorState({ open: false, path: null, content: '', loading: false, error: null, mtime: null, size: null });
         setEditorSaveError(null);
         setEditorSavedAt(null);
+        setEditorDirty(false);
     }, []);
 
     const handleEditorSave = useCallback(async (value) => {
@@ -1246,6 +1265,51 @@ function App() {
             setEditorSaving(false);
         }
     }, [editorState?.path, editorSaving]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const handleWorkspaceUpdate = (event) => {
+            if (!editorState.open || !editorState.path) return;
+            const updates = event?.detail?.updates || [];
+            if (!Array.isArray(updates) || updates.length === 0) return;
+            const targetPath = editorState.path;
+            let nextMtime = null;
+            for (const update of updates) {
+                if (!update?.root) continue;
+                const updatePath = update.path || '.';
+                const matches = updatePath === '.' || targetPath === updatePath || targetPath.startsWith(`${updatePath}/`);
+                if (!matches) continue;
+                const node = findNodeByPath(update.root, targetPath);
+                if (node && node.type === 'file') {
+                    nextMtime = node.mtime || null;
+                    break;
+                }
+            }
+            if (!nextMtime) return;
+            if (editorState.mtime && nextMtime === editorState.mtime) return;
+            if (editorDirty) {
+                const confirmReload = window.confirm('This file changed on disk. Reload and discard local changes?');
+                if (!confirmReload) return;
+            }
+            setEditorSaveError(null);
+            setEditorSavedAt(null);
+            setEditorDirty(false);
+            setEditorState((prev) => ({
+                ...prev,
+                loading: true,
+                error: null,
+            }));
+            loadEditorFile(targetPath).catch((err) => {
+                setEditorState((prev) => ({
+                    ...prev,
+                    loading: false,
+                    error: err.message || 'Failed to reload file',
+                }));
+            });
+        };
+        window.addEventListener('workspace-update', handleWorkspaceUpdate);
+        return () => window.removeEventListener('workspace-update', handleWorkspaceUpdate);
+    }, [editorState.open, editorState.path, editorState.mtime, editorDirty, loadEditorFile]);
 
     const steerQueued = Boolean(steerQueuedTurnId && (steerQueuedTurnId === (agentStatus?.turn_id || currentTurnId)));
     const editorOpen = Boolean(editorState.open);
@@ -1275,6 +1339,7 @@ function App() {
                     savedAt=${editorSavedAt}
                     onSave=${handleEditorSave}
                     onClose=${closeEditor}
+                    onDirtyChange=${setEditorDirty}
                 />
                 <div class="editor-splitter" onMouseDown=${handleEditorSplitterMouseDown} onTouchStart=${handleEditorSplitterTouchStart}></div>
             `}

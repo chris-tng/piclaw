@@ -21,7 +21,7 @@ import { handleWorkspaceAttach, handleWorkspaceDownload, handleWorkspaceFile, ha
 import { SseHub } from "./web/sse-hub.js";
 import { UiBridge } from "./web/ui-bridge.js";
 import { ResponseService } from "./web/http/response-service.js";
-import { getMessageRowIdById, getMessagesSince, replaceMessageContent, createWebSession, getWebSession, deleteExpiredWebSessions, DEFAULT_WEB_USER_ID, getWebauthnEnrollment, consumeWebauthnEnrollment, getWebauthnCredentialsForRpId, getWebauthnCredentialById, storeWebauthnCredential, updateWebauthnCredentialCounter, } from "../db.js";
+import { getMessageRowIdById, getMessagesSince, replaceMessageContent, createWebSession, getWebSession, deleteExpiredWebSessions, DEFAULT_WEB_USER_ID, getWebauthnEnrollment, consumeWebauthnEnrollment, getWebauthnCredentialsForRpId, getWebauthnCredentialById, storeWebauthnCredential, updateWebauthnCredentialCounter, getAllChatCursors, getChatCursor, setChatCursor, getFailedRun, clearFailedRun, getInflightRuns, rollbackInflightRun, getDb, } from "../db.js";
 import { WebChannelState } from "./web/channel-state.js";
 import { storeWebMessage } from "./web/message-store.js";
 import { deletePostResponse, getHashtagResponse, getSearchResponse, getThreadResponse, getTimelineResponse, } from "./web/timeline-service.js";
@@ -159,43 +159,73 @@ export class WebChannel {
     getThreadRootId(chatJid, messageId) {
         return getMessageRowIdById(chatJid, messageId);
     }
-    resumeChat(chatJid, prevTimestamp, threadRootId) {
-        if (typeof prevTimestamp === "string") {
-            this.state.lastAgentTimestamp[chatJid] = prevTimestamp;
-            this.saveState();
-        }
+    resumeChat(chatJid, threadRootId) {
         this.queue.enqueue(async () => {
             await this.processChat(chatJid, DEFAULT_AGENT_ID, threadRootId ?? undefined);
         }, `resume:${chatJid}:${Date.now()}`);
     }
     skipFailedOnModelSwitch(chatJid) {
-        const failed = this.state.getFailedRun(chatJid);
+        const failed = getFailedRun(chatJid);
         if (!failed)
             return;
-        const current = this.state.lastAgentTimestamp[chatJid] || "";
-        if (!current || current < failed.failedTimestamp) {
-            this.state.lastAgentTimestamp[chatJid] = failed.failedTimestamp;
+        const current = getChatCursor(chatJid);
+        if (!current || current < failed.failedTs) {
+            setChatCursor(chatJid, failed.failedTs);
         }
-        this.state.clearFailedRun(chatJid);
-        this.state.clearPendingResume(chatJid);
-        this.saveState();
+        clearFailedRun(chatJid);
     }
-    resumePendingChats(chatJid) {
-        const pending = this.state.getPendingResumes();
-        const entries = chatJid && chatJid !== "all" ? { [chatJid]: pending[chatJid] } : pending;
-        for (const [jid, info] of Object.entries(entries)) {
-            if (!info)
-                continue;
-            const prevTimestamp = typeof info.prevTimestamp === "string" ? info.prevTimestamp : "";
-            const messages = getMessagesSince(jid, prevTimestamp, ASSISTANT_NAME);
-            if (messages.length === 0) {
-                this.state.clearPendingResume(jid);
-                continue;
-            }
-            const threadRootId = info.threadRootId ?? getMessageRowIdById(jid, info.messageId);
-            this.resumeChat(jid, prevTimestamp, threadRootId ?? undefined);
+    /**
+     * Check for inflight run markers left by a previous process that was killed
+     * mid-turn. Rolls back all cursors in a single transaction (all-or-nothing),
+     * then enqueues a retry for each. Only enqueues if the transaction succeeds –
+     * if the rollback fails the inflight markers remain and will be retried on
+     * the next startup.
+     *
+     * Called once at startup before the queue starts processing.
+     */
+    recoverInflightRuns() {
+        const inflights = getInflightRuns();
+        if (inflights.length === 0)
+            return;
+        try {
+            getDb().transaction(() => {
+                for (const inflight of inflights) {
+                    rollbackInflightRun(inflight.chatJid, inflight.prevTs);
+                }
+            })();
         }
-        this.saveState();
+        catch (err) {
+            console.error("[web] Failed to roll back inflight runs; will retry on next startup:", err);
+            return;
+        }
+        for (const inflight of inflights) {
+            console.log(`[web] Recovering interrupted run for ${inflight.chatJid} (started ${inflight.startedAt})`);
+            this.queue.enqueue(async () => {
+                await this.processChat(inflight.chatJid, DEFAULT_AGENT_ID);
+            }, `inflight-recovery:${inflight.chatJid}`);
+        }
+    }
+    /**
+     * Scan all known chats (or a specific one) for messages that arrived after
+     * their stored cursor and enqueue processChat() for each with pending work.
+     * Called after a restart via the resume_pending IPC.
+     */
+    resumePendingChats(chatJid) {
+        const cursors = getAllChatCursors();
+        const jids = chatJid && chatJid !== "all"
+            ? [chatJid]
+            : Object.keys(cursors);
+        for (const jid of jids) {
+            const since = cursors[jid];
+            if (since === undefined)
+                continue; // No cursor → never processed, skip
+            const messages = getMessagesSince(jid, since, ASSISTANT_NAME);
+            if (messages.length === 0)
+                continue;
+            this.queue.enqueue(async () => {
+                await this.processChat(jid, DEFAULT_AGENT_ID);
+            }, `resume:${jid}:${Date.now()}`);
+        }
     }
     loadState() {
         this.state.load();

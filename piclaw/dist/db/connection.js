@@ -176,6 +176,30 @@ function createSchema(database) {
       value TEXT NOT NULL
     );
 
+    -- Per-chat cursor and inflight-run tracking.
+    -- cursor_ts        : ISO timestamp of the last fully-processed message.
+    -- inflight_*       : set atomically with the cursor advance before runAgent();
+    --                    cleared by endChatRun/endChatRunWithError after the run.
+    --                    If still set on startup the process died mid-run and
+    --                    the cursor must be rolled back to inflight_prev_ts.
+    -- failed_*         : set atomically by endChatRunWithError when a run errors;
+    --                    cleared atomically by endChatRun on success, or by
+    --                    clearFailedRun on model switch. Because these columns
+    --                    share a row with inflight_*, every completion path is
+    --                    a single UPDATE with no intermediate inconsistent state.
+    CREATE TABLE IF NOT EXISTS chat_cursors (
+      chat_jid            TEXT PRIMARY KEY,
+      cursor_ts           TEXT NOT NULL DEFAULT '',
+      inflight_prev_ts    TEXT,
+      inflight_message_id TEXT,
+      inflight_started_at TEXT,
+      failed_prev_ts      TEXT,
+      failed_ts           TEXT,
+      failed_message_id   TEXT,
+      failed_thread_root  INTEGER,
+      failed_created_at   TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS token_usage (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       chat_jid TEXT NOT NULL,
@@ -329,6 +353,64 @@ function ensureWebSessionColumns(database) {
     }
 }
 /**
+ * Add the failed_* columns to chat_cursors for databases created before they
+ * were introduced. ALTER TABLE ADD COLUMN is safe to run repeatedly – SQLite
+ * ignores the statement if the column already exists (we catch the error).
+ */
+function ensureChatCursorFailedColumns(database) {
+    const cols = new Set(database.prepare("PRAGMA table_info(chat_cursors)").all()
+        .map((r) => r.name));
+    const toAdd = [
+        ["failed_prev_ts", "TEXT"],
+        ["failed_ts", "TEXT"],
+        ["failed_message_id", "TEXT"],
+        ["failed_thread_root", "INTEGER"],
+        ["failed_created_at", "TEXT"],
+    ];
+    for (const [col, type] of toAdd) {
+        if (!cols.has(col)) {
+            try {
+                database.exec(`ALTER TABLE chat_cursors ADD COLUMN ${col} ${type}`);
+            }
+            catch {
+                // Already exists or table not yet created – either is fine.
+            }
+        }
+    }
+}
+/**
+ * One-time migration: seed chat_cursors from the old lastAgentTimestamp JSON
+ * blob stored in router_state under key "last_agent_timestamp_web".
+ * Runs inside a transaction so all rows land together or not at all.
+ * Safe to call on every startup – exits immediately if the table already
+ * has rows (migration already ran).
+ */
+function migrateChatCursors(database) {
+    const count = database.prepare("SELECT COUNT(*) as n FROM chat_cursors").get().n;
+    if (count > 0)
+        return;
+    const row = database
+        .prepare("SELECT value FROM router_state WHERE key = ?")
+        .get("last_agent_timestamp_web");
+    if (!row)
+        return;
+    try {
+        const state = JSON.parse(row.value);
+        const timestamps = state?.lastAgentTimestamp ?? {};
+        const insert = database.prepare("INSERT OR IGNORE INTO chat_cursors (chat_jid, cursor_ts) VALUES (?, ?)");
+        database.transaction(() => {
+            for (const [jid, ts] of Object.entries(timestamps)) {
+                if (typeof ts === "string" && ts)
+                    insert.run(jid, ts);
+            }
+        })();
+    }
+    catch {
+        // Migration failed – cursors start empty. Worst case: reprocess some
+        // already-seen messages. Acceptable given this only happens once.
+    }
+}
+/**
  * Open (or create) the SQLite database and run all schema migrations.
  * Must be called once at application startup before any other db/* function.
  *
@@ -346,6 +428,8 @@ export function initDatabase() {
     ensureScheduledTaskColumns(db);
     ensureWebSessionColumns(db);
     ensureFts(db);
+    ensureChatCursorFailedColumns(db);
+    migrateChatCursors(db);
 }
 /**
  * Return the singleton Database instance.
