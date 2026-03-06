@@ -7,7 +7,11 @@
 #   --sync       Run in the foreground (no self-detach)
 #   --async      Force async mode (default)
 #   OLD_PID      PID to kill first (fallback only; default: /tmp/piclaw.pid)
-#   CMD          command to run (fallback only; default: piclaw --port 3000)
+#   CMD          command to run (fallback only; default: piclaw --port 8080)
+#
+# ⚠️ Container admonition:
+#   Runtime installs must live under /usr/local/lib/bun/install/global/node_modules/piclaw.
+#   If piclaw resolves from /home/agent/.bun, you're likely restarting the wrong build.
 #
 # Detection order (first match wins):
 #   1. PICLAW_SERVICE_MANAGER=supervisor|systemd|manual  (explicit override)
@@ -21,7 +25,7 @@
 set -euo pipefail
 
 export BUN_INSTALL="/usr/local/lib/bun"
-export PATH="$BUN_INSTALL/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:$PATH"
+export PATH="$BUN_INSTALL/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 LOG_PATH="${PICLAW_RELOAD_LOG:-/tmp/restart-piclaw-force.log}"
 DETACH_DEFAULT="${PICLAW_RELOAD_ASYNC:-1}"
@@ -94,18 +98,18 @@ fi
 [ "${1:-}" = "--" ] && shift
 
 if [ $# -eq 0 ]; then
-  set -- piclaw --port "${PICLAW_WEB_PORT:-3000}"
+  set -- piclaw --port "${PICLAW_WEB_PORT:-8080}"
 fi
 
 if [ -z "$OLD_PID" ] && [ -f "$PIDFILE" ]; then
   OLD_PID=$(cat "$PIDFILE" 2>/dev/null || true)
 fi
 
-PORT="${PICLAW_WEB_PORT:-3000}"
+PORT="${PICLAW_WEB_PORT:-8080}"
 for ((i=1;i<=$#;i++)); do
   arg="${!i}"
   if [ "$arg" = "--port" ]; then
-    next_index=$((i+1)); PORT="${!next_index:-3000}"
+    next_index=$((i+1)); PORT="${!next_index:-8080}"
   elif [[ "$arg" == --port=* ]]; then
     PORT="${arg#--port=}"
   fi
@@ -120,6 +124,16 @@ COMMAND="$1"
 
 echo ""
 echo "[reload] === $(date -Iseconds) ==="
+echo "[reload] BUN_INSTALL=$BUN_INSTALL"
+if command -v piclaw >/dev/null 2>&1; then
+  PICLAW_BIN=$(readlink -f "$(command -v piclaw)" 2>/dev/null || command -v piclaw)
+  echo "[reload] piclaw binary: $PICLAW_BIN"
+  if echo "$PICLAW_BIN" | grep -q "/home/agent/.bun/"; then
+    echo "[reload] WARNING: piclaw resolves to /home/agent/.bun; expected /usr/local/lib/bun runtime path."
+  fi
+else
+  echo "[reload] WARNING: piclaw binary not found in PATH"
+fi
 
 # ── Service manager detection ────────────────────────────────────────
 detect_service_manager() {

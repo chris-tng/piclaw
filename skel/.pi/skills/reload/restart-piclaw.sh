@@ -1,40 +1,55 @@
 #!/bin/bash
-# Restart piclaw: restart the Supervisor-managed service when available.
-# Falls back to killing/starting piclaw directly when supervisorctl is absent.
+# Restart piclaw: detect the service manager (supervisord or systemd --user)
+# and restart piclaw through it. Falls back to manual kill/start when neither
+# is available.
 #
 # Usage: restart-piclaw.sh [--sync|--async] [OLD_PID] [-- CMD...]
 #   --sync       Run in the foreground (no self-detach)
 #   --async      Force async mode (default)
-#   OLD_PID      PID to kill first (default: read from /tmp/piclaw.pid)
-#   CMD          command to run (default: piclaw --port 3000)
+#   OLD_PID      PID to kill first (fallback only; default: /tmp/piclaw.pid)
+#   CMD          command to run (fallback only; default: piclaw --port 8080)
 #
-# The script now self-detaches by default, so you can run it directly from
-# /shell or ssh. Logs go to /tmp/restart-piclaw-force.log unless overridden via
+# ⚠️ Container admonition:
+#   Runtime installs must live under /usr/local/lib/bun/install/global/node_modules/piclaw.
+#   If piclaw resolves from /home/agent/.bun, you're likely restarting the wrong build.
+#
+# Detection order (first match wins):
+#   1. PICLAW_SERVICE_MANAGER=supervisor|systemd|manual  (explicit override)
+#   2. supervisorctl available AND a "piclaw" program exists → supervisor
+#   3. systemctl --user available AND a "piclaw.service" unit exists → systemd
+#   4. Manual kill/start fallback
+#
+# Logs go to /tmp/restart-piclaw-force.log unless overridden via
 # PICLAW_RELOAD_LOG.
 
-export PATH="/home/agent/.bun/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"
-export BUN_INSTALL="/home/agent/.bun"
+set -euo pipefail
+
+export BUN_INSTALL="/usr/local/lib/bun"
+export PATH="$BUN_INSTALL/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 LOG_PATH="${PICLAW_RELOAD_LOG:-/tmp/restart-piclaw-force.log}"
 DETACH_DEFAULT="${PICLAW_RELOAD_ASYNC:-1}"
 DETACH_MODE="$DETACH_DEFAULT"
+
+# Supervisor settings
 SUPERVISOR_SERVICE="${PICLAW_SUPERVISOR_SERVICE:-piclaw}"
 SUPERVISORCTL_BIN="${PICLAW_SUPERVISORCTL_BIN:-supervisorctl}"
-SUPERVISORCTL_CONFIG="${PICLAW_SUPERVISORCTL_CONFIG:-/etc/supervisor/supervisord.conf}"
+# Try workspace config first, fall back to /etc
+if [ -f "/workspace/.piclaw/supervisor/supervisord.conf" ]; then
+  SUPERVISORCTL_CONFIG="${PICLAW_SUPERVISORCTL_CONFIG:-/workspace/.piclaw/supervisor/supervisord.conf}"
+else
+  SUPERVISORCTL_CONFIG="${PICLAW_SUPERVISORCTL_CONFIG:-/etc/supervisor/supervisord.conf}"
+fi
 
+# Systemd settings
+SYSTEMD_UNIT="${PICLAW_SYSTEMD_UNIT:-piclaw.service}"
+
+# ── Argument parsing ─────────────────────────────────────────────────
 while [ $# -gt 0 ]; do
   case "$1" in
-    --sync|--no-async)
-      DETACH_MODE=0
-      shift
-      ;;
-    --async)
-      DETACH_MODE=1
-      shift
-      ;;
-    *)
-      break
-      ;;
+    --sync|--no-async) DETACH_MODE=0; shift ;;
+    --async)           DETACH_MODE=1; shift ;;
+    *)                 break ;;
   esac
 done
 
@@ -42,13 +57,12 @@ if [ -n "${PICLAW_RELOAD_SYNC_MODE:-}" ]; then
   DETACH_MODE=0
 fi
 
+# ── Self-detach (async mode) ─────────────────────────────────────────
 if [ "$DETACH_MODE" = "1" ]; then
   export PICLAW_RELOAD_SYNC_MODE=1
   mkdir -p "$(dirname "$LOG_PATH")"
   LAUNCH_CMD=()
-  if command -v setsid >/dev/null 2>&1; then
-    LAUNCH_CMD+=(setsid)
-  fi
+  command -v setsid >/dev/null 2>&1 && LAUNCH_CMD+=(setsid)
   if command -v nohup >/dev/null 2>&1; then
     nohup "${LAUNCH_CMD[@]}" "$0" "$@" </dev/null >>"$LOG_PATH" 2>&1 &
   else
@@ -59,6 +73,7 @@ if [ "$DETACH_MODE" = "1" ]; then
   exit 0
 fi
 
+# ── Locking ──────────────────────────────────────────────────────────
 PIDFILE=/tmp/piclaw.pid
 SUPERVISOR_PIDFILE=/tmp/piclaw-supervisor.pid
 LOCKFILE=/tmp/piclaw-restart.lock
@@ -75,29 +90,26 @@ else
   echo "[reload] flock not available; continuing without lock"
 fi
 
-# Parse args
+# ── Parse positional args (fallback mode only) ───────────────────────
 OLD_PID=""
 if [ $# -ge 1 ] && [ "$1" != "--" ]; then
-  OLD_PID="$1"
-  shift
+  OLD_PID="$1"; shift
 fi
 [ "${1:-}" = "--" ] && shift
 
 if [ $# -eq 0 ]; then
-  set -- piclaw --port "${PICLAW_WEB_PORT:-3000}"
+  set -- piclaw --port "${PICLAW_WEB_PORT:-8080}"
 fi
 
-# Fall back to pidfile
 if [ -z "$OLD_PID" ] && [ -f "$PIDFILE" ]; then
   OLD_PID=$(cat "$PIDFILE" 2>/dev/null || true)
 fi
 
-PORT="${PICLAW_WEB_PORT:-3000}"
+PORT="${PICLAW_WEB_PORT:-8080}"
 for ((i=1;i<=$#;i++)); do
   arg="${!i}"
   if [ "$arg" = "--port" ]; then
-    next_index=$((i+1))
-    PORT="${!next_index:-3000}"
+    next_index=$((i+1)); PORT="${!next_index:-8080}"
   elif [[ "$arg" == --port=* ]]; then
     PORT="${arg#--port=}"
   fi
@@ -108,19 +120,67 @@ IPC_MESSAGES_DIR="$DATA_DIR/ipc/messages"
 IPC_TASKS_DIR="$DATA_DIR/ipc/tasks"
 NOTIFY_SENT_FILE="/tmp/piclaw-reload-notified"
 INTERNAL_SECRET="${PICLAW_INTERNAL_SECRET:-${PICLAW_WEB_INTERNAL_SECRET:-}}"
-
 COMMAND="$1"
 
 echo ""
 echo "[reload] === $(date -Iseconds) ==="
+echo "[reload] BUN_INSTALL=$BUN_INSTALL"
+if command -v piclaw >/dev/null 2>&1; then
+  PICLAW_BIN=$(readlink -f "$(command -v piclaw)" 2>/dev/null || command -v piclaw)
+  echo "[reload] piclaw binary: $PICLAW_BIN"
+  if echo "$PICLAW_BIN" | grep -q "/home/agent/.bun/"; then
+    echo "[reload] WARNING: piclaw resolves to /home/agent/.bun; expected /usr/local/lib/bun runtime path."
+  fi
+else
+  echo "[reload] WARNING: piclaw binary not found in PATH"
+fi
+
+# ── Service manager detection ────────────────────────────────────────
+detect_service_manager() {
+  # Explicit override
+  if [ -n "${PICLAW_SERVICE_MANAGER:-}" ]; then
+    echo "$PICLAW_SERVICE_MANAGER"
+    return
+  fi
+
+  # 1. Check supervisorctl + piclaw program registered
+  #    supervisorctl status exit codes: 0=running, 3=stopped, 4=no such process
+  #    Both 0 and 3 mean the program exists; only 4+ means it doesn't.
+  if command -v "$SUPERVISORCTL_BIN" >/dev/null 2>&1; then
+    local ctl_args=()
+    [ -n "$SUPERVISORCTL_CONFIG" ] && [ -f "$SUPERVISORCTL_CONFIG" ] && ctl_args+=(-c "$SUPERVISORCTL_CONFIG")
+    local ctl_exit=0
+    "$SUPERVISORCTL_BIN" "${ctl_args[@]}" status "$SUPERVISOR_SERVICE" >/dev/null 2>&1 || ctl_exit=$?
+    if [ "$ctl_exit" -le 3 ]; then
+      echo "supervisor"
+      return
+    fi
+  fi
+
+  # 2. Check systemctl --user + piclaw.service unit exists
+  #    Needs XDG_RUNTIME_DIR to talk to the user bus.
+  if command -v systemctl >/dev/null 2>&1; then
+    local xdg="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    if XDG_RUNTIME_DIR="$xdg" systemctl --user list-unit-files "$SYSTEMD_UNIT" 2>/dev/null \
+         | grep -q "$SYSTEMD_UNIT"; then
+      echo "systemd"
+      return
+    fi
+  fi
+
+  # 3. Fallback
+  echo "manual"
+}
+
+SERVICE_MANAGER=$(detect_service_manager)
+echo "[reload] Detected service manager: $SERVICE_MANAGER"
+
+# ── Helpers ──────────────────────────────────────────────────────────
 
 wait_for_exit() {
-  local pid="$1"
-  local label="$2"
+  local pid="$1" label="$2"
   for _ in $(seq 1 20); do
-    if ! kill -0 "$pid" 2>/dev/null; then
-      return 0
-    fi
+    kill -0 "$pid" 2>/dev/null || return 0
     sleep 0.5
   done
   echo "[reload] ${label} still running after timeout"
@@ -128,77 +188,53 @@ wait_for_exit() {
 }
 
 is_zombie() {
-  local pid="$1"
   local stat
-  stat=$(ps -o stat= -p "$pid" 2>/dev/null | tr -d ' ')
+  stat=$(ps -o stat= -p "$1" 2>/dev/null | tr -d ' ')
   [[ "$stat" == *Z* ]]
 }
 
 find_port_pid() {
-  if ! command -v ss >/dev/null 2>&1; then
-    return 0
-  fi
-  ss -ltnp "sport = :$PORT" 2>/dev/null | awk -F 'pid=' 'NR>1 {split($2,a,","); print a[1]}' | head -1
+  command -v ss >/dev/null 2>&1 || return 0
+  ss -ltnp "sport = :$PORT" 2>/dev/null \
+    | awk -F 'pid=' 'NR>1 {split($2,a,","); print a[1]}' | head -1
 }
 
 wait_for_agent_idle() {
-  if ! command -v curl >/dev/null 2>&1; then
-    echo "[reload] curl not available; skipping agent status wait."
-    return 0
-  fi
+  command -v curl >/dev/null 2>&1 || { echo "[reload] curl not available; skipping agent status wait."; return 0; }
   local url="http://127.0.0.1:$PORT/agent/status"
-  local attempt=0
-  local max_attempts=120
+  local attempt=0 max_attempts=120
   local -a headers=()
-  if [ -n "$INTERNAL_SECRET" ]; then
-    headers+=(-H "X-Piclaw-Internal-Secret: $INTERNAL_SECRET")
-  fi
+  [ -n "$INTERNAL_SECRET" ] && headers+=(-H "X-Piclaw-Internal-Secret: $INTERNAL_SECRET")
   while true; do
     local resp
     resp=$(curl -fsS --max-time 2 "${headers[@]}" "$url" 2>/dev/null || true)
     if [ -z "$resp" ]; then
-      if [ -n "$INTERNAL_SECRET" ]; then
-        echo "[reload] Agent status unavailable (curl failed); proceeding."
-      elif [ $attempt -eq 0 ]; then
-        echo "[reload] Agent status unavailable; proceeding without wait."
-      fi
+      [ $attempt -eq 0 ] && echo "[reload] Agent status unavailable; proceeding."
       return 0
     fi
     if echo "$resp" | grep -q '"status":"active"'; then
-      if [ $attempt -eq 0 ]; then
-        echo "[reload] Waiting for active agent turn to finish..."
-      fi
+      [ $attempt -eq 0 ] && echo "[reload] Waiting for active agent turn to finish..."
       attempt=$((attempt + 1))
-      if [ $attempt -ge $max_attempts ]; then
-        echo "[reload] Waited ${max_attempts}s for active turn; continuing reload."
-        return 0
-      fi
-      sleep 1
-      continue
+      [ $attempt -ge $max_attempts ] && { echo "[reload] Waited ${max_attempts}s; continuing."; return 0; }
+      sleep 1; continue
     fi
-    if [ $attempt -gt 0 ]; then
-      echo "[reload] Active turn finished; continuing reload."
-    fi
+    [ $attempt -gt 0 ] && echo "[reload] Active turn finished; continuing reload."
     return 0
   done
 }
 
 kill_pid() {
-  local pid="$1"
-  local label="$2"
-  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-    if is_zombie "$pid"; then
-      echo "[reload] ${label} ($pid) is a zombie; skipping kill"
-      return 0
-    fi
-    echo "[reload] Stopping ${label} ($pid)..."
-    kill "$pid" 2>/dev/null || true
-    wait_for_exit "$pid" "$label" || true
-    if kill -0 "$pid" 2>/dev/null; then
-      echo "[reload] Force-killing ${label} ($pid)"
-      kill -9 "$pid" 2>/dev/null || true
-      sleep 1
-    fi
+  local pid="$1" label="$2"
+  [ -z "$pid" ] && return 0
+  kill -0 "$pid" 2>/dev/null || return 0
+  is_zombie "$pid" && { echo "[reload] ${label} ($pid) is a zombie; skipping"; return 0; }
+  echo "[reload] Stopping ${label} ($pid)..."
+  kill "$pid" 2>/dev/null || true
+  wait_for_exit "$pid" "$label" || true
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "[reload] Force-killing ${label} ($pid)"
+    kill -9 "$pid" 2>/dev/null || true
+    sleep 1
   fi
 }
 
@@ -209,39 +245,20 @@ tidy_lock() {
   fi
 }
 
+CHILD_PID=""
 handle_signal() {
   echo "[reload] Signal received, shutting down..."
-  if [ -n "$CHILD_PID" ] && kill -0 "$CHILD_PID" 2>/dev/null; then
+  [ -n "$CHILD_PID" ] && kill -0 "$CHILD_PID" 2>/dev/null && {
     kill "$CHILD_PID" 2>/dev/null || true
     wait "$CHILD_PID" 2>/dev/null || true
-  fi
-  tidy_lock
-  exit 0
+  }
+  tidy_lock; exit 0
 }
 trap handle_signal SIGTERM SIGINT
 
-restart_via_supervisor() {
-  if ! command -v "$SUPERVISORCTL_BIN" >/dev/null 2>&1; then
-    return 1
-  fi
-  local ctl_args=()
-  if [ -n "$SUPERVISORCTL_CONFIG" ] && [ -f "$SUPERVISORCTL_CONFIG" ]; then
-    ctl_args+=(-c "$SUPERVISORCTL_CONFIG")
-  fi
-  echo "[reload] Restarting $SUPERVISOR_SERVICE via $SUPERVISORCTL_BIN"
-  if "$SUPERVISORCTL_BIN" "${ctl_args[@]}" restart "$SUPERVISOR_SERVICE" >/dev/null 2>&1; then
-    echo "[reload] Supervisor restart triggered"
-    return 0
-  fi
-  echo "[reload] Supervisor restart failed"
-  return 2
-}
-
 notify_ready() {
   local ready_port="${1:-$PORT}"
-  if [ -f "$NOTIFY_SENT_FILE" ]; then
-    return 0
-  fi
+  [ -f "$NOTIFY_SENT_FILE" ] && return 0
   for _ in $(seq 1 40); do
     if bash -c "</dev/tcp/127.0.0.1/$ready_port" >/dev/null 2>&1; then
       mkdir -p "$IPC_MESSAGES_DIR"
@@ -257,97 +274,120 @@ EOF
 }
 
 queue_resume_pending() {
-  if ! mkdir -p "$IPC_TASKS_DIR" 2>/dev/null; then
-    echo "[reload] Unable to create IPC tasks dir at $IPC_TASKS_DIR; skipping resume queue."
-    return 0
-  fi
-  if ls "$IPC_TASKS_DIR"/resume_pending_*.json >/dev/null 2>&1; then
-    echo "[reload] Resume IPC already queued; skipping."
-    return 0
-  fi
+  mkdir -p "$IPC_TASKS_DIR" 2>/dev/null || {
+    echo "[reload] Unable to create IPC tasks dir; skipping resume queue."; return 0
+  }
+  ls "$IPC_TASKS_DIR"/resume_pending_*.json >/dev/null 2>&1 && {
+    echo "[reload] Resume IPC already queued; skipping."; return 0
+  }
   cat > "$IPC_TASKS_DIR/resume_pending_$(date +%s%N).json" <<EOF
 {"type":"resume_pending","chatJid":"all","reason":"reload"}
 EOF
   echo "[reload] Queued resume_pending IPC."
 }
 
+# ── Restart via supervisor ───────────────────────────────────────────
+restart_supervisor() {
+  local ctl_args=()
+  [ -n "$SUPERVISORCTL_CONFIG" ] && [ -f "$SUPERVISORCTL_CONFIG" ] && ctl_args+=(-c "$SUPERVISORCTL_CONFIG")
+  echo "[reload] Restarting $SUPERVISOR_SERVICE via $SUPERVISORCTL_BIN"
+  if "$SUPERVISORCTL_BIN" "${ctl_args[@]}" restart "$SUPERVISOR_SERVICE" 2>&1; then
+    echo "[reload] Supervisor restart succeeded"
+    return 0
+  fi
+  echo "[reload] Supervisor restart failed"
+  return 1
+}
+
+# ── Restart via systemd --user ───────────────────────────────────────
+restart_systemd() {
+  echo "[reload] Restarting $SYSTEMD_UNIT via systemctl --user"
+  if systemctl --user restart "$SYSTEMD_UNIT" 2>&1; then
+    echo "[reload] systemd --user restart succeeded"
+    return 0
+  fi
+  echo "[reload] systemd --user restart failed"
+  return 1
+}
+
+# ── Manual fallback ──────────────────────────────────────────────────
+restart_manual() {
+  echo "[reload] Manual restart (no service manager)"
+
+  if ! command -v "$COMMAND" >/dev/null 2>&1; then
+    echo "[reload] Command not found: $COMMAND"
+    return 1
+  fi
+
+  kill_pid "$OLD_PID" "old piclaw"
+
+  PORT_PID=$(find_port_pid)
+  if [ -n "$PORT_PID" ]; then
+    CMDLINE=$(ps -p "$PORT_PID" -o cmd= 2>/dev/null || true)
+    if echo "$CMDLINE" | grep -qi "piclaw"; then
+      kill_pid "$PORT_PID" "piclaw on port $PORT"
+    else
+      echo "[reload] Port $PORT in use by PID $PORT_PID ($CMDLINE). Aborting."
+      return 1
+    fi
+  fi
+
+  # Kill old script-supervisor if present
+  if [ -f "$SUPERVISOR_PIDFILE" ]; then
+    OLD_SUPERVISOR=$(cat "$SUPERVISOR_PIDFILE" 2>/dev/null || true)
+    [ -n "$OLD_SUPERVISOR" ] && [ "$OLD_SUPERVISOR" != "$$" ] && kill_pid "$OLD_SUPERVISOR" "old supervisor"
+  fi
+  echo $$ > "$SUPERVISOR_PIDFILE"
+  tidy_lock
+
+  echo "[reload] Starting: $* (supervisor PID $$)"
+  local attempt=0
+  while true; do
+    attempt=$((attempt + 1))
+    "$@" &
+    CHILD_PID=$!
+    echo "$CHILD_PID" > "$PIDFILE"
+    [ ! -f "$NOTIFY_SENT_FILE" ] && notify_ready &
+    wait "$CHILD_PID"
+    local status=$?
+    CHILD_PID=""
+    [ $status -eq 0 ] && { echo "[reload] piclaw exited cleanly"; exit 0; }
+    [ $attempt -ge 5 ] && { echo "[reload] piclaw exited with status $status; giving up"; exit $status; }
+    echo "[reload] piclaw exited with status $status; restarting in 2s"
+    sleep 2
+  done
+}
+
+# ── Main ─────────────────────────────────────────────────────────────
+
 wait_for_agent_idle
 queue_resume_pending
 rm -f "$NOTIFY_SENT_FILE"
-restart_via_supervisor
-SUPERVISOR_STATUS=$?
-if [ $SUPERVISOR_STATUS -eq 0 ]; then
-  notify_ready &
-  rm -f "$PIDFILE" "$SUPERVISOR_PIDFILE"
-  tidy_lock
-  exit 0
-fi
-if [ $SUPERVISOR_STATUS -eq 2 ]; then
-  echo "[reload] Supervisor restart failed; aborting to avoid conflicts."
-  tidy_lock
-  exit 1
-fi
 
-echo "[reload] Falling back to manual piclaw restart"
-
-if ! command -v "$COMMAND" >/dev/null 2>&1; then
-  echo "[reload] Command not found: $COMMAND"
-  tidy_lock
-  exit 1
-fi
-
-# Kill old piclaw
-kill_pid "$OLD_PID" "old piclaw"
-
-# Ensure port is free (kill stray piclaw if needed)
-PORT_PID=$(find_port_pid)
-if [ -n "$PORT_PID" ]; then
-  CMDLINE=$(ps -p "$PORT_PID" -o cmd= 2>/dev/null || true)
-  if echo "$CMDLINE" | grep -qi "piclaw"; then
-    kill_pid "$PORT_PID" "piclaw on port $PORT"
-  else
-    echo "[reload] Port $PORT is in use by PID $PORT_PID ($CMDLINE). Aborting."
-    tidy_lock
-    exit 1
-  fi
-fi
-
-CHILD_PID=""
-
-# Kill old supervisor if present
-if [ -f "$SUPERVISOR_PIDFILE" ]; then
-  OLD_SUPERVISOR=$(cat "$SUPERVISOR_PIDFILE" 2>/dev/null || true)
-  if [ -n "$OLD_SUPERVISOR" ] && [ "$OLD_SUPERVISOR" != "$$" ]; then
-    kill_pid "$OLD_SUPERVISOR" "old supervisor"
-  fi
-fi
-
-echo $$ > "$SUPERVISOR_PIDFILE"
-
-tidy_lock
-
-echo "[reload] Starting: $* (supervisor PID $$)"
-ATTEMPT=0
-while true; do
-  ATTEMPT=$((ATTEMPT + 1))
-  "$@" &
-  CHILD_PID=$!
-  echo "$CHILD_PID" > "$PIDFILE"
-  if [ ! -f "$NOTIFY_SENT_FILE" ]; then
-    notify_ready &
-  fi
-  wait "$CHILD_PID"
-  STATUS=$?
-  CHILD_PID=""
-  if [ $STATUS -eq 0 ]; then
-    echo "[reload] piclaw exited cleanly"
-    exit 0
-  fi
-  if [ $ATTEMPT -ge 5 ]; then
-    echo "[reload] piclaw exited with status $STATUS; giving up"
-    exit $STATUS
-  fi
-  echo "[reload] piclaw exited with status $STATUS; restarting in 2s"
-  sleep 2
-
-done
+case "$SERVICE_MANAGER" in
+  supervisor)
+    if restart_supervisor; then
+      notify_ready &
+      rm -f "$PIDFILE" "$SUPERVISOR_PIDFILE"
+      tidy_lock; exit 0
+    fi
+    echo "[reload] Supervisor restart failed; aborting to avoid conflicts."
+    tidy_lock; exit 1
+    ;;
+  systemd)
+    if restart_systemd; then
+      notify_ready &
+      rm -f "$PIDFILE" "$SUPERVISOR_PIDFILE"
+      tidy_lock; exit 0
+    fi
+    echo "[reload] systemd --user restart failed; aborting."
+    tidy_lock; exit 1
+    ;;
+  manual)
+    restart_manual "$@"
+    ;;
+  *)
+    echo "[reload] Unknown service manager: $SERVICE_MANAGER"
+    tidy_lock; exit 1
+    ;;
+esac

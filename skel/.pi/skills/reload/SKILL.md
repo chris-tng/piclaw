@@ -8,28 +8,39 @@ description: Reinstall piclaw from workspace source and force-restart the runnin
 Reinstall the piclaw package from workspace source and restart the running process
 immediately. The new process takes over on the same port.
 
+> ⚠️ **Important (container runtime):**
+> Always install to `/usr/local/lib/bun/install/global/node_modules/piclaw`.
+> Do **not** deploy to `/home/agent/.bun/...` in this container, or Supervisor may keep running an older build.
+
 ## Steps
 
 Run the following as a **single bash invocation**:
 
 ```bash
-set -e
+set -euo pipefail
+export BUN_INSTALL="/usr/local/lib/bun"
+export PATH="$BUN_INSTALL/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # 1. Build
 cd /workspace/piclaw && make build-piclaw
 
-# 2. Pack and install globally (real files, not symlinks)
+# 2. Pack and install to the active global runtime path (real files, not symlinks)
 cd /workspace/piclaw/piclaw
 bun pm pack --destination /tmp
 TARBALL=$(ls -t /tmp/piclaw-*.tgz | head -1)
-DEST=/home/agent/.bun/install/global/node_modules/piclaw
-rm -rf "$DEST"
-mkdir -p "$DEST"
-tar -xzf "$TARBALL" -C "$DEST" --strip-components=1
+DEST="$BUN_INSTALL/install/global/node_modules/piclaw"
+sudo rm -rf "$DEST"
+sudo mkdir -p "$DEST"
+sudo tar -xzf "$TARBALL" -C "$DEST" --strip-components=1
 rm -f "$TARBALL"
-cd "$DEST" && bun install --production
+cd "$DEST" && sudo BUN_INSTALL_CACHE_DIR=/tmp/bun-cache bun install --production || true
 
-# 3. Launch restart (self-detaches + waits for current turn to finish)
+# 3. Quick sanity check: show where piclaw resolves from
+PICLAW_BIN=$(command -v piclaw || true)
+echo "piclaw binary: ${PICLAW_BIN:-not found}"
+[ -n "$PICLAW_BIN" ] && readlink -f "$PICLAW_BIN" || true
+
+# 4. Launch restart (self-detaches + waits for current turn to finish)
 #    Logs stream to /tmp/restart-piclaw-force.log by default.
 PICLAW_RELOAD_LOG=/tmp/restart-piclaw-force.log \
   /workspace/.pi/skills/reload/restart-piclaw.sh
@@ -39,24 +50,59 @@ echo "Reload scheduled. Check /tmp/restart-piclaw-force.log for status."
 
 ## How It Works
 
-The restart script (`restart-piclaw.sh`):
-1. Waits for the current agent turn to finish by polling `/agent/status`
-2. Queues a `resume_pending` IPC task so interrupted turns can resume after restart (best-effort)
-3. Attempts to restart the Supervisor-managed service (`supervisorctl restart ${PICLAW_SUPERVISOR_SERVICE:-piclaw}`). The binary, path, and config can be overridden via `PICLAW_SUPERVISORCTL_BIN`/`PICLAW_SUPERVISORCTL_CONFIG`.
-4. If `supervisorctl` is **not found**, the script falls back to the legacy flow: kill the process (using `/tmp/piclaw.pid`), ensure the port is free, and launch the configured command under the script's tiny supervisor.
-5. If `supervisorctl` **is found** but the restart command fails, the script **aborts** (exit 1) to avoid conflicting with Supervisor's own restart logic.
+The restart script (`restart-piclaw.sh`) auto-detects the service manager and restarts
+piclaw through it. Detection order (first match wins):
 
-When Supervisor is available the script no longer writes `/tmp/piclaw-supervisor.pid` or runs its own long-lived supervisor loop-those steps still happen in the fallback path for environments without Supervisor.
+| Priority | Check | Method |
+|----------|-------|--------|
+| 0 | `PICLAW_SERVICE_MANAGER` env var set | Use its value directly (`supervisor`, `systemd`, `manual`) |
+| 1 | `supervisorctl` binary exists AND a `piclaw` program is registered | `supervisorctl restart piclaw` |
+| 2 | `systemctl` binary exists AND a `piclaw.service` user unit exists | `systemctl --user restart piclaw.service` |
+| 3 | Neither found | Manual kill + start fallback |
+
+Before restarting, the script:
+1. Waits (up to 120s) for the active agent turn to finish by polling `/agent/status`
+2. Queues a `resume_pending` IPC task so interrupted turns can resume after restart
+
+### Supervisor path (default in Docker containers)
+
+Uses `supervisorctl -c <config> restart piclaw`. The config path is auto-detected:
+- `/workspace/.piclaw/supervisor/supervisord.conf` (preferred)
+- `/etc/supervisor/supervisord.conf` (fallback)
+- Override with `PICLAW_SUPERVISORCTL_CONFIG`
+
+If `supervisorctl` is found but the restart fails, the script **aborts** (exit 1) to avoid
+conflicting with Supervisor's own restart logic.
+
+### Systemd --user path (for non-Docker hosts)
+
+Uses `systemctl --user restart piclaw.service`. Override the unit name with
+`PICLAW_SYSTEMD_UNIT`.
+
+If the restart fails, the script aborts.
+
+### Manual fallback
+
+Kills the old process (via PID file or `OLD_PID` arg), waits for the port to free up,
+and starts `piclaw --port 8080` in a tiny supervisor loop (5 retries). Override the
+command with `-- piclaw --port 8080`.
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PICLAW_SERVICE_MANAGER` | (auto) | Force `supervisor`, `systemd`, or `manual` |
+| `PICLAW_SUPERVISOR_SERVICE` | `piclaw` | Supervisor program name |
+| `PICLAW_SUPERVISORCTL_BIN` | `supervisorctl` | supervisorctl binary |
+| `PICLAW_SUPERVISORCTL_CONFIG` | (auto) | Supervisor config path |
+| `PICLAW_SYSTEMD_UNIT` | `piclaw.service` | systemd --user unit name |
+| `PICLAW_WEB_PORT` | `8080` | Port to wait for / pass to piclaw |
+| `PICLAW_RELOAD_LOG` | `/tmp/restart-piclaw-force.log` | Async log file |
+| `PICLAW_RELOAD_ASYNC` | `1` | Set `0` for sync (foreground) mode |
 
 ## Important Notes
 
-- The script waits (up to 120s) for the active agent turn to finish before initiating a restart. When Supervisor is available it delegates to `supervisorctl`; otherwise it kills/launches the process under the tiny supervisor.
-- To debug synchronously, run `restart-piclaw.sh --sync ...` or set `PICLAW_RELOAD_ASYNC=0`.
-- The restart script queues a `resume_pending` IPC task. If the IPC tasks directory cannot be created or a resume task already exists, it logs and continues.
-- If `supervisorctl` is available but the restart fails (socket/config/service issues), the script aborts rather than falling back, to avoid fighting Supervisor.
-- The fallback path starts with `piclaw --port 3000` by default. Pass a custom command after `--` (fallback only):
-  `restart-piclaw.sh -- piclaw --port 8080`
-- For Supervisor restarts, configure the service itself and optionally set `PICLAW_SUPERVISOR_SERVICE` (service name).
+- Bun and piclaw are installed globally under `/usr/local/lib/bun` (root-owned).
+- The script logs the detected service manager and resolved `piclaw` binary path for easier debugging.
 - WhatsApp session state persists across restarts (stored in SQLite + auth dir).
 - Check `/tmp/restart-piclaw-force.log` if something goes wrong.
-- `bun add -g file:` creates symlinks; the pack+extract approach ensures real file copies.

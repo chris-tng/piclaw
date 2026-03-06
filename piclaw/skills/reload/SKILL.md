@@ -8,27 +8,39 @@ description: Reinstall piclaw from workspace source and force-restart the runnin
 Reinstall the piclaw package from workspace source and restart the running process
 immediately. The new process takes over on the same port.
 
+> ⚠️ **Important (container runtime):**
+> Always install to `/usr/local/lib/bun/install/global/node_modules/piclaw`.
+> Do **not** deploy to `/home/agent/.bun/...` in this container, or Supervisor may keep running an older build.
+
 ## Steps
 
 Run the following as a **single bash invocation**:
 
 ```bash
-set -e
+set -euo pipefail
 export BUN_INSTALL="/usr/local/lib/bun"
-export PATH="$BUN_INSTALL/bin:$PATH"
+export PATH="$BUN_INSTALL/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # 1. Build
 cd /workspace/piclaw && make build-piclaw
 
-# 2. Pack and install globally via bun (sudo for system-wide prefix)
+# 2. Pack and install to the active global runtime path (real files, not symlinks)
 cd /workspace/piclaw/piclaw
 bun pm pack --destination /tmp
 TARBALL=$(ls -t /tmp/piclaw-*.tgz | head -1)
-sudo BUN_INSTALL="$BUN_INSTALL" bun add -g "$TARBALL"
-sudo chmod -R a+rX "$BUN_INSTALL"
+DEST="$BUN_INSTALL/install/global/node_modules/piclaw"
+sudo rm -rf "$DEST"
+sudo mkdir -p "$DEST"
+sudo tar -xzf "$TARBALL" -C "$DEST" --strip-components=1
 rm -f "$TARBALL"
+cd "$DEST" && sudo BUN_INSTALL_CACHE_DIR=/tmp/bun-cache bun install --production || true
 
-# 3. Launch restart (self-detaches + waits for current turn to finish)
+# 3. Quick sanity check: show where piclaw resolves from
+PICLAW_BIN=$(command -v piclaw || true)
+echo "piclaw binary: ${PICLAW_BIN:-not found}"
+[ -n "$PICLAW_BIN" ] && readlink -f "$PICLAW_BIN" || true
+
+# 4. Launch restart (self-detaches + waits for current turn to finish)
 #    Logs stream to /tmp/restart-piclaw-force.log by default.
 PICLAW_RELOAD_LOG=/tmp/restart-piclaw-force.log \
   /workspace/.pi/skills/reload/restart-piclaw.sh
@@ -72,7 +84,7 @@ If the restart fails, the script aborts.
 ### Manual fallback
 
 Kills the old process (via PID file or `OLD_PID` arg), waits for the port to free up,
-and starts `piclaw --port 3000` in a tiny supervisor loop (5 retries). Override the
+and starts `piclaw --port 8080` in a tiny supervisor loop (5 retries). Override the
 command with `-- piclaw --port 8080`.
 
 ## Environment Variables
@@ -84,13 +96,13 @@ command with `-- piclaw --port 8080`.
 | `PICLAW_SUPERVISORCTL_BIN` | `supervisorctl` | supervisorctl binary |
 | `PICLAW_SUPERVISORCTL_CONFIG` | (auto) | Supervisor config path |
 | `PICLAW_SYSTEMD_UNIT` | `piclaw.service` | systemd --user unit name |
-| `PICLAW_WEB_PORT` | `3000` | Port to wait for / pass to piclaw |
+| `PICLAW_WEB_PORT` | `8080` | Port to wait for / pass to piclaw |
 | `PICLAW_RELOAD_LOG` | `/tmp/restart-piclaw-force.log` | Async log file |
 | `PICLAW_RELOAD_ASYNC` | `1` | Set `0` for sync (foreground) mode |
 
 ## Important Notes
 
-- Bun and piclaw are installed globally under `/usr/local/lib/bun` (root-owned). Use `sudo bun add -g` to install.
-- The script logs the detected service manager at startup for easy debugging.
+- Bun and piclaw are installed globally under `/usr/local/lib/bun` (root-owned).
+- The script logs the detected service manager and resolved `piclaw` binary path for easier debugging.
 - WhatsApp session state persists across restarts (stored in SQLite + auth dir).
 - Check `/tmp/restart-piclaw-force.log` if something goes wrong.
