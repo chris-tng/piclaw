@@ -135,7 +135,7 @@ export async function handleAgentMessage(
     );
   }
 
-  const steerResult = await channel.agentPool.queueStreamingMessage(chatJid, normalized.content, "steer");
+  const steerResult = await channel.agentPool.queueStreamingMessage(chatJid, content, "steer");
   if (steerResult.queued) {
     channel.queuePendingSteering(chatJid, interaction.timestamp);
     channel.broadcastEvent("agent_steer_queued", { chat_jid: chatJid });
