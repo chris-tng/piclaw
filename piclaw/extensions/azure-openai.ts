@@ -676,6 +676,18 @@ function streamAzureOpenAIResponses(model: any, context: any, options: any) {
       // Azure requires: id/call_id max 64 chars, only [a-zA-Z0-9_-].
       // Upstream normalization misses some edge cases (cross-provider IDs without "|",
       // stale encrypted signatures, etc.). We sanitize ALL items here.
+      //
+      // Additionally, Azure enforces that every function_call item whose id starts
+      // with "fc_" must have its paired reasoning item (rs_xxx) in the input.
+      // If reasoning items were stripped (compaction, empty thinking blocks, model
+      // switch), keeping the fc_ id causes a 400 error. Setting id to undefined
+      // bypasses the pairing validation (same approach as cross-provider replay).
+      const reasoningIds = new Set<string>();
+      for (const item of messages) {
+        if ((item as any).type === "reasoning" && (item as any).id) {
+          reasoningIds.add((item as any).id);
+        }
+      }
       for (const item of messages) {
         if (item.id && typeof item.id === "string") {
           const nextId = sanitizeOpenAIId(item.id);
@@ -684,6 +696,14 @@ function streamAzureOpenAIResponses(model: any, context: any, options: any) {
         if (item.call_id && typeof item.call_id === "string") {
           const nextCallId = sanitizeOpenAIId(item.call_id);
           if (nextCallId) item.call_id = nextCallId;
+        }
+        // Strip function_call ids when no reasoning items are present.
+        // If there ARE reasoning items, we keep function_call ids and trust
+        // the upstream converter paired them correctly.
+        if ((item as any).type === "function_call" && item.id &&
+            typeof item.id === "string" && (item.id as string).startsWith("fc_") &&
+            reasoningIds.size === 0) {
+          (item as any).id = undefined;
         }
       }
       const params: Record<string, any> = {
