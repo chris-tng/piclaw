@@ -2725,7 +2725,7 @@ body {
     }
     
     .compose-box textarea {
-        min-height: 60px;
+        min-height: 30px;
         font-size: var(--font-size-md);
     }
     
@@ -2806,7 +2806,7 @@ body {
     }
     
     .compose-box textarea {
-        min-height: 100px;
+        min-height: 30px;
     }
 }
 
