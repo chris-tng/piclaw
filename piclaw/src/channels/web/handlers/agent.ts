@@ -24,11 +24,22 @@ import {
   parseAgentMessageRequest,
   storeAgentUserMessage,
 } from "../agent-message-service.js";
-import { getMessagesSince, getChatCursor, beginChatRun, endChatRun, endChatRunWithError, setChatCursor } from "../../../db.js";
+import {
+  beginChatRun,
+  endChatRun,
+  endChatRunWithError,
+  getChatCursor,
+  getInflightMessageId,
+  getMessageRowIdById,
+  getMessagesSince,
+  getDb,
+  setChatCursor,
+} from "../../../db.js";
 import { detectChannel, formatMessages, formatOutbound } from "../../../router.js";
 import { createAgentProfileBuilder } from "../agent-utils.js";
 import { resolveAvatarUrl } from "../avatar-service.js";
 import { createAgentEventEmitter, createStreamingEventHandler } from "../agent-events.js";
+import { broadcastInteractionUpdated } from "../interaction-service.js";
 import { storeAgentTurn } from "../agent-message-store.js";
 import { resolveThreadId, resolveThreadRootId } from "../threading.js";
 import { createUuid } from "../../../utils/ids.js";
@@ -65,7 +76,7 @@ export async function handleAgentMessage(
 
   channel.broadcastEvent("new_post", interaction);
 
-  const threadId = resolveThreadId(normalized.threadId, interaction.id);
+  let threadId = resolveThreadId(normalized.threadId, interaction.id);
 
   const markCommandHandled = () => {
     if (interaction?.timestamp) {
@@ -150,8 +161,27 @@ export async function handleAgentMessage(
 
   const steerResult = await channel.agentPool.queueStreamingMessage(chatJid, content, "steer");
   if (steerResult.queued) {
+    // Parent steering messages to the original inflight turn root so they
+    // render as thread replies (indented like agent responses).
+    const inflightMessageId = getInflightMessageId(chatJid);
+    const rootRowId = inflightMessageId ? getMessageRowIdById(chatJid, inflightMessageId) : null;
+    if (rootRowId && rootRowId !== interaction.id) {
+      getDb().prepare("UPDATE messages SET thread_id = ? WHERE rowid = ?").run(rootRowId, interaction.id);
+      interaction.data.thread_id = rootRowId;
+      threadId = rootRowId;
+      broadcastInteractionUpdated(
+        channel,
+        interaction,
+        ASSISTANT_NAME,
+        resolveAvatarUrl("agent", ASSISTANT_AVATAR),
+        USER_NAME || null,
+        resolveAvatarUrl("user", USER_AVATAR),
+        USER_AVATAR_BACKGROUND || null
+      );
+    }
+
     channel.queuePendingSteering(chatJid, interaction.timestamp);
-    channel.broadcastEvent("agent_steer_queued", { chat_jid: chatJid });
+    channel.broadcastEvent("agent_steer_queued", { chat_jid: chatJid, thread_id: threadId ?? null });
     return channel.json(
       {
         user_message: interaction,

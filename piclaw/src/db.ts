@@ -55,6 +55,7 @@ export { getRouterState, setRouterState } from "./db/router-state.js";
 export {
   getChatCursor,
   getAllChatCursors,
+  getInflightMessageId,
   setChatCursor,
   beginChatRun,
   endChatRun,
