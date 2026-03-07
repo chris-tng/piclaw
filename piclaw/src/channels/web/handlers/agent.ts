@@ -85,8 +85,31 @@ export async function handleAgentMessage(
     }
   };
 
+  const withAgentProfile = createAgentProfileBuilder(
+    ASSISTANT_NAME,
+    resolveAvatarUrl("agent", ASSISTANT_AVATAR),
+    USER_NAME || null,
+    resolveAvatarUrl("user", USER_AVATAR),
+    USER_AVATAR_BACKGROUND || null
+  );
+
+  const emitCommandStatus = (payload: Record<string, unknown>) => {
+    channel.updateAgentStatus(chatJid, payload);
+    channel.broadcastEvent("agent_status", withAgentProfile(payload));
+  };
+
   const command = parseControlCommand(content, TRIGGER_PATTERN);
   if (command) {
+    const commandTurnId = createUuid("turn");
+    const commandTitle = content.trim().split(/\s+/, 1)[0] || "command";
+    emitCommandStatus({
+      thread_id: interaction.timestamp,
+      agent_id: agentId,
+      turn_id: commandTurnId,
+      type: "intent",
+      title: `Running ${commandTitle}...`,
+    });
+
     const result = await channel.agentPool.applyControlCommand(chatJid, command);
     const formatted = formatOutbound(result.message, "web");
     const isQueueCommand = command.type === "queue" || command.type === "queue_all";
@@ -130,6 +153,14 @@ export async function handleAgentMessage(
       channel.skipFailedOnModelSwitch(chatJid);
     }
 
+    emitCommandStatus({
+      thread_id: interaction.timestamp,
+      agent_id: agentId,
+      turn_id: commandTurnId,
+      type: result.status === "success" ? "done" : "error",
+      title: result.status === "success" ? `Completed ${commandTitle}` : (result.message || "Command failed"),
+    });
+
     markCommandHandled();
     return channel.json(
       { user_message: interaction, thread_id: threadId, command: result },
@@ -140,6 +171,16 @@ export async function handleAgentMessage(
   // If message looks like an extension slash command (starts with '/'), execute it directly
   const trimmed = content.trim();
   if (trimmed.startsWith("/")) {
+    const commandTurnId = createUuid("turn");
+    const slashName = trimmed.split(/\s+/, 1)[0] || "/command";
+    emitCommandStatus({
+      thread_id: interaction.timestamp,
+      agent_id: agentId,
+      turn_id: commandTurnId,
+      type: "intent",
+      title: `Running ${slashName}...`,
+    });
+
     channel.lastCommandInteractionId = interaction.id;
     let cmdResult;
     try {
@@ -153,6 +194,26 @@ export async function handleAgentMessage(
     } catch (e) {
       console.error('[web] Failed to send slash command response:', e);
     }
+
+    if (slashName === "/reload" && cmdResult.status === "success") {
+      emitCommandStatus({
+        thread_id: interaction.timestamp,
+        agent_id: agentId,
+        turn_id: commandTurnId,
+        type: "intent",
+        title: "Reload scheduled — waiting for restart",
+        detail: cmdResult.message || undefined,
+      });
+    } else {
+      emitCommandStatus({
+        thread_id: interaction.timestamp,
+        agent_id: agentId,
+        turn_id: commandTurnId,
+        type: cmdResult.status === "success" ? "done" : "error",
+        title: cmdResult.status === "success" ? `Completed ${slashName}` : (cmdResult.message || "Command failed"),
+      });
+    }
+
     markCommandHandled();
     return channel.json(
       { user_message: interaction, thread_id: threadId, command: cmdResult },
@@ -313,6 +374,21 @@ export async function processChat(
         agent_id: agentId,
         type: "intent",
         title: "Queued — waiting for current response",
+        turn_id: turnId,
+      });
+      throw new Error(output.error);
+    }
+
+    if (output.error && output.error.includes("No API provider registered for api:")) {
+      // Extension/provider registration races can happen right after restart.
+      // Keep the message pending and let the queue retry automatically.
+      rollbackInflightRun(chatJid, prevCursor);
+      trackedEmitter.status({
+        thread_id: threadId,
+        agent_id: agentId,
+        type: "intent",
+        title: "Model provider is initializing — retrying shortly",
+        detail: output.error,
         turn_id: turnId,
       });
       throw new Error(output.error);
