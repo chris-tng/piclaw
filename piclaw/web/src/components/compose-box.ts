@@ -324,8 +324,9 @@ export function ComposeBox({
         setShowModelPopup((prev) => !prev);
     };
 
-    const handleSubmit = async () => {
-        if (!content.trim() && mediaFiles.length === 0 && fileRefs.length === 0) return;
+    const handleSubmit = async (overrideContent) => {
+        const currentContent = overrideContent !== undefined ? overrideContent : content;
+        if (!currentContent.trim() && mediaFiles.length === 0 && fileRefs.length === 0) return;
 
         setLoading(true);
         try {
@@ -336,7 +337,7 @@ export function ComposeBox({
                 mediaIds.push(result.id);
             }
 
-            const baseContent = content.trim();
+            const baseContent = currentContent.trim();
             const fileBlock = fileRefs.length
                 ? `Files:\n${fileRefs.map((path) => `- ${path}`).join('\n')}`
                 : '';
@@ -385,6 +386,7 @@ export function ComposeBox({
     };
 
     const handleKeyDown = (e) => {
+        if (e.isComposing) return;
         if (searchMode && e.key === 'Escape') {
             e.preventDefault();
             setSearchText('');
@@ -459,12 +461,13 @@ export function ComposeBox({
         }
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
+            const currentValue = textareaRef.current?.value ?? (searchMode ? searchText : content);
             if (searchMode) {
-                if (searchText.trim()) {
-                    onSearch?.(searchText.trim());
+                if (currentValue.trim()) {
+                    onSearch?.(currentValue.trim());
                 }
             } else {
-                handleSubmit();
+                handleSubmit(currentValue);
             }
         }
     };

@@ -64,14 +64,29 @@ export async function handleAgentMessage(channel, req, pathname, chatJid, defaul
         const modelCommands = ["model", "thinking", "cycle_model", "cycle_thinking"];
         if (result.status === "success" && modelCommands.includes(command.type)) {
             let nextModel = result.model_label ?? null;
-            if (!nextModel) {
+            let thinkingLevel = result.thinking_level ?? null;
+            let supportsThinking = undefined;
+            try {
+                const modelState = await channel.agentPool.getAvailableModels(chatJid);
+                if (!nextModel)
+                    nextModel = modelState.current ?? null;
+                if (thinkingLevel == null)
+                    thinkingLevel = modelState.thinking_level ?? null;
+                supportsThinking = modelState.supports_thinking;
+            }
+            catch {
                 const getModel = channel.agentPool
                     .getCurrentModelLabel;
                 if (typeof getModel === "function") {
                     nextModel = await getModel(chatJid).catch(() => null);
                 }
             }
-            channel.broadcastEvent("model_changed", { chat_jid: chatJid, model: nextModel ?? null });
+            channel.broadcastEvent("model_changed", {
+                chat_jid: chatJid,
+                model: nextModel ?? null,
+                thinking_level: thinkingLevel ?? null,
+                supports_thinking: supportsThinking,
+            });
         }
         if (result.status === "success" && (command.type === "model" || command.type === "cycle_model")) {
             channel.skipFailedOnModelSwitch(chatJid);

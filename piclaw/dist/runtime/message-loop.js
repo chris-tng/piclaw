@@ -48,7 +48,6 @@ export async function processMessages(chatJid, deps) {
     if (!hasTrigger)
         return true;
     const channel = detectChannel(chatJid);
-    const prevCursor = deps.state.lastAgentTimestamp[chatJid] || "";
     deps.state.lastAgentTimestamp[chatJid] = messages[messages.length - 1].timestamp;
     deps.state.saveTimestamps();
     const stripTrigger = (text) => {

@@ -149,7 +149,11 @@ export class AgentPool {
         const available = registry.getAvailable();
         const models = available.map((model) => `${model.provider}/${model.id}`);
         const currentModel = session.model ? `${session.model.provider}/${session.model.id}` : null;
-        return { current: currentModel, models };
+        const thinkingLevel = session.thinkingLevel ?? null;
+        const supportsThinking = typeof session.supportsThinking === "function"
+            ? session.supportsThinking()
+            : Boolean(session.model?.reasoning);
+        return { current: currentModel, models, thinking_level: thinkingLevel, supports_thinking: supportsThinking };
     }
     /** Return the current context token usage for a chat session, or null if unknown. */
     async getContextUsageForChat(chatJid) {
