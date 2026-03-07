@@ -166,6 +166,8 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
     const dragDepthRef    = useRef(0);
     const dropTargetRef   = useRef(dropTarget);
     const dragActiveRef   = useRef(dragActive);
+    const selectedPathRef = useRef(selectedPath);
+    const previewRef      = useRef(preview);
 
     // Sync mutable refs each render
     onFileSelectRef.current = onFileSelect;
@@ -176,6 +178,8 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
     useEffect(() => { activeRef.current = active ?? visible; }, [active, visible]);
     useEffect(() => { dropTargetRef.current = dropTarget; }, [dropTarget]);
     useEffect(() => { dragActiveRef.current = dragActive; }, [dragActive]);
+    useEffect(() => { selectedPathRef.current = selectedPath; }, [selectedPath]);
+    useEffect(() => { previewRef.current = preview; }, [preview]);
 
     // ── loadPreview ───────────────────────────────────────────────────────────
     const loadPreview = async (path) => {
@@ -272,6 +276,20 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
                 setInitialLoad(false);
                 return next;
             });
+
+            // If the selected file changed on disk, refresh the preview.
+            const selected = selectedPathRef.current;
+            if (!selected || !previewRef.current) return;
+            const node = nodeMapRef.current?.get(selected);
+            if (node && node.type === 'dir') return;
+            const shouldRefresh = updates.some((update) => {
+                const path = update?.path || '';
+                if (!path || path === '.') return true;
+                return selected === path || selected.startsWith(`${path}/`);
+            });
+            if (shouldRefresh) {
+                loadPreviewRef.current?.(selected);
+            }
         };
         window.addEventListener('workspace-update', handler);
         return () => window.removeEventListener('workspace-update', handler);
