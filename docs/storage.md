@@ -20,7 +20,8 @@
 | `tool_outputs_fts` | Full‑text index for tool output |
 | `workspace_files` | Indexed workspace files (path, size, mtime) |
 | `workspace_fts` | Full‑text index for workspace content |
-| `router_state` | Polling cursors |
+| `chat_cursors` | Per‑chat cursor + inflight/failed run tracking |
+| `router_state` | Misc router state (auto‑compaction + web status) |
 | `keychain_entries` | Encrypted secrets for tool env injection |
 | `webauthn_credentials` | Stored passkeys (credential public keys + counters) |
 | `webauthn_enrollments` | One‑time enrolment tokens for passkey registration |
@@ -34,6 +35,7 @@ Attachments and link previews are stored on the message record (`content_blocks`
 erDiagram
   CHATS ||--o{ MESSAGES : contains
   CHATS ||--o{ TOKEN_USAGE : tracks
+  CHATS ||--|| CHAT_CURSORS : tracks
   MESSAGES ||--o{ MESSAGE_MEDIA : has
   MEDIA ||--o{ MESSAGE_MEDIA : linked
   SCHEDULED_TASKS ||--o{ TASK_RUN_LOGS : logs
@@ -119,6 +121,18 @@ erDiagram
     text provider
     text api
     int turns
+  }
+  CHAT_CURSORS {
+    text chat_jid
+    text cursor_ts
+    text inflight_prev_ts
+    text inflight_message_id
+    text inflight_started_at
+    text failed_prev_ts
+    text failed_ts
+    text failed_message_id
+    int failed_thread_root
+    text failed_created_at
   }
   TOOL_OUTPUTS {
     text id
