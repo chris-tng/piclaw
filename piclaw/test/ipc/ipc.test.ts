@@ -5,7 +5,7 @@
  * scheduled task registration, and cleanup of processed files.
  */
 
-import { beforeAll, beforeEach, afterAll, expect, test } from "bun:test";
+import { beforeAll, afterAll, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync, readdirSync, unlinkSync } from "fs";
 import { join } from "path";
 import { getTestWorkspace, setEnv, waitFor } from "../helpers.js";

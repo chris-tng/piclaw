@@ -99,9 +99,19 @@ export class WebChannel {
             this.workspaceWatcher = null;
         }
     }
-    async sendMessage(chatJid, text, threadId) {
+    async sendMessage(chatJid, text, options) {
+        const normalized = typeof options === "number" || options === null
+            ? { threadId: options ?? null }
+            : (options ?? {});
+        const threadId = normalized.threadId ?? null;
+        const forceRoot = Boolean(normalized.forceRoot);
         const interaction = this.storeMessage(chatJid, text, true, [], threadId ? { threadId } : undefined);
         if (interaction) {
+            if (forceRoot && !threadId) {
+                // Ensure scheduled messages start new threads (not replies to inflight turns).
+                getDb().prepare("UPDATE messages SET thread_id = ? WHERE rowid = ?").run(interaction.id, interaction.id);
+                interaction.data.thread_id = interaction.id;
+            }
             broadcastAgentResponse(this, interaction, ASSISTANT_NAME, resolveAvatarUrl("agent", ASSISTANT_AVATAR), USER_NAME || null, resolveAvatarUrl("user", USER_AVATAR), USER_AVATAR_BACKGROUND || null);
         }
     }
@@ -549,8 +559,7 @@ export class WebChannel {
         const allowCredentials = credentials.map((cred) => {
             const transports = cred.transports ? JSON.parse(cred.transports) : undefined;
             return {
-                id: this.base64UrlToBuffer(cred.credential_id),
-                type: "public-key",
+                id: cred.credential_id,
                 transports: Array.isArray(transports) ? transports : undefined,
             };
         });
@@ -597,9 +606,9 @@ export class WebChannel {
             this.logAuthEvent(req, "WebAuthn login unknown credential");
             return this.json({ error: "Unknown credential" }, 400);
         }
-        const authenticator = {
-            credentialID: this.base64UrlToBuffer(stored.credential_id),
-            credentialPublicKey: this.base64UrlToBuffer(stored.public_key),
+        const credentialRecord = {
+            id: stored.credential_id,
+            publicKey: this.base64UrlToBuffer(stored.public_key),
             counter: stored.sign_count || 0,
             transports: stored.transports ? JSON.parse(stored.transports) : undefined,
         };
@@ -611,7 +620,7 @@ export class WebChannel {
                 expectedChallenge: pending.challenge,
                 expectedOrigin: origin,
                 expectedRPID: pending.rpId,
-                authenticator,
+                credential: credentialRecord,
                 requireUserVerification: false,
             });
         }
@@ -660,13 +669,12 @@ export class WebChannel {
         const { rpId } = this.getWebauthnRpInfo(req);
         const existing = getWebauthnCredentialsForRpId(enrollment.user_id, rpId);
         const excludeCredentials = existing.map((cred) => ({
-            id: this.base64UrlToBuffer(cred.credential_id),
-            type: "public-key",
+            id: cred.credential_id,
         }));
         const options = await generateRegistrationOptions({
             rpName: ASSISTANT_NAME || "PiClaw",
             rpID: rpId,
-            userID: enrollment.user_id,
+            userID: new TextEncoder().encode(enrollment.user_id),
             userName: USER_NAME || enrollment.user_id,
             userDisplayName: USER_NAME || "User",
             attestationType: "none",
@@ -739,9 +747,9 @@ export class WebChannel {
         storeWebauthnCredential({
             user_id: pending.userId,
             rp_id: pending.rpId,
-            credential_id: this.bufferToBase64Url(info.credentialID),
-            public_key: this.bufferToBase64Url(info.credentialPublicKey),
-            sign_count: info.counter || 0,
+            credential_id: info.credential.id,
+            public_key: this.bufferToBase64Url(info.credential.publicKey),
+            sign_count: info.credential.counter || 0,
             transports,
         });
         return this.json({ ok: true });

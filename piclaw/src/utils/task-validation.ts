@@ -34,7 +34,7 @@ export function validateShellCommand(input: unknown): { ok: boolean; command?: s
   if (/[\r\n]/.test(command)) {
     return { ok: false, error: "Command cannot contain newlines." };
   }
-  if (/\u0000/.test(command)) {
+  if (command.includes("\0")) {
     return { ok: false, error: "Command contains invalid null byte." };
   }
   const lower = command.toLowerCase();

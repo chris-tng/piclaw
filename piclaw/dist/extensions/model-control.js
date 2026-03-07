@@ -18,7 +18,9 @@ const TOOL_HINT = [
 // Helpers
 // ---------------------------------------------------------------------------
 function modelLabel(model) {
-    return model ? `${model.provider}/${model.id}` : null;
+    if (!model?.provider || !model?.id)
+        return null;
+    return `${model.provider}/${model.id}`;
 }
 function getAvailableLevels(model) {
     if (!model?.reasoning)
@@ -88,6 +90,8 @@ export const modelControl = (pi) => {
             ctx.modelRegistry.refresh();
             const seen = new Map();
             for (const m of ctx.modelRegistry.getAvailable()) {
+                if (!m?.provider || !m?.id)
+                    continue;
                 const key = `${m.provider}/${m.id}`;
                 if (!seen.has(key))
                     seen.set(key, m);

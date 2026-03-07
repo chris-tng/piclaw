@@ -96,7 +96,10 @@ export function getToolOutput(handle) {
 }
 /** Search the FTS index for a tool output, returning snippet strings. */
 export function searchToolOutput(handle, query, limit = 5) {
-    return searchToolOutputSnippets(handle, query, limit);
+    const trimmed = query?.trim?.() ?? "";
+    if (!trimmed)
+        return [];
+    return searchToolOutputSnippets(handle, trimmed, limit);
 }
 /**
  * Delete tool outputs older than `maxAgeDays`. Removes both the DB records

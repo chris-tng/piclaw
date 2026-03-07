@@ -2,6 +2,7 @@
  * test/utils/task-validation.test.ts – Validation tests for scheduled shell tasks.
  */
 import { describe, expect, test } from "bun:test";
+import { WORKSPACE_DIR } from "../../src/core/config.js";
 import { validateShellCommand, validateShellCwd } from "../../src/utils/task-validation.js";
 
 describe("validateShellCommand", () => {
@@ -32,7 +33,7 @@ describe("validateShellCwd", () => {
   test("defaults to workspace", () => {
     const res = validateShellCwd(undefined);
     expect(res.ok).toBe(true);
-    expect(res.cwd).toContain("/workspace");
+    expect(res.cwd).toBe(WORKSPACE_DIR);
   });
 
   test("rejects outside workspace", () => {

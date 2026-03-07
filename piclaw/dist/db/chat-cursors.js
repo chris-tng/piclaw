@@ -55,6 +55,17 @@ export function getAllChatCursors() {
         result[row.chat_jid] = row.cursor_ts;
     return result;
 }
+/**
+ * Get the inflight message id for a chat, if a run is currently active.
+ * Used to attach steering messages to the original turn root.
+ */
+export function getInflightMessageId(chatJid) {
+    const db = getDb();
+    const row = db
+        .prepare("SELECT inflight_message_id FROM chat_cursors WHERE chat_jid = ?")
+        .get(chatJid);
+    return row?.inflight_message_id ?? null;
+}
 // ---------------------------------------------------------------------------
 // Cursor writes
 // ---------------------------------------------------------------------------

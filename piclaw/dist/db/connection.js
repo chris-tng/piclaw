@@ -147,6 +147,10 @@ function createSchema(database) {
       chat_jid TEXT NOT NULL,
       prompt TEXT NOT NULL,
       model TEXT,
+      task_kind TEXT NOT NULL DEFAULT 'agent',
+      command TEXT,
+      cwd TEXT,
+      timeout_sec INTEGER,
       schedule_type TEXT NOT NULL,
       schedule_value TEXT NOT NULL,
       next_run TEXT,
@@ -333,14 +337,21 @@ function ensureFts(database) {
 function ensureScheduledTaskColumns(database) {
     const columns = database.prepare("PRAGMA table_info(scheduled_tasks)").all();
     const existing = new Set(columns.map((col) => col.name));
-    if (!existing.has("model")) {
+    const ensureColumn = (name, type) => {
+        if (existing.has(name))
+            return;
         try {
-            database.exec("ALTER TABLE scheduled_tasks ADD COLUMN model TEXT");
+            database.exec(`ALTER TABLE scheduled_tasks ADD COLUMN ${name} ${type}`);
         }
         catch {
             // ignore if column already exists or cannot be added
         }
-    }
+    };
+    ensureColumn("model", "TEXT");
+    ensureColumn("task_kind", "TEXT DEFAULT 'agent'");
+    ensureColumn("command", "TEXT");
+    ensureColumn("cwd", "TEXT");
+    ensureColumn("timeout_sec", "INTEGER");
 }
 function ensureWebSessionColumns(database) {
     const columns = database.prepare("PRAGMA table_info(web_sessions)").all();
@@ -419,10 +430,27 @@ function migrateChatCursors(database) {
  * Called by index.ts (the application entry point).
  */
 export function initDatabase() {
-    const dbPath = path.join(STORE_DIR, "messages.db");
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-    db = new Database(dbPath);
-    db.exec("PRAGMA journal_mode = WAL;");
+    const useMemory = process.env.PICLAW_DB_IN_MEMORY === "1" ||
+        process.env.PICLAW_DB_IN_MEMORY === "true" ||
+        process.env.PICLAW_STORE === ":memory:";
+    if (db) {
+        try {
+            db.close();
+        }
+        catch {
+            // ignore close errors
+        }
+    }
+    if (useMemory) {
+        db = new Database(":memory:");
+        db.exec("PRAGMA journal_mode = MEMORY;");
+    }
+    else {
+        const dbPath = path.join(STORE_DIR, "messages.db");
+        fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+        db = new Database(dbPath);
+        db.exec("PRAGMA journal_mode = WAL;");
+    }
     db.exec("PRAGMA busy_timeout = 5000;");
     db.exec("PRAGMA secure_delete = ON;");
     createSchema(db);

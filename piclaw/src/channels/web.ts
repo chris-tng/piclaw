@@ -21,13 +21,10 @@ import {
   generateRegistrationOptions,
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
+  type AuthenticationResponseJSON,
+  type RegistrationResponseJSON,
+  type WebAuthnCredential,
 } from "@simplewebauthn/server";
-import type {
-  AuthenticationResponseJSON,
-  PublicKeyCredentialDescriptorFuture,
-  RegistrationResponseJSON,
-  AuthenticatorDevice,
-} from "@simplewebauthn/types";
 import { randomSessionToken, safeEqual, verifyTotp } from "./web/auth.js";
 import {
   ASSISTANT_AVATAR,
@@ -630,8 +627,8 @@ export class WebChannel {
     return Buffer.from(value).toString("base64url");
   }
 
-  private base64UrlToBuffer(value: string): Uint8Array {
-    return Buffer.from(value, "base64url");
+  private base64UrlToBuffer(value: string): Uint8Array<ArrayBuffer> {
+    return Buffer.from(value, "base64url") as Uint8Array<ArrayBuffer>;
   }
 
   async handleAuthVerify(req: Request): Promise<Response> {
@@ -697,11 +694,10 @@ export class WebChannel {
       return this.json({ error: "No passkeys registered" }, 404);
     }
 
-    const allowCredentials: PublicKeyCredentialDescriptorFuture[] = credentials.map((cred) => {
+    const allowCredentials = credentials.map((cred) => {
       const transports = cred.transports ? JSON.parse(cred.transports) : undefined;
       return {
-        id: this.base64UrlToBuffer(cred.credential_id),
-        type: "public-key",
+        id: cred.credential_id,
         transports: Array.isArray(transports) ? transports : undefined,
       };
     });
@@ -753,9 +749,9 @@ export class WebChannel {
       return this.json({ error: "Unknown credential" }, 400);
     }
 
-    const authenticator: AuthenticatorDevice = {
-      credentialID: this.base64UrlToBuffer(stored.credential_id),
-      credentialPublicKey: this.base64UrlToBuffer(stored.public_key),
+    const credentialRecord: WebAuthnCredential = {
+      id: stored.credential_id,
+      publicKey: this.base64UrlToBuffer(stored.public_key),
       counter: stored.sign_count || 0,
       transports: stored.transports ? JSON.parse(stored.transports) : undefined,
     };
@@ -768,7 +764,7 @@ export class WebChannel {
         expectedChallenge: pending.challenge,
         expectedOrigin: origin,
         expectedRPID: pending.rpId,
-        authenticator,
+        credential: credentialRecord,
         requireUserVerification: false,
       });
     } catch (err) {
@@ -820,15 +816,14 @@ export class WebChannel {
 
     const { rpId } = this.getWebauthnRpInfo(req);
     const existing = getWebauthnCredentialsForRpId(enrollment.user_id, rpId);
-    const excludeCredentials: PublicKeyCredentialDescriptorFuture[] = existing.map((cred) => ({
-      id: this.base64UrlToBuffer(cred.credential_id),
-      type: "public-key",
+    const excludeCredentials = existing.map((cred) => ({
+      id: cred.credential_id,
     }));
 
     const options = await generateRegistrationOptions({
       rpName: ASSISTANT_NAME || "PiClaw",
       rpID: rpId,
-      userID: enrollment.user_id,
+      userID: new TextEncoder().encode(enrollment.user_id),
       userName: USER_NAME || enrollment.user_id,
       userDisplayName: USER_NAME || "User",
       attestationType: "none",
@@ -907,9 +902,9 @@ export class WebChannel {
     storeWebauthnCredential({
       user_id: pending.userId,
       rp_id: pending.rpId,
-      credential_id: this.bufferToBase64Url(info.credentialID),
-      public_key: this.bufferToBase64Url(info.credentialPublicKey),
-      sign_count: info.counter || 0,
+      credential_id: info.credential.id,
+      public_key: this.bufferToBase64Url(info.credential.publicKey),
+      sign_count: info.credential.counter || 0,
       transports,
     });
 
