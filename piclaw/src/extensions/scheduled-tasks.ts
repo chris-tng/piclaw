@@ -103,6 +103,20 @@ const ScheduleTaskSchema = Type.Object({
   timeout_sec: Type.Optional(Type.Integer({ description: "Shell timeout in seconds.", minimum: 1, maximum: 3600 })),
 });
 
+type ScheduleTaskDetails = {
+  ok: boolean;
+  id: string | null;
+  task_kind: "agent" | "shell" | null;
+  next_run: string | null;
+};
+
+const failureDetails: ScheduleTaskDetails = {
+  ok: false,
+  id: null,
+  task_kind: null,
+  next_run: null,
+};
+
 /** Extension factory that registers /tasks and /scheduled slash commands. */
 export const scheduledTasks: ExtensionFactory = (pi: ExtensionAPI) => {
   const handler = async (args: string) => {
@@ -178,20 +192,20 @@ export const scheduledTasks: ExtensionFactory = (pi: ExtensionAPI) => {
 
       const validated = validateShellCommand(params.command);
       if (!validated.ok) {
-        return { content: [{ type: "text", text: validated.error || "Invalid shell command." }], details: { ok: false } };
+        return { content: [{ type: "text", text: validated.error || "Invalid shell command." }], details: { ok: false, id: null, task_kind: null, next_run: null } };
       }
       if (params.model) {
-        return { content: [{ type: "text", text: "Model overrides are not supported for shell tasks." }], details: { ok: false } };
+        return { content: [{ type: "text", text: "Model overrides are not supported for shell tasks." }], details: { ok: false, id: null, task_kind: null, next_run: null } };
       }
 
       const cwdResult = validateShellCwd(params.cwd);
       if (!cwdResult.ok) {
-        return { content: [{ type: "text", text: cwdResult.error || "Invalid cwd." }], details: { ok: false } };
+        return { content: [{ type: "text", text: cwdResult.error || "Invalid cwd." }], details: { ok: false, id: null, task_kind: null, next_run: null } };
       }
 
       const nextRun = computeNextRun(params.schedule_type, params.schedule_value);
       if (!nextRun) {
-        return { content: [{ type: "text", text: "Invalid schedule value." }], details: { ok: false } };
+        return { content: [{ type: "text", text: "Invalid schedule value." }], details: { ok: false, id: null, task_kind: null, next_run: null } };
       }
 
       const taskId = createUuid("task");
