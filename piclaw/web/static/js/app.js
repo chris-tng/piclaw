@@ -705,7 +705,7 @@ function App() {
     const handleDeletePost = useCallback(async (post) => {
         if (!post) return;
         const postId = post.id;
-        const replyCount = posts?.filter((item) => item?.data?.thread_id === postId).length || 0;
+        const replyCount = posts?.filter((item) => item?.data?.thread_id === postId && item?.id !== postId).length || 0;
         if (replyCount > 0) {
             const confirmed = window.confirm(`Delete this message and its ${replyCount} replies?`);
             if (!confirmed) return;

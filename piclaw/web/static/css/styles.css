@@ -2359,8 +2359,9 @@ body {
 .agent-thinking-body ul,
 .agent-thinking-body ol {
     margin: 0.3em 0;
-    padding-left: 1.1em;
+    padding-left: 1.2em;
     line-height: 1.35;
+    list-style-position: inside;
 }
 
 .agent-thinking-body li {

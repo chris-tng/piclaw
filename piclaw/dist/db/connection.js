@@ -64,10 +64,12 @@ function createSchema(database) {
       PRIMARY KEY (id, chat_jid),
       FOREIGN KEY (chat_jid) REFERENCES chats(jid)
     );
-    CREATE INDEX IF NOT EXISTS idx_timestamp ON messages(timestamp);
-    CREATE INDEX IF NOT EXISTS idx_messages_chat_jid ON messages(chat_jid);
+    -- Indexes for common timeline queries and thread operations.
+    -- idx_messages_chat_jid_timestamp covers both chat and time ordering.
+    -- idx_messages_chat_jid_bot_timestamp is used for agent/user filters.
     CREATE INDEX IF NOT EXISTS idx_messages_chat_jid_timestamp ON messages(chat_jid, timestamp);
     CREATE INDEX IF NOT EXISTS idx_messages_chat_jid_bot_timestamp ON messages(chat_jid, is_bot_message, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_messages_thread_id ON messages(chat_jid, thread_id);
 
     -- FTS5 virtual table for full-text search over message content.
     -- Kept in sync via insert/delete/update triggers below.
