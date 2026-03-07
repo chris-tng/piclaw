@@ -2,9 +2,9 @@
 #
 # Targets:
 #   vendor         – Bundle vendored CodeMirror (minified ESM).
-#   build-web      – Copy web frontend TS sources to static/js/.
+#   build-web      – Build web bundles into static/dist/ (+ sourcemaps).
 #   build-ts       – Type-check TypeScript (tsc --noEmit). No dist/ output.
-#   build-piclaw   – Full build: build-web (vendor + copy) + build-ts.
+#   build-piclaw   – Full build: build-web (vendor + bundles) + build-ts.
 #   pack           – Pack piclaw into a .tgz (depends on build-piclaw).
 #   local-install  – Pack, install globally, and restart (full cycle).
 #   lint/test      – Run ESLint and bun test suite.
@@ -14,22 +14,13 @@
 #   push           – Push commits and current tag to origin.
 #
 # Web build notes:
-#   The web frontend lives in piclaw/web/src/ as TypeScript files that double
-#   as valid browser JS (using // @ts-nocheck). Today, build:web simply copies
-#   them to web/static/js/ with a .js extension. Bun serves them as ES modules.
+#   The web frontend now builds into two bundles under web/static/dist/:
+#     - app.bundle.js   (authenticated web UI)
+#     - login.bundle.js (login page behavior)
 #
-#   TODO: Bundle & minify with `bun build`
-#   ────────────────────────────────────────
-#   Replace the copy-based build:web with `bun build web/src/app.ts` to produce
-#   a single minified app.bundle.js (~100KB vs ~230KB unbundled). Vendor libs
-#   (preact-htm, codemirror, katex, marked, mermaid) stay as separate pre-built
-#   files since they're already minified.
-#
-#   Auth-gating the app bundle (DONE)
-#   ──────────────────────────────────
-#   Only CSS, fonts, vendor libs, and static images are whitelisted past auth
-#   in request-router-service.ts (isPublicStaticPath). The app JS bundle
-#   (app.js, api.js, components/) now requires authentication.
+#   Vendor libs remain separate pre-built assets where useful (e.g. codemirror,
+#   marked, katex, mermaid). request-router-service.ts auth-gates app.bundle.js
+#   and only allows login.bundle.js pre-auth.
 
 IMAGE ?= pibox
 TAG ?= latest
@@ -69,10 +60,9 @@ vendor: ## Bundle vendored CodeMirror (minified ESM)
 	cd piclaw && bun run build:vendor
 	@ls -lh piclaw/web/static/js/vendor/codemirror.js
 
-build-web: ## Copy web TS sources to static/js/ (includes vendor bundle)
+build-web: ## Build web bundles (+ sourcemaps) into static/dist/ (includes vendor bundle)
 	cd piclaw && bun run build:web
-# TODO: Replace copy-based build:web with `bun build --minify` to produce a
-# single app.bundle.js. See header comments for full plan.
+	@ls -lh piclaw/web/static/dist/app.bundle.js piclaw/web/static/dist/app.bundle.js.map piclaw/web/static/dist/login.bundle.js piclaw/web/static/dist/login.bundle.js.map
 
 build-ts: ## Type-check TypeScript (no dist/ output needed; bun runs .ts directly)
 	cd piclaw && bun run build
@@ -84,9 +74,12 @@ build-piclaw: build-web build-ts ## Full build: vendor + web + ts
 
 # ── Pack & install ───────────────────────────────────────────────────
 
-pack: build-piclaw ## Pack piclaw into a .tgz
-	cd piclaw && bun pm pack
-	@ls -lh piclaw/piclaw-*.tgz
+PACK_DIR ?= /tmp/piclaw-pack
+
+pack: build-piclaw ## Pack piclaw into a .tgz (outside the repo)
+	rm -rf $(PACK_DIR) && mkdir -p $(PACK_DIR)
+	cd piclaw && bun pm pack --destination $(PACK_DIR)
+	@ls -lh $(PACK_DIR)/piclaw-*.tgz
 
 restart: ## Restart piclaw via supervisorctl
 	supervisorctl restart piclaw 2>/dev/null || true
@@ -96,7 +89,8 @@ restart: ## Restart piclaw via supervisorctl
 local-install: pack ## Pack, install globally, and restart piclaw
 	@set -e; \
 	VERSION=$$(jq -r .version piclaw/package.json); \
-	TGZ="$$(realpath piclaw/piclaw-$${VERSION}.tgz)"; \
+	TGZ="$$(ls -t $(PACK_DIR)/piclaw-*.tgz | head -1)"; \
+	if [ -z "$$TGZ" ]; then echo "[local-install] No package tarball found in $(PACK_DIR)"; exit 1; fi; \
 	echo "[local-install] Installing v$${VERSION} globally..."; \
 	printf '{"dependencies":{"@mariozechner/pi-coding-agent":"$(PI_AGENT_VERSION)","piclaw":"%s"}}\n' \
 		"$$TGZ" | sudo tee $(GLOBAL_PKG) >/dev/null; \
@@ -143,7 +137,7 @@ bump-minor: ## Bump minor version, build, commit, and tag
 	echo $$NEW > VERSION; \
 	$(MAKE) sync-version; \
 	$(MAKE) build-piclaw; \
-	git add VERSION piclaw/package.json piclaw/web/static/js; \
+	git add VERSION piclaw/package.json piclaw/web/static; \
 	git commit -m "Bump version to $$NEW"; \
 	git tag "v$$NEW"; \
 	echo "Bumped version: $$OLD -> $$NEW (tagged v$$NEW)"
@@ -159,7 +153,7 @@ bump-patch: ## Bump patch version, build, commit, and tag
 	echo $$NEW > VERSION; \
 	$(MAKE) sync-version; \
 	$(MAKE) build-piclaw; \
-	git add VERSION piclaw/package.json piclaw/web/static/js; \
+	git add VERSION piclaw/package.json piclaw/web/static; \
 	git commit -m "Bump version to $$NEW"; \
 	git tag "v$$NEW"; \
 	echo "Bumped version: $$OLD -> $$NEW (tagged v$$NEW)"

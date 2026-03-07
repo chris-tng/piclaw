@@ -7,8 +7,8 @@
  *   - Validates CSRF Origin on all state-changing (POST/PUT/DELETE/PATCH) requests
  *   - Rate-limits auth endpoints (brute-force protection) and data endpoints
  *     (posts, uploads, deletes, workspace writes)
- *   - Auth-gates the app JS bundle; only CSS, fonts, vendor libs, and images
- *     are served to unauthenticated visitors
+ *   - Auth-gates the app JS bundle; only CSS, fonts, static images, and the
+ *     login bundle are served to unauthenticated visitors
  *   - Routes requests to the appropriate handler (posts, media, workspace,
  *     agent control, SSE streaming, static files)
  *
@@ -165,18 +165,22 @@ function withSecurityHeaders(response: Response, isTls: boolean): Response {
 
 /**
  * Determine which /static/ paths are safe to serve without authentication.
- * The login page is fully self-contained (inline CSS/JS) and doesn't need
- * any /static/js/ files. Only CSS, fonts, vendor libs, and image assets
- * are whitelisted. The app JS bundle (app.js, api.js, components/) requires
- * authentication to prevent exposing API structure and application logic.
+ * Public pages only need styling, icons, and the login bundle.
+ *
+ * Auth split:
+ *   - Public: /static/dist/login.bundle.js
+ *   - Auth-only: /static/dist/app.bundle.js (+ other app internals)
  */
 function isPublicStaticPath(pathname: string): boolean {
-  // CSS and fonts are needed for basic styling; JS bundle is gated behind auth
+  // CSS and fonts are needed by login and base shell pages.
   if (pathname.startsWith("/static/css/")) return true;
   if (pathname.startsWith("/static/fonts/")) return true;
-  // Allow vendor libs (preact etc.) — they contain no app-specific logic
-  if (pathname.startsWith("/static/js/vendor/")) return true;
-  // Static images/icons
+
+  // Explicitly allow only the login bundle (+ source map) for unauthenticated users.
+  if (pathname === "/static/dist/login.bundle.js") return true;
+  if (pathname === "/static/dist/login.bundle.js.map") return true;
+
+  // Static images/icons used by favicon/PWA/login branding.
   if (pathname.startsWith("/static/") && /\.(png|ico|svg|jpg|jpeg|webp|gif)$/i.test(pathname)) return true;
   return false;
 }
@@ -301,9 +305,9 @@ export class RequestRouterService {
     const isManifest = isGetOrHead && pathname === "/manifest.json";
     const isFavicon = isGetOrHead && pathname === "/favicon.ico";
     const isAppleIcon = isGetOrHead && APPLE_ICON_PATHS.has(pathname);
-    // Auth-gate the app JS bundle: only CSS, fonts, vendor libs, and static
-    // images are served to unauthenticated visitors. The login page is fully
-    // self-contained (inline CSS/JS) and loads nothing from /static/js/.
+    // Auth-gate app bundle assets: only CSS, fonts, static images, and the
+    // login bundle (/static/dist/login.bundle.js + .map) are served pre-auth.
+    // The authenticated UI bundle (/static/dist/app.bundle.js) stays gated.
     const isStaticAsset = pathname.startsWith("/static/");
     const isPublicStatic = isStaticAsset && isPublicStaticPath(pathname);
     const isDocsAsset = pathname.startsWith("/docs/");

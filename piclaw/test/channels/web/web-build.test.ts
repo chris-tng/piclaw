@@ -14,7 +14,7 @@ function projectRoot(): string {
   return join(import.meta.dir, "..", "..", "..");
 }
 
-test("build:web produces static assets", async () => {
+test("build:web produces bundle assets", async () => {
   const root = projectRoot();
   const proc = Bun.spawn(["bun", "run", "build:web"], {
     cwd: root,
@@ -25,8 +25,13 @@ test("build:web produces static assets", async () => {
   const exitCode = await proc.exited;
   expect(exitCode).toBe(0);
 
-  const appPath = join(root, "web", "static", "js", "app.js");
-  const apiPath = join(root, "web", "static", "js", "api.js");
-  expect(existsSync(appPath)).toBe(true);
-  expect(existsSync(apiPath)).toBe(true);
+  const appBundlePath = join(root, "web", "static", "dist", "app.bundle.js");
+  const appMapPath = join(root, "web", "static", "dist", "app.bundle.js.map");
+  const loginBundlePath = join(root, "web", "static", "dist", "login.bundle.js");
+  const loginMapPath = join(root, "web", "static", "dist", "login.bundle.js.map");
+
+  expect(existsSync(appBundlePath)).toBe(true);
+  expect(existsSync(appMapPath)).toBe(true);
+  expect(existsSync(loginBundlePath)).toBe(true);
+  expect(existsSync(loginMapPath)).toBe(true);
 });

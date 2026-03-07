@@ -9,19 +9,18 @@
 
   Served by: channels/web/http/static.ts at the root URL.
   Auth: This page is only served to authenticated users. The login page
-        (login.html) is a completely separate self-contained page with
-        inline JS for TOTP/WebAuthn — it does NOT load any of these scripts.
+        (login.html) is a separate entrypoint that loads login.bundle.js.
 
-  TODO: Bundle & segment
-  ──────────────────────
-  Currently web/src/*.ts files are copied as-is to static/js/*.js and
-  loaded as individual ES modules (~15 HTTP requests). Replace with:
-    1. `bun build web/src/app.ts --minify` → single app.bundle.js
-    2. Keep vendor libs (marked, katex, mermaid, preact-htm, codemirror)
-       as separate pre-built files — they're already minified.
-    3. Auth-gate the app bundle: move it to an auth-required path or
-       restrict the /static/ whitelist so unauthenticated visitors only
-       get CSS, fonts, and icons. See request-router-service.ts TODOs.
+  Bundles:
+  ────────
+  The authenticated SPA is shipped as one bundle:
+    - /static/dist/app.bundle.js
+  Login is a separate bundle:
+    - /static/dist/login.bundle.js (loaded only by login.html)
+
+  Vendor globals (marked, KaTeX, Mermaid) remain separate prebuilt files.
+  request-router-service.ts auth-gates /static/dist/app.bundle.js and only
+  exposes /static/dist/login.bundle.js to unauthenticated visitors.
 -->
 <head>
     <meta charset="UTF-8">
@@ -57,10 +56,10 @@
     <script src="/static/js/marked.min.js"></script>
     <script src="/static/js/vendor/katex.min.js"></script>
     <script src="/static/js/vendor/beautiful-mermaid.js"></script>
-    <script type="module" src="/static/js/app.js?v=65"></script>
+    <script type="module" src="/static/dist/app.bundle.js?v=1"></script>
     <script type="module">
         // Fallback error display for module errors
-        import('./static/js/app.js?v=65').catch(function(e) {
+        import('/static/dist/app.bundle.js?v=1').catch(function(e) {
             document.getElementById('app').innerHTML = '<pre style="padding:20px;color:red;">Module Error: ' + e.message + '</pre>';
         });
     </script>

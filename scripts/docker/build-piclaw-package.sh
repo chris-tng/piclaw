@@ -5,23 +5,16 @@
 # the global install layout under $BUN_INSTALL.
 #
 # Build pipeline:
-#   1. `bun run build`     – tsc: type-checks and emits dist/ (legacy; nothing
-#                            uses dist/ at runtime since bun runs .ts directly)
-#   2. `bun run build:web` – Copies web/src/*.ts to web/static/js/*.js and
-#                            bundles vendored CodeMirror via `bun build --minify`
-#   3. `bun pm pack`       – Creates the tarball for global install
-#
-# TODO: Replace the copy-based build:web with `bun build --minify` to produce
-#   a single minified app.bundle.js. Vendor libs (preact-htm, codemirror,
-#   katex, marked, mermaid) should stay as separate pre-built files.
+#   1. `bun run build`     – Type-check/compile TypeScript for CI parity.
+#   2. `bun run build:web` – Produces web/static/dist/{app,login}.bundle.js
+#                            plus source maps, and builds vendored CodeMirror.
+#   3. `bun pm pack`       – Creates the tarball for global install.
 #
 # TODO: Exclude dist/ from the tarball (add to .npmignore or use package.json
 #   "files" field). The bin entry points to src/index.ts, not dist/.
 #
-# TODO: Auth-gate the app bundle. Currently /static/ is whitelisted past auth
-#   in request-router-service.ts, so the full app JS is served to
-#   unauthenticated users. login.html is already self-contained. Either move
-#   the bundle behind an auth-gated path or split the static whitelist.
+# Note: request-router-service.ts auth-gates app.bundle.js and only exposes
+#   login.bundle.js pre-auth.
 set -euo pipefail
 
 export BUN_INSTALL="${BUN_INSTALL:-/usr/local/lib/bun}"
@@ -50,7 +43,14 @@ fi
 # Use an absolute path so bun add -g works reliably under sudo/buildkit.
 TARBALL="$(realpath "$TARBALL")"
 
-sudo BUN_INSTALL="$BUN_INSTALL" "$BUN_INSTALL/bin/bun" add -g "$TARBALL"
+GLOBAL_PKG="$BUN_INSTALL/install/global/package.json"
+GLOBAL_LOCK="$BUN_INSTALL/install/global/bun.lock"
+
+# Keep the global install deterministic and avoid stale/duplicate dependency
+# entries from previous runs.
+printf '{"dependencies":{"piclaw":"%s"}}\n' "$TARBALL" | sudo tee "$GLOBAL_PKG" >/dev/null
+sudo rm -f "$GLOBAL_LOCK"
+sudo BUN_INSTALL="$BUN_INSTALL" "$BUN_INSTALL/bin/bun" install -g "$TARBALL" --registry https://registry.npmjs.org
 
 rm -f "$TARBALL"
 rm -rf "$PACK_DIR"
