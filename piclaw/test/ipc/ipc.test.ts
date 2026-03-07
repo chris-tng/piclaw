@@ -6,7 +6,7 @@
  */
 
 import { beforeAll, beforeEach, afterAll, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync, readdirSync } from "fs";
+import { mkdirSync, writeFileSync, readdirSync, unlinkSync } from "fs";
 import { join } from "path";
 import { getTestWorkspace, setEnv, waitFor } from "../helpers.js";
 
@@ -17,6 +17,8 @@ let config: typeof import("../../src/core/config.js");
 
 const sentMessages: Array<{ jid: string; text: string }> = [];
 const sentNudges: string[] = [];
+const resumedChats: Array<Record<string, any>> = [];
+const resumePendingCalls: Array<Record<string, any> | undefined> = [];
 
 beforeAll(async () => {
   const ws = getTestWorkspace();
@@ -38,6 +40,16 @@ beforeAll(async () => {
     sendNudge: async (text) => {
       sentNudges.push(text);
     },
+    resolveModel: (input) => {
+      if (input === "valid/model") return { model: "valid/model" };
+      return { error: "Invalid model." };
+    },
+    resumeChat: async (data) => {
+      resumedChats.push(data);
+    },
+    resumePending: async (data) => {
+      resumePendingCalls.push(data);
+    },
   });
 
 });
@@ -45,6 +57,8 @@ beforeAll(async () => {
 beforeEach(() => {
   sentMessages.length = 0;
   sentNudges.length = 0;
+  resumedChats.length = 0;
+  resumePendingCalls.length = 0;
 });
 
 afterAll(() => {
@@ -87,4 +101,72 @@ test("IPC schedule_task creates a due task", async () => {
 
   const due = db.getDueTasks();
   expect(due.length).toBeGreaterThan(0);
+});
+
+test("IPC resume_pending triggers resumePending handler", async () => {
+  const tasksDir = join(config.DATA_DIR, "ipc", "tasks");
+  mkdirSync(tasksDir, { recursive: true });
+  const filePath = join(tasksDir, `resume_${Date.now()}.json`);
+  writeFileSync(
+    filePath,
+    JSON.stringify({
+      type: "resume_pending",
+      chatJid: "web:default",
+    })
+  );
+
+  await waitFor(() => resumePendingCalls.length === 1);
+  expect(resumePendingCalls[0]?.chatJid).toBe("web:default");
+});
+
+test("IPC renames malformed task files", async () => {
+  const ipcDir = join(config.DATA_DIR, "ipc");
+  const tasksDir = join(ipcDir, "tasks");
+  mkdirSync(tasksDir, { recursive: true });
+  const fileName = `bad_${Date.now()}.json`;
+  const filePath = join(tasksDir, fileName);
+  writeFileSync(filePath, "{not valid json");
+
+  await waitFor(() => readdirSync(ipcDir).some((file) => file === `error-${fileName}`));
+
+  const errorPath = join(ipcDir, `error-${fileName}`);
+  expect(readdirSync(tasksDir).includes(fileName)).toBe(false);
+  expect(readdirSync(ipcDir).includes(`error-${fileName}`)).toBe(true);
+  unlinkSync(errorPath);
+});
+
+test("IPC update_task with invalid model reports error", async () => {
+  const tasksDir = join(config.DATA_DIR, "ipc", "tasks");
+  mkdirSync(tasksDir, { recursive: true });
+
+  const taskId = `task_${Date.now()}`;
+  db.createTask({
+    id: taskId,
+    chat_jid: "web:default",
+    prompt: "hello",
+    model: null,
+    schedule_type: "once",
+    schedule_value: new Date().toISOString(),
+    next_run: new Date().toISOString(),
+    status: "active",
+    created_at: new Date().toISOString(),
+  });
+
+  const filePath = join(tasksDir, `update_${Date.now()}.json`);
+  writeFileSync(
+    filePath,
+    JSON.stringify({
+      type: "update_task",
+      taskId,
+      chatJid: "web:default",
+      model: "invalid/model",
+    })
+  );
+
+  await waitFor(() => sentMessages.length === 1);
+  expect(sentMessages[0].jid).toBe("web:default");
+  expect(sentMessages[0].text).toContain("Cannot update task");
+
+  const task = db.getTaskById(taskId);
+  expect(task?.model ?? null).toBe(null);
 });
