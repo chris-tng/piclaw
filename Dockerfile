@@ -3,6 +3,7 @@ FROM debian:bookworm-slim
 
 ARG HOMEBREW_BREW_GIT_REMOTES=""
 ARG HOMEBREW_CORE_GIT_REMOTES=""
+ARG PI_CODING_AGENT_VERSION="0.57.0"
 
 # Environment variables
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -15,6 +16,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     HOMEBREW_NO_INSTALL_CLEANUP=1 \
     HOMEBREW_BREW_GIT_REMOTES=${HOMEBREW_BREW_GIT_REMOTES} \
     HOMEBREW_CORE_GIT_REMOTES=${HOMEBREW_CORE_GIT_REMOTES} \
+    PI_CODING_AGENT_VERSION=${PI_CODING_AGENT_VERSION} \
     BUN_INSTALL=/usr/local/lib/bun \
     PATH=/usr/local/lib/bun/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 

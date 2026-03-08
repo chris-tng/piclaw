@@ -27,11 +27,17 @@ test("build:web produces bundle assets", async () => {
 
   const appBundlePath = join(root, "web", "static", "dist", "app.bundle.js");
   const appMapPath = join(root, "web", "static", "dist", "app.bundle.js.map");
+  const appCssPath = join(root, "web", "static", "dist", "app.bundle.css");
+
   const loginBundlePath = join(root, "web", "static", "dist", "login.bundle.js");
   const loginMapPath = join(root, "web", "static", "dist", "login.bundle.js.map");
+  const loginCssPath = join(root, "web", "static", "dist", "login.bundle.css");
 
   expect(existsSync(appBundlePath)).toBe(true);
   expect(existsSync(appMapPath)).toBe(true);
+  expect(existsSync(appCssPath)).toBe(true);
+
   expect(existsSync(loginBundlePath)).toBe(true);
   expect(existsSync(loginMapPath)).toBe(true);
+  expect(existsSync(loginCssPath)).toBe(true);
 });

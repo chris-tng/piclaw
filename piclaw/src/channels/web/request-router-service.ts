@@ -7,8 +7,8 @@
  *   - Validates CSRF Origin on all state-changing (POST/PUT/DELETE/PATCH) requests
  *   - Rate-limits auth endpoints (brute-force protection) and data endpoints
  *     (posts, uploads, deletes, workspace writes)
- *   - Auth-gates the app JS bundle; only CSS, fonts, static images, and the
- *     login bundle are served to unauthenticated visitors
+ *   - Auth-gates app bundles; only fonts, static images, and login bundles
+ *     are served to unauthenticated visitors
  *   - Routes requests to the appropriate handler (posts, media, workspace,
  *     agent control, SSE streaming, static files)
  *
@@ -168,17 +168,18 @@ function withSecurityHeaders(response: Response, isTls: boolean): Response {
  * Public pages only need styling, icons, and the login bundle.
  *
  * Auth split:
- *   - Public: /static/dist/login.bundle.js
- *   - Auth-only: /static/dist/app.bundle.js (+ other app internals)
+ *   - Public: /static/dist/login.bundle.js + /static/dist/login.bundle.css
+ *   - Auth-only: /static/dist/app.bundle.js + /static/dist/app.bundle.css
  */
 function isPublicStaticPath(pathname: string): boolean {
-  // CSS and fonts are needed by login and base shell pages.
-  if (pathname.startsWith("/static/css/")) return true;
+  // Fonts are needed by KaTeX and login/app styles.
   if (pathname.startsWith("/static/fonts/")) return true;
 
-  // Explicitly allow only the login bundle (+ source map) for unauthenticated users.
+  // Explicitly allow only login bundles (+ source maps) for unauthenticated users.
   if (pathname === "/static/dist/login.bundle.js") return true;
   if (pathname === "/static/dist/login.bundle.js.map") return true;
+  if (pathname === "/static/dist/login.bundle.css") return true;
+  if (pathname === "/static/dist/login.bundle.css.map") return true;
 
   // Static images/icons used by favicon/PWA/login branding.
   if (pathname.startsWith("/static/") && /\.(png|ico|svg|jpg|jpeg|webp|gif)$/i.test(pathname)) return true;
@@ -305,9 +306,10 @@ export class RequestRouterService {
     const isManifest = isGetOrHead && pathname === "/manifest.json";
     const isFavicon = isGetOrHead && pathname === "/favicon.ico";
     const isAppleIcon = isGetOrHead && APPLE_ICON_PATHS.has(pathname);
-    // Auth-gate app bundle assets: only CSS, fonts, static images, and the
-    // login bundle (/static/dist/login.bundle.js + .map) are served pre-auth.
-    // The authenticated UI bundle (/static/dist/app.bundle.js) stays gated.
+    // Auth-gate app bundle assets: only fonts, static images, and login
+    // bundles (/static/dist/login.bundle.js|.css + source maps) are served
+    // pre-auth. Authenticated UI bundles (/static/dist/app.bundle.js|.css)
+    // stay gated.
     const isStaticAsset = pathname.startsWith("/static/");
     const isPublicStatic = isStaticAsset && isPublicStaticPath(pathname);
     const isDocsAsset = pathname.startsWith("/docs/");

@@ -31,7 +31,7 @@ GHCR_IMAGE := $(REGISTRY)/$(GHCR_OWNER)/$(IMAGE):$(TAG)
 
 GLOBAL_PKG := /usr/local/lib/bun/install/global/package.json
 GLOBAL_LOCK := /usr/local/lib/bun/install/global/bun.lock
-PI_AGENT_VERSION ?= ^0.55.4
+PI_AGENT_VERSION ?= ^0.57.0
 
 .PHONY: help up down enter build build-piclaw build-web build-ts vendor pack \
         local-install restart lint test test-coverage \
@@ -60,9 +60,15 @@ vendor: ## Bundle vendored CodeMirror (minified ESM)
 	cd piclaw && bun run build:vendor
 	@ls -lh piclaw/web/static/js/vendor/codemirror.js
 
-build-web: ## Build web bundles (+ sourcemaps) into static/dist/ (includes vendor bundle)
+build-web: ## Build web JS/CSS bundles (+ sourcemaps) into static/dist/ (includes vendor bundle)
 	cd piclaw && bun run build:web
-	@ls -lh piclaw/web/static/dist/app.bundle.js piclaw/web/static/dist/app.bundle.js.map piclaw/web/static/dist/login.bundle.js piclaw/web/static/dist/login.bundle.js.map
+	@ls -lh \
+		piclaw/web/static/dist/app.bundle.js \
+		piclaw/web/static/dist/app.bundle.js.map \
+		piclaw/web/static/dist/app.bundle.css \
+		piclaw/web/static/dist/login.bundle.js \
+		piclaw/web/static/dist/login.bundle.js.map \
+		piclaw/web/static/dist/login.bundle.css
 
 build-ts: ## Type-check TypeScript (no dist/ output needed; bun runs .ts directly)
 	cd piclaw && bun run build

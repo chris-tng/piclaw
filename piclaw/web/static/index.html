@@ -13,14 +13,17 @@
 
   Bundles:
   ────────
-  The authenticated SPA is shipped as one bundle:
+  The authenticated SPA is shipped as app bundles:
     - /static/dist/app.bundle.js
-  Login is a separate bundle:
+    - /static/dist/app.bundle.css
+  Login is a separate minimal bundle set:
     - /static/dist/login.bundle.js (loaded only by login.html)
+    - /static/dist/login.bundle.css (loaded only by login.html)
 
-  Vendor globals (marked, KaTeX, Mermaid) remain separate prebuilt files.
-  request-router-service.ts auth-gates /static/dist/app.bundle.js and only
-  exposes /static/dist/login.bundle.js to unauthenticated visitors.
+  Vendor JS globals (marked, KaTeX, Mermaid) remain separate prebuilt files.
+  App/login CSS is bundled into /static/dist/*.bundle.css.
+  request-router-service.ts auth-gates /static/dist/app.bundle.{js,css} and only
+  exposes /static/dist/login.bundle.{js,css} to unauthenticated visitors.
 -->
 <head>
     <meta charset="UTF-8">
@@ -30,8 +33,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>PiClaw</title>
     <meta name="apple-mobile-web-app-title" content="PiClaw">
-    <link rel="stylesheet" href="/static/css/katex.min.css">
-    <link rel="stylesheet" href="/static/css/styles.css?v=54">
+    <link rel="stylesheet" href="/static/dist/app.bundle.css?v=1">
     <link rel="manifest" href="/manifest.json?v=8">
     <link id="dynamic-favicon" rel="icon" href="/favicon.ico" data-default="/favicon.ico">
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">

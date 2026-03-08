@@ -79,7 +79,8 @@ sudo ln -sf "$BUN_INSTALL/bin/bun"  /usr/local/bin/bun
 sudo ln -sf "$BUN_INSTALL/bin/bunx" /usr/local/bin/bunx
 
 # Install pi-coding-agent globally (sudo so it writes to root-owned prefix)
-sudo BUN_INSTALL="$BUN_INSTALL" "$BUN_INSTALL/bin/bun" add -g @mariozechner/pi-coding-agent
+PI_CODING_AGENT_VERSION="${PI_CODING_AGENT_VERSION:-0.57.0}"
+sudo BUN_INSTALL="$BUN_INSTALL" "$BUN_INSTALL/bin/bun" add -g "@mariozechner/pi-coding-agent@${PI_CODING_AGENT_VERSION}"
 
 # Ensure world-readable after install
 sudo chmod -R a+rX "$BUN_INSTALL"

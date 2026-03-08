@@ -47,8 +47,10 @@ GLOBAL_PKG="$BUN_INSTALL/install/global/package.json"
 GLOBAL_LOCK="$BUN_INSTALL/install/global/bun.lock"
 
 # Keep the global install deterministic and avoid stale/duplicate dependency
-# entries from previous runs.
-printf '{"dependencies":{"piclaw":"%s"}}\n' "$TARBALL" | sudo tee "$GLOBAL_PKG" >/dev/null
+# entries from previous runs. Keep pi-coding-agent explicitly installed so
+# the standalone `pi` CLI stays aligned with piclaw's dependency version.
+PI_AGENT_VERSION="$(jq -r '.dependencies["@mariozechner/pi-coding-agent"] // "0.57.0"' package.json)"
+printf '{"dependencies":{"@mariozechner/pi-coding-agent":"%s","piclaw":"%s"}}\n' "$PI_AGENT_VERSION" "$TARBALL" | sudo tee "$GLOBAL_PKG" >/dev/null
 sudo rm -f "$GLOBAL_LOCK"
 sudo BUN_INSTALL="$BUN_INSTALL" "$BUN_INSTALL/bin/bun" install -g "$TARBALL" --registry https://registry.npmjs.org
 

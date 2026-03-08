@@ -1,6 +1,6 @@
 {
   "name": "piclaw",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Personal pi coding agent assistant. Lightweight nanoclaw-style orchestrator using Bun and pi.",
   "type": "module",
   "main": "src/index.ts",
@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
     "build:vendor": "bun build web/src/vendor/codemirror-entry.ts --target=browser --format=esm --minify --outfile web/static/js/vendor/codemirror.js",
-    "build:web": "bun run build:vendor && rm -rf web/static/dist && mkdir -p web/static/dist && bun build web/src/app.ts web/src/login.ts --target=browser --format=esm --minify --sourcemap --outdir web/static/dist --entry-naming=\"[name].bundle.js\" && rm -rf web/static/js/components web/static/js/utils web/static/js/ui && rm -f web/static/js/app.js web/static/js/api.js web/static/js/markdown.js",
+    "build:web": "bun run build:vendor && rm -rf web/static/dist && mkdir -p web/static/dist && bun build web/src/app.ts web/src/login.ts --target=browser --format=esm --minify --sourcemap --outdir web/static/dist --entry-naming=\"[name].bundle.js\" && bun build web/src/styles/app.css web/src/styles/login.css --target=browser --minify --sourcemap --outdir web/static/dist --entry-naming=\"[name].bundle.css\" && rm -rf web/static/js/components web/static/js/utils web/static/js/ui && rm -f web/static/js/app.js web/static/js/api.js web/static/js/markdown.js",
     "test": "bun test --max-concurrency=1",
     "test:coverage": "bun test --max-concurrency=1 --coverage --coverage-reporter=text --coverage-reporter=lcov"
   },
