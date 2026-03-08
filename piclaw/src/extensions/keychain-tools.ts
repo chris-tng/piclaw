@@ -4,18 +4,25 @@
 import { Type } from "@sinclair/typebox";
 import type { ExtensionAPI, ExtensionFactory } from "@mariozechner/pi-coding-agent";
 
-import { getKeychainEntry, listKeychainEntries } from "../secure/keychain.js";
+import { getKeychainEntry, listKeychainEntries, setKeychainEntry } from "../secure/keychain.js";
 
 const KeychainToolSchema = Type.Object({
-  action: Type.Union([Type.Literal("list"), Type.Literal("get")], {
-    description: "Operation to perform: list entries or get a specific value.",
+  action: Type.Union([Type.Literal("list"), Type.Literal("get"), Type.Literal("set")], {
+    description: "Operation to perform: list entries, get a value, or store/update an entry.",
   }),
-  name: Type.Optional(Type.String({ description: "Keychain entry name (required for action=get)." })),
+  name: Type.Optional(Type.String({ description: "Keychain entry name (required for action=get/set)." })),
   field: Type.Optional(
     Type.Union([Type.Literal("secret"), Type.Literal("username")], {
       description: "Field to return for action=get (default: secret).",
     }),
   ),
+  type: Type.Optional(
+    Type.Union([Type.Literal("token"), Type.Literal("password"), Type.Literal("basic"), Type.Literal("secret")], {
+      description: "Entry type for action=set (default: secret).",
+    }),
+  ),
+  secret: Type.Optional(Type.String({ description: "Plaintext secret for action=set." })),
+  username: Type.Optional(Type.String({ description: "Optional username for action=set." })),
   limit: Type.Optional(Type.Integer({ description: "Max entries for action=list (1-200).", minimum: 1, maximum: 200 })),
 });
 
@@ -41,7 +48,7 @@ export const keychainTools: ExtensionFactory = (pi: ExtensionAPI) => {
   pi.registerTool({
     name: "keychain",
     label: "keychain",
-    description: "List keychain entries or retrieve a keychain secret/username.",
+    description: "List keychain entries, retrieve values, or store/update keychain entries.",
     parameters: KeychainToolSchema,
     async execute(_toolCallId, params) {
       if (params.action === "list") {
@@ -64,9 +71,45 @@ export const keychainTools: ExtensionFactory = (pi: ExtensionAPI) => {
       const name = params.name?.trim();
       if (!name) {
         return {
-          content: [{ type: "text", text: "Provide name for action=get." }],
+          content: [{ type: "text", text: `Provide name for action=${params.action}.` }],
           details: { count: 0, entries: [], name: "", field: "", type: "" },
         };
+      }
+
+      if (params.action === "set") {
+        const secret = String(params.secret ?? "");
+        if (!secret) {
+          return {
+            content: [{ type: "text", text: "Provide secret for action=set." }],
+            details: { count: 0, entries: [], name, field: "", type: "" },
+          };
+        }
+
+        const type =
+          params.type === "token" ||
+          params.type === "password" ||
+          params.type === "basic" ||
+          params.type === "secret"
+            ? params.type
+            : "secret";
+
+        try {
+          await setKeychainEntry({
+            name,
+            type,
+            secret,
+            username: params.username ? String(params.username) : undefined,
+          });
+          return {
+            content: [{ type: "text", text: `Stored keychain entry ${name} (${type}).` }],
+            details: { count: 1, entries: [], name, field: "", type },
+          };
+        } catch (error) {
+          return {
+            content: [{ type: "text", text: (error as Error).message || "Failed to store keychain entry." }],
+            details: { count: 0, entries: [], name, field: "", type: "" },
+          };
+        }
       }
 
       const field = params.field === "username" ? "username" : "secret";

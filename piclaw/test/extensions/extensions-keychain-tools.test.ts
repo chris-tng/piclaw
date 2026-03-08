@@ -100,4 +100,33 @@ describe("keychain-tools extension", () => {
     const userResult = await tool.execute("k3", { action: "get", name: "ssh/piclaw", field: "username" });
     expect(userResult.content[0].text).toBe("git");
   });
+
+  test("sets a keychain entry and can read it back", async () => {
+    const tool = await getTool();
+
+    const setResult = await tool.execute("k4", {
+      action: "set",
+      name: "proxmox/piclaw",
+      type: "token",
+      secret: "tok_123",
+      username: "root@pam!piclaw",
+    });
+    expect(setResult.content[0].text).toContain("Stored keychain entry proxmox/piclaw (token).");
+
+    const secretResult = await tool.execute("k5", { action: "get", name: "proxmox/piclaw" });
+    expect(secretResult.content[0].text).toBe("tok_123");
+
+    const userResult = await tool.execute("k6", { action: "get", name: "proxmox/piclaw", field: "username" });
+    expect(userResult.content[0].text).toBe("root@pam!piclaw");
+  });
+
+  test("set action validates required fields", async () => {
+    const tool = await getTool();
+
+    const missingName = await tool.execute("k7", { action: "set", secret: "abc" });
+    expect(missingName.content[0].text).toContain("Provide name for action=set");
+
+    const missingSecret = await tool.execute("k8", { action: "set", name: "foo/bar" });
+    expect(missingSecret.content[0].text).toContain("Provide secret for action=set");
+  });
 });
