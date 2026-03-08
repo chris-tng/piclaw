@@ -198,7 +198,10 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
     const loadPreviewRef  = useRef(null);
     const loadSubtreeRef  = useRef(null);
     const sidebarRef      = useRef(null);
+    const treeListRef     = useRef(null);
     const uploadInputRef  = useRef(null);
+    const uploadTargetRef = useRef('.');
+    const longPressTimerRef = useRef(null);
     const previewHeightRef= useRef(0);
     const showHiddenRef   = useRef(showHidden);
     const visibleRef      = useRef(visible);
@@ -401,6 +404,10 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
                 clearTimeout(debouncedVisibilityRef.current);
                 debouncedVisibilityRef.current = 0;
             }
+            if (longPressTimerRef.current) {
+                clearTimeout(longPressTimerRef.current);
+                longPressTimerRef.current = null;
+            }
             setWorkspaceVisibility(false, showHiddenRef.current).catch(() => {});
         };
     }, []);
@@ -422,6 +429,7 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
     // Created once; reads live state through refs so it never needs recreation.
     const handleTreeClick = useRef((e) => {
         const rowEl = e.target.closest('[data-path]');
+        treeListRef.current?.focus?.();
         if (!rowEl) return;
         const clickedPath = rowEl.dataset.path;
         const clickedType = rowEl.dataset.type;
@@ -482,6 +490,155 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
         if (e.target.closest('[data-path]')) return;
         clearSelection();
     }).current;
+
+    const deleteFileAtPath = useCallback(async (path) => {
+        if (!path) return;
+        const filename = path.split('/').pop() || path;
+        const confirmed = window.confirm(`Delete "${filename}"? This cannot be undone.`);
+        if (!confirmed) return;
+
+        try {
+            await deleteWorkspaceFile(path);
+            const parent = path.includes('/') ? (path.split('/').slice(0, -1).join('/') || '.') : '.';
+            if (selectedPathRef.current === path) {
+                clearSelection();
+            }
+            loadSubtreeRef.current?.(parent);
+            setError(null);
+        } catch (err) {
+            setPreview(prev => ({ ...(prev || {}), error: err.message || 'Failed to delete file' }));
+        }
+    }, [clearSelection]);
+
+    const scrollRowIntoView = useCallback((path) => {
+        const container = treeListRef.current;
+        if (!container || !path || typeof CSS === 'undefined' || typeof CSS.escape !== 'function') return;
+        const el = container.querySelector(`[data-path="${CSS.escape(path)}"]`);
+        el?.scrollIntoView?.({ block: 'nearest' });
+    }, []);
+
+    const handleTreeKeyDown = useCallback((e) => {
+        const currentRows = rows;
+        if (!currentRows || currentRows.length === 0) return;
+        const currentIndex = selectedPath
+            ? currentRows.findIndex((r) => r.node.path === selectedPath)
+            : -1;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            const next = Math.min(currentIndex + 1, currentRows.length - 1);
+            const row = currentRows[next];
+            if (!row) return;
+            setSelectedPath(row.node.path);
+            if (row.node.type !== 'dir') {
+                onFileSelectRef.current?.(row.node.path, row.node);
+                loadPreviewRef.current?.(row.node.path);
+            } else { setPreview(null); setLoadingPreview(false); setDownloadId(null); }
+            scrollRowIntoView(row.node.path);
+            return;
+        }
+
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            const next = currentIndex <= 0 ? 0 : currentIndex - 1;
+            const row = currentRows[next];
+            if (!row) return;
+            setSelectedPath(row.node.path);
+            if (row.node.type !== 'dir') {
+                onFileSelectRef.current?.(row.node.path, row.node);
+                loadPreviewRef.current?.(row.node.path);
+            } else { setPreview(null); setLoadingPreview(false); setDownloadId(null); }
+            scrollRowIntoView(row.node.path);
+            return;
+        }
+
+        if (e.key === 'ArrowRight' && currentIndex >= 0) {
+            const row = currentRows[currentIndex];
+            if (row?.node?.type === 'dir' && !expanded.has(row.node.path)) {
+                e.preventDefault();
+                loadSubtreeRef.current?.(row.node.path);
+                setExpanded((prev) => new Set([...prev, row.node.path]));
+            }
+            return;
+        }
+
+        if (e.key === 'ArrowLeft' && currentIndex >= 0) {
+            const row = currentRows[currentIndex];
+            if (row?.node?.type === 'dir' && expanded.has(row.node.path)) {
+                e.preventDefault();
+                setExpanded((prev) => {
+                    const next = new Set(prev);
+                    next.delete(row.node.path);
+                    return next;
+                });
+            }
+            return;
+        }
+
+        if (e.key === 'Enter' && currentIndex >= 0) {
+            e.preventDefault();
+            const row = currentRows[currentIndex];
+            if (!row) return;
+            const path = row.node.path;
+            if (row.node.type === 'dir') {
+                const wasExpanded = expandedRef.current.has(path);
+                if (!wasExpanded) loadSubtreeRef.current?.(path);
+                setExpanded((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(path)) next.delete(path);
+                    else next.add(path);
+                    return next;
+                });
+                setPreview(null);
+                setDownloadId(null);
+                setLoadingPreview(false);
+            } else {
+                onFileSelectRef.current?.(path, row.node);
+                loadPreviewRef.current?.(path);
+            }
+            return;
+        }
+
+        if ((e.key === 'Delete' || e.key === 'Backspace') && currentIndex >= 0) {
+            const row = currentRows[currentIndex];
+            if (!row || row.node.type === 'dir') return;
+            e.preventDefault();
+            deleteFileAtPath(row.node.path);
+            return;
+        }
+
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            clearSelection();
+        }
+    }, [clearSelection, deleteFileAtPath, expanded, rows, scrollRowIntoView, selectedPath]);
+
+    const handleRowTouchStart = useCallback((event) => {
+        const row = event?.target?.closest?.('.workspace-row');
+        if (!row) return;
+        const type = row.dataset.type;
+        const path = row.dataset.path;
+        if (type !== 'file' || !path) return;
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = setTimeout(() => {
+            longPressTimerRef.current = null;
+            deleteFileAtPath(path);
+        }, 600);
+    }, [deleteFileAtPath]);
+
+    const handleRowTouchEnd = useCallback(() => {
+        if (longPressTimerRef.current) {
+            clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+        }
+    }, []);
+
+    const handleRowTouchMove = useCallback(() => {
+        if (longPressTimerRef.current) {
+            clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+        }
+    }, []);
 
     // ── Preview-pane vertical resize — zero re-renders ────────────────────────
     const handlePreviewSplitterMouseDown = useRef((e) => {
@@ -565,19 +722,7 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
 
     const handleDeleteFile = async () => {
         if (!selectedPath || selectedIsDir) return;
-        const filename = selectedPath.split('/').pop() || selectedPath;
-        const confirmed = window.confirm(`Delete "${filename}"? This cannot be undone.`);
-        if (!confirmed) return;
-
-        try {
-            await deleteWorkspaceFile(selectedPath);
-            const parent = selectedPath.includes('/') ? (selectedPath.split('/').slice(0, -1).join('/') || '.') : '.';
-            clearSelection();
-            loadSubtreeRef.current?.(parent);
-            setError(null);
-        } catch (err) {
-            setPreview(prev => ({ ...(prev || {}), error: err.message || 'Failed to delete file' }));
-        }
+        await deleteFileAtPath(selectedPath);
     };
 
     const isFileDrag = (event) => {
@@ -585,13 +730,19 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
         return types.includes('Files');
     };
 
-    const resolveHoverTarget = useCallback((event) => {
+    const resolveDropTargetFromEvent = useCallback((event) => {
         const row = event?.target?.closest?.('.workspace-row');
         if (!row) return null;
         const path = row.dataset.path;
         const type = row.dataset.type;
-        if (type === 'dir' && path) return path;
-        return null;
+        if (!path) return null;
+        if (type === 'dir') return path;
+        if (path.includes('/')) {
+            const parts = path.split('/');
+            parts.pop();
+            return parts.join('/') || '.';
+        }
+        return '.';
     }, []);
 
     const handleDragEnter = useCallback((event) => {
@@ -599,20 +750,18 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
         event.preventDefault();
         dragDepthRef.current += 1;
         if (!dragActiveRef.current) setDragActive(true);
-        const hovered = resolveHoverTarget(event);
-        const target = hovered || resolveDropTargetPath();
+        const target = resolveDropTargetFromEvent(event) || resolveDropTargetPath();
         setDropTarget(target);
-    }, [resolveDropTargetPath, resolveHoverTarget]);
+    }, [resolveDropTargetPath, resolveDropTargetFromEvent]);
 
     const handleDragOver = useCallback((event) => {
         if (!isFileDrag(event)) return;
         event.preventDefault();
         if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
         if (!dragActiveRef.current) setDragActive(true);
-        const hovered = resolveHoverTarget(event);
-        const target = hovered || resolveDropTargetPath();
+        const target = resolveDropTargetFromEvent(event) || resolveDropTargetPath();
         if (dropTargetRef.current !== target) setDropTarget(target);
-    }, [resolveDropTargetPath, resolveHoverTarget]);
+    }, [resolveDropTargetPath, resolveDropTargetFromEvent]);
 
     const handleDragLeave = useCallback((event) => {
         if (!isFileDrag(event)) return;
@@ -668,22 +817,32 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
         setDropTarget(null);
         const files = Array.from(event?.dataTransfer?.files || []);
         if (files.length === 0) return;
-        const target = dropTargetRef.current || resolveDropTargetPath();
+        const target = dropTargetRef.current || resolveDropTargetFromEvent(event) || resolveDropTargetPath();
         await uploadFilesToTarget(files, target);
-    }, [resolveDropTargetPath, uploadFilesToTarget]);
+    }, [resolveDropTargetPath, resolveDropTargetFromEvent, uploadFilesToTarget]);
+
+    const handleFolderUploadClick = useCallback((event) => {
+        event?.stopPropagation?.();
+        if (uploading) return;
+        const target = event?.currentTarget?.dataset?.uploadTarget || '.';
+        uploadTargetRef.current = target;
+        uploadInputRef.current?.click();
+    }, [uploading]);
 
     const handleUploadButtonClick = useCallback(() => {
         if (uploading) return;
+        const selected = selectedPathRef.current;
+        const selectedNode = selected ? nodeMapRef.current?.get(selected) : null;
+        uploadTargetRef.current = selectedNode?.type === 'dir' ? selectedNode.path : '.';
         uploadInputRef.current?.click();
     }, [uploading]);
 
     const handleUploadInputChange = useCallback(async (event) => {
         const files = Array.from(event?.target?.files || []);
         if (files.length === 0) return;
-        const selected = selectedPathRef.current;
-        const selectedNode = selected ? nodeMapRef.current?.get(selected) : null;
-        const target = selectedNode?.type === 'dir' ? selectedNode.path : '.';
+        const target = uploadTargetRef.current || '.';
         await uploadFilesToTarget(files, target);
+        uploadTargetRef.current = '.';
         if (event?.target) event.target.value = '';
     }, [uploadFilesToTarget]);
 
@@ -729,12 +888,25 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
                 ${initialLoad && html`<div class="workspace-loading">Loading…</div>`}
                 ${error && html`<div class="workspace-error">${error}</div>`}
                 ${tree && html`
-                    <div class="workspace-tree-list" onClick=${handleTreeClick}>
+                    <div
+                        class="workspace-tree-list"
+                        ref=${treeListRef}
+                        tabIndex="0"
+                        onClick=${handleTreeClick}
+                        onKeyDown=${handleTreeKeyDown}
+                        onTouchStart=${handleRowTouchStart}
+                        onTouchEnd=${handleRowTouchEnd}
+                        onTouchMove=${handleRowTouchMove}
+                        onTouchCancel=${handleRowTouchEnd}
+                    >
                         ${rows.map(({ node, depth }) => {
                             const isDir     = node.type === 'dir';
                             const isSelected= node.path === selectedPath;
                             const isOpen    = isDir && expanded.has(node.path);
                             const isDropTarget = dropTarget && node.path === dropTarget;
+                            const childCount = Array.isArray(node.children) && node.children.length > 0
+                                ? node.children.length
+                                : (Number(node.child_count) || 0);
                             return html`
                                 <div
                                     key=${node.path}
@@ -759,8 +931,24 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
                                             : html`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>`}
                                     </svg>
                                     <span class="workspace-label">${node.name}</span>
-                                    ${isDir && !isOpen && Array.isArray(node.children) && node.children.length > 0 && html`
-                                        <span class="workspace-count">${node.children.length}</span>
+                                    ${isDir && !isOpen && childCount > 0 && html`
+                                        <span class="workspace-count">${childCount}</span>
+                                    `}
+                                    ${isDir && html`
+                                        <button
+                                            class="workspace-folder-upload"
+                                            data-upload-target=${node.path}
+                                            title="Upload files to this folder"
+                                            onClick=${handleFolderUploadClick}
+                                            disabled=${uploading}
+                                        >
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                                <polyline points="7 8 12 3 17 8"/>
+                                                <line x1="12" y1="3" x2="12" y2="15"/>
+                                            </svg>
+                                        </button>
                                     `}
                                 </div>
                             `;
