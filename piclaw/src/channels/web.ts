@@ -15,7 +15,7 @@
 
 import { AgentQueue } from "../queue.js";
 import type { AgentPool } from "../agent-pool.js";
-import { initTheme, type AgentSession } from "@mariozechner/pi-coding-agent";
+import { initTheme } from "@mariozechner/pi-coding-agent";
 import { handleAuthVerifyRequest, type TotpAuthContext } from "./web/totp-auth.js";
 import {
   buildSessionCookieHeader,
@@ -94,6 +94,13 @@ import {
 } from "./web/timeline-service.js";
 import { getAgentsResponse } from "./web/agents-service.js";
 import { buildAvatarResponse, ensureAvatarCache, resolveAvatarUrl } from "./web/avatar-service.js";
+import {
+  handleAgentContextRequest,
+  handleAgentModelsRequest,
+  handleAgentStatusRequest,
+  type AgentStatusContext,
+} from "./web/agent-status.js";
+import { bindWebUiSessionBinder } from "./web/agent-pool-binder.js";
 import { handleManifestRequest } from "./web/manifest.js";
 import {
   handleInternalPostRequest,
@@ -141,11 +148,9 @@ export class WebChannel {
     this.agentPool = opts.agentPool;
     this.uiBridge = new UiBridge(this);
     this.remoteInterop = new RemoteInteropService(this.agentPool);
-    if (typeof (this.agentPool as any).setSessionBinder === "function") {
-      (this.agentPool as any).setSessionBinder((session: AgentSession, chatJid: string) =>
-        this.uiBridge.bindSession(session, chatJid)
-      );
-    }
+    bindWebUiSessionBinder(this.agentPool, (session, chatJid) =>
+      this.uiBridge.bindSession(session, chatJid)
+    );
   }
 
   async start(): Promise<void> {
@@ -574,6 +579,17 @@ export class WebChannel {
     };
   }
 
+  private getAgentStatusContext(): AgentStatusContext {
+    return {
+      defaultChatJid: DEFAULT_CHAT_JID,
+      json: (payload, status = 200) => this.json(payload, status),
+      getAgentStatus: (chatJid) => this.getAgentStatus(chatJid),
+      getBuffer: (turnId, panel) => this.getBuffer(turnId, panel),
+      getContextUsageForChat: (chatJid) => this.agentPool.getContextUsageForChat(chatJid),
+      getAvailableModels: (chatJid) => this.agentPool.getAvailableModels(chatJid),
+    };
+  }
+
   async handleAuthVerify(req: Request): Promise<Response> {
     return await handleAuthVerifyRequest(req, this.getTotpAuthContext());
   }
@@ -749,48 +765,17 @@ export class WebChannel {
   }
 
   handleAgentStatus(req: Request): Response {
-    const url = new URL(req.url);
-    const chatJid = (url.searchParams.get("chat_jid") || DEFAULT_CHAT_JID).trim() || DEFAULT_CHAT_JID;
-    const status = this.getAgentStatus(chatJid);
-    if (!status) {
-      return this.json({ status: "idle", data: null });
-    }
-    // Enrich with current draft/thought buffers so the client can restore
-    // state after a disconnect or SSE failure without waiting for the next
-    // streaming delta.
-    const turnId = (status.turn_id || status.turnId) as string | undefined;
-    let thought: { text: string; totalLines: number } | undefined;
-    let draft: { text: string; totalLines: number } | undefined;
-    if (turnId) {
-      const tb = this.getBuffer(turnId, "thought");
-      if (tb) thought = { text: tb.text, totalLines: tb.totalLines };
-      const db = this.getBuffer(turnId, "draft");
-      if (db) draft = { text: db.text, totalLines: db.totalLines };
-    }
-    return this.json({ status: "active", data: status, thought, draft });
+    return handleAgentStatusRequest(req, this.getAgentStatusContext());
   }
 
   /** GET /agent/context — return context window usage for the compose box indicator. */
   async handleAgentContext(req: Request): Promise<Response> {
-    const url = new URL(req.url);
-    const chatJid = (url.searchParams.get("chat_jid") || DEFAULT_CHAT_JID).trim() || DEFAULT_CHAT_JID;
-    const usage = await this.agentPool.getContextUsageForChat(chatJid);
-    if (!usage) {
-      return this.json({ tokens: null, contextWindow: null, percent: null });
-    }
-    return this.json({
-      tokens: usage.tokens,
-      contextWindow: usage.contextWindow,
-      percent: usage.percent,
-    });
+    return await handleAgentContextRequest(req, this.getAgentStatusContext());
   }
 
   /** GET /agent/models — return available model labels and current selection. */
   async handleAgentModels(req: Request): Promise<Response> {
-    const url = new URL(req.url);
-    const chatJid = (url.searchParams.get("chat_jid") || DEFAULT_CHAT_JID).trim() || DEFAULT_CHAT_JID;
-    const payload = await this.agentPool.getAvailableModels(chatJid);
-    return this.json(payload, 200);
+    return await handleAgentModelsRequest(req, this.getAgentStatusContext());
   }
 
   /**
