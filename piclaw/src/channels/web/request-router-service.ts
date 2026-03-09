@@ -27,18 +27,9 @@
 import { extname, resolve } from "path";
 import type { WebChannel } from "../web.js";
 import { rememberWebOrigin } from "./request-origin.js";
-import { getClientKey } from "./http/client.js";
-import { isRateLimited } from "./http/rate-limit.js";
-import {
-  AUTH_RATE_LIMIT,
-  AUTH_RATE_WINDOW_MS,
-  DATA_RATE_WINDOW_MS,
-  ENROLL_RATE_LIMIT,
-  ENROLL_RATE_WINDOW_MS,
-  getDataRateLimitRule,
-} from "./http/rate-limit-rules.js";
-import { getRouteFlags, shouldSkipAuthCheck } from "./http/route-flags.js";
-import { checkCsrfOrigin, rateLimitResponse, withSecurityHeaders } from "./http/security.js";
+import { enforceRequestGuards } from "./http/request-guards.js";
+import { getRouteFlags } from "./http/route-flags.js";
+import { withSecurityHeaders } from "./http/security.js";
 
 const STATIC_DIR = resolve(import.meta.dir, "..", "..", "..", "..", "web", "static");
 const STATIC_MIME_TYPES: Record<string, string> = {
@@ -107,91 +98,9 @@ export class RequestRouterService {
     rememberWebOrigin("web:default", req);
 
     const flags = getRouteFlags(req, pathname);
-    const authEnabled = this.channel.isAuthEnabled();
-    const internalSecretEnabled = this.channel.isInternalSecretEnabled();
-    const hasInternalAccess = internalSecretEnabled && this.channel.verifyInternalSecret(req);
-
-    // Internal post/patch: require internal secret when configured, otherwise
-    // fall through to normal TOTP auth (do NOT skip auth).
-    if (flags.isInternalPost || flags.isInternalPatch) {
-      if (internalSecretEnabled) {
-        if (!hasInternalAccess) {
-          console.warn(
-            `[auth] Internal secret required (ip=${getClientKey(req)}, method=${req.method}, path=${pathname})`
-          );
-          return this.channel.json({ error: "Unauthorized" }, 401);
-        }
-        // hasInternalAccess is true → skipAuthCheck will include it below
-      }
-      // If internal secret is NOT enabled, these are treated as normal
-      // endpoints and must pass TOTP auth like everything else.
-    }
-
-    if (!authEnabled && flags.isAuthVerify) {
-      return this.channel.json({ error: "Auth disabled" }, 404);
-    }
-
-    // Rate-limit auth endpoints to prevent brute-force attacks.
-    if (flags.isAuthVerify) {
-      if (isRateLimited(req, "auth/verify", AUTH_RATE_WINDOW_MS, AUTH_RATE_LIMIT)) {
-        console.warn(`[auth] Rate limit exceeded for /auth/verify (ip=${getClientKey(req)})`);
-        return this.channel.json({ error: "Too many login attempts. Try again later." }, 429);
-      }
-    }
-    if (flags.isWebauthnLoginStart || flags.isWebauthnLoginFinish) {
-      if (isRateLimited(req, "webauthn/login", AUTH_RATE_WINDOW_MS, AUTH_RATE_LIMIT)) {
-        console.warn(`[auth] Rate limit exceeded for WebAuthn login (ip=${getClientKey(req)})`);
-        return this.channel.json({ error: "Too many login attempts. Try again later." }, 429);
-      }
-    }
-    if (flags.isWebauthnEnrollPage || flags.isWebauthnRegisterStart || flags.isWebauthnRegisterFinish) {
-      if (isRateLimited(req, "webauthn/enrol", ENROLL_RATE_WINDOW_MS, ENROLL_RATE_LIMIT)) {
-        console.warn(`[auth] Rate limit exceeded for WebAuthn enrol (ip=${getClientKey(req)})`);
-        return this.channel.json({ error: "Too many enrol attempts. Try again later." }, 429);
-      }
-    }
-
-    const skipAuthCheck = shouldSkipAuthCheck(flags, hasInternalAccess);
-
-    if (authEnabled) {
-      if (flags.isAuthVerify) {
-        return this.channel.handleAuthVerify(req);
-      }
-      if (flags.isLoginPage) {
-        return this.channel.serveLoginPage();
-      }
-      if (!skipAuthCheck && !this.channel.isAuthenticated(req)) {
-        console.warn(
-          `[auth] Unauthorized request (ip=${getClientKey(req)}, method=${req.method}, path=${pathname})`
-        );
-        if (flags.isIndex) {
-          return this.channel.serveLoginPage();
-        }
-        if (flags.isGetOrHead) {
-          return this.channel.redirectToLogin();
-        }
-        return this.channel.json({ error: "Unauthorized" }, 401);
-      }
-    } else if (flags.isLoginPage) {
-      return this.channel.json({ error: "Not found" }, 404);
-    }
-
-    // ── CSRF origin check on state-changing methods ──
-    // Auth endpoints are exempt: they have their own rate limiting and are
-    // needed before the user has a session (Origin may vary in edge cases).
-    if (flags.isMutating && !hasInternalAccess && !flags.isAuthEndpoint) {
-      if (!checkCsrfOrigin(req)) {
-        console.warn(`[security] CSRF origin check failed (ip=${getClientKey(req)}, origin=${req.headers.get("origin")})`);
-        return this.channel.json({ error: "Origin not allowed" }, 403);
-      }
-    }
-
-    // ── Rate limiting on data endpoints ──
-    if (flags.isMutating && !hasInternalAccess) {
-      const dataRule = getDataRateLimitRule(req.method, pathname);
-      if (dataRule && isRateLimited(req, dataRule.bucket, DATA_RATE_WINDOW_MS, dataRule.limit)) {
-        return rateLimitResponse(dataRule.message);
-      }
+    const guardResponse = await enforceRequestGuards(this.channel, req, pathname, flags);
+    if (guardResponse) {
+      return guardResponse;
     }
 
     if (flags.isWebauthnEnrollPage) {
