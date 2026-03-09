@@ -25,7 +25,10 @@
     "build:vendor": "bun build web/src/vendor/codemirror-entry.ts --target=browser --format=esm --minify --outfile web/static/js/vendor/codemirror.js",
     "build:web": "bun run build:vendor && rm -rf web/static/dist && mkdir -p web/static/dist && bun build web/src/app.ts web/src/login.ts --target=browser --format=esm --minify --sourcemap --outdir web/static/dist --entry-naming=\"[name].bundle.js\" && bun build web/src/styles/app.css web/src/styles/login.css --target=browser --minify --sourcemap --outdir web/static/dist --entry-naming=\"[name].bundle.css\" && rm -rf web/static/js/components web/static/js/utils web/static/js/ui && rm -f web/static/js/app.js web/static/js/api.js web/static/js/markdown.js",
     "test": "bun test --max-concurrency=1",
-    "test:coverage": "bun test --max-concurrency=1 --coverage --coverage-reporter=text --coverage-reporter=lcov"
+    "test:coverage": "bun test --max-concurrency=1 --coverage --coverage-reporter=text --coverage-reporter=lcov",
+    "check:pack-hygiene": "bun run scripts/pack-hygiene.ts",
+    "check:stale-dist": "bun run scripts/check-stale-dist.ts",
+    "quality": "bun run lint && bun run test && bun run check:pack-hygiene && bun run check:stale-dist"
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "0.57.1",

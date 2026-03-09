@@ -434,12 +434,11 @@ export const WEB_PASSKEY_MODE = (
   "totp-fallback"
 ).toLowerCase();
 
+const envTrustProxyRaw = process.env.PICLAW_TRUST_PROXY ?? envConfig.PICLAW_TRUST_PROXY;
+const envTrustProxy = pickBoolean({ PICLAW_TRUST_PROXY: envTrustProxyRaw }, ["PICLAW_TRUST_PROXY"]);
+
 /** Trust x-forwarded-* / x-real-ip headers from a reverse proxy (default false). */
-export const TRUST_PROXY =
-  configTrustProxy ??
-  ((process.env.PICLAW_TRUST_PROXY || envConfig.PICLAW_TRUST_PROXY || "").toLowerCase() === "true" ||
-    process.env.PICLAW_TRUST_PROXY === "1" ||
-    envConfig.PICLAW_TRUST_PROXY === "1");
+export const TRUST_PROXY = envTrustProxy ?? configTrustProxy ?? false;
 
 // ---------------------------------------------------------------------------
 // Remote interop configuration (cross-instance IPC).

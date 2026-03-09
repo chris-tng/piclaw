@@ -79,3 +79,40 @@ test("env overrides config.json values", async () => {
   expect(cfg.PUSHOVER_APP_TOKEN).toBe("env-token");
   expect(cfg.PUSHOVER_USER_KEY).toBe("env-user");
 });
+
+test("loads TRUST_PROXY from web config and allows env override", async () => {
+  const ws = getTestWorkspace();
+
+  const configDir = join(ws.workspace, ".piclaw");
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(
+    join(configDir, "config.json"),
+    JSON.stringify({
+      web: {
+        trustProxy: true,
+      },
+    }),
+    "utf8"
+  );
+
+  restoreEnv = setEnv({
+    PICLAW_WORKSPACE: ws.workspace,
+    PICLAW_STORE: ws.store,
+    PICLAW_DATA: ws.data,
+    PICLAW_TRUST_PROXY: undefined,
+  });
+
+  const cfgFromConfig = await importFresh<typeof import("../src/core/config.js")>("../src/core/config.js");
+  expect(cfgFromConfig.TRUST_PROXY).toBe(true);
+
+  restoreEnv?.();
+  restoreEnv = setEnv({
+    PICLAW_WORKSPACE: ws.workspace,
+    PICLAW_STORE: ws.store,
+    PICLAW_DATA: ws.data,
+    PICLAW_TRUST_PROXY: "0",
+  });
+
+  const cfgFromEnv = await importFresh<typeof import("../src/core/config.js")>("../src/core/config.js");
+  expect(cfgFromEnv.TRUST_PROXY).toBe(false);
+});
