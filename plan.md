@@ -72,6 +72,7 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
 
 ### Recent commit sequence (latest first)
 
+- `85db5c8` Consolidate web dispatch route flag test fixtures
 - `9233ac6` Reduce web endpoint test fixture duplication
 - `8491d98` Add web/runtime test redundancy inventory
 - `e198134` Document runtime seam contracts with JSDoc
@@ -196,6 +197,7 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
 - [ ] **Test redundancy analysis (suite signal-to-noise)**
   - In progress: initial inventory captured in `docs/testing/test-redundancy-inventory.md` covering web/runtime hotspots and concrete dedupe candidates (JSON response/request fixtures, route-flag fixture builders, env/workspace setup helpers).
   - In progress: started consolidation by introducing shared web test HTTP helpers (`test/channels/web/helpers/http.ts`) and reducing repeated JSON response/request scaffolding across endpoint helper suites.
+  - In progress: consolidated duplicated route-flag defaults in HTTP dispatch tests via shared fixture builder (`test/channels/web/helpers/route-flags.ts`) used by `http-dispatch-auth.test.ts` and `http-dispatch-shell.test.ts`.
   - Pending: continue consolidating redundant cases while preserving behavior-critical/security regression coverage.
 
 - [ ] **Dead code review and removal**
