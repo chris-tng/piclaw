@@ -9,8 +9,10 @@
 import { randomBytes } from "node:crypto";
 import { getDb } from "./connection.js";
 
+/** Default user ID used for single-user passkey enrollments. */
 export const DEFAULT_PASSKEY_USER_ID = "default";
 
+/** Stored passkey credential record. */
 export interface WebauthnCredential {
   id: number;
   user_id: string;
@@ -23,6 +25,7 @@ export interface WebauthnCredential {
   last_used_at: string | null;
 }
 
+/** One-time enrollment token row used during passkey registration. */
 export interface WebauthnEnrollment {
   token: string;
   user_id: string;
@@ -30,6 +33,7 @@ export interface WebauthnEnrollment {
   expires_at: string;
 }
 
+/** Create and persist a short-lived enrollment token for WebAuthn registration. */
 export function createWebauthnEnrollment(userId = DEFAULT_PASSKEY_USER_ID, ttlSeconds = 5 * 60): WebauthnEnrollment {
   const db = getDb();
   const token = randomBytes(24).toString("base64url");
@@ -41,6 +45,7 @@ export function createWebauthnEnrollment(userId = DEFAULT_PASSKEY_USER_ID, ttlSe
   return { token, user_id: userId, created_at: createdAt, expires_at: expiresAt };
 }
 
+/** Fetch an enrollment token and auto-prune it when expired. */
 export function getWebauthnEnrollment(token: string): WebauthnEnrollment | null {
   const db = getDb();
   const row = db
@@ -55,6 +60,7 @@ export function getWebauthnEnrollment(token: string): WebauthnEnrollment | null 
   return row;
 }
 
+/** Consume (read + delete) an enrollment token, returning null when expired/missing. */
 export function consumeWebauthnEnrollment(token: string): WebauthnEnrollment | null {
   const db = getDb();
   const row = db
@@ -68,6 +74,7 @@ export function consumeWebauthnEnrollment(token: string): WebauthnEnrollment | n
   return row;
 }
 
+/** List all passkey credentials for a user in creation order. */
 export function listWebauthnCredentials(userId = DEFAULT_PASSKEY_USER_ID): WebauthnCredential[] {
   const db = getDb();
   return db
@@ -78,6 +85,7 @@ export function listWebauthnCredentials(userId = DEFAULT_PASSKEY_USER_ID): Webau
     .all(userId) as WebauthnCredential[];
 }
 
+/** List passkey credentials for a user filtered by RP ID. */
 export function getWebauthnCredentialsForRpId(userId: string, rpId: string): WebauthnCredential[] {
   const db = getDb();
   return db
@@ -88,6 +96,7 @@ export function getWebauthnCredentialsForRpId(userId: string, rpId: string): Web
     .all(userId, rpId) as WebauthnCredential[];
 }
 
+/** Fetch a single passkey credential by credential ID. */
 export function getWebauthnCredentialById(credentialId: string): WebauthnCredential | null {
   const db = getDb();
   const row = db
@@ -99,6 +108,7 @@ export function getWebauthnCredentialById(credentialId: string): WebauthnCredent
   return row ?? null;
 }
 
+/** Find credentials by ID prefix (used for short-id UX helpers). */
 export function findWebauthnCredentialsByPrefix(userId: string, prefix: string): WebauthnCredential[] {
   const db = getDb();
   return db
@@ -109,6 +119,7 @@ export function findWebauthnCredentialsByPrefix(userId: string, prefix: string):
     .all(userId, `${prefix}%`) as WebauthnCredential[];
 }
 
+/** Insert or replace a passkey credential row while preserving original created_at. */
 export function storeWebauthnCredential(input: {
   user_id: string;
   rp_id: string;
@@ -132,6 +143,7 @@ export function storeWebauthnCredential(input: {
   );
 }
 
+/** Update stored signature counter and last-used timestamp for a credential. */
 export function updateWebauthnCredentialCounter(credentialId: string, signCount: number): void {
   const db = getDb();
   db.prepare(
@@ -139,6 +151,7 @@ export function updateWebauthnCredentialCounter(credentialId: string, signCount:
   ).run(signCount, credentialId);
 }
 
+/** Delete a stored passkey credential by credential ID. */
 export function deleteWebauthnCredential(credentialId: string): void {
   const db = getDb();
   db.prepare("DELETE FROM webauthn_credentials WHERE credential_id = ?").run(credentialId);

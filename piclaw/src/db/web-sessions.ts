@@ -8,8 +8,10 @@
 
 import { getDb } from "./connection.js";
 
+/** Default user ID used for single-user web auth sessions. */
 export const DEFAULT_WEB_USER_ID = "default";
 
+/** Persisted web auth session row. */
 export interface WebSessionRecord {
   token: string;
   user_id: string;
@@ -18,6 +20,7 @@ export interface WebSessionRecord {
   expires_at: string;
 }
 
+/** Create or replace a persistent web auth session token row. */
 export function createWebSession(
   token: string,
   userId: string,
@@ -33,6 +36,7 @@ export function createWebSession(
   return { token, user_id: userId, auth_method: authMethod, created_at: createdAt, expires_at: expiresAt };
 }
 
+/** Fetch a session row by token and auto-delete it when expired. */
 export function getWebSession(token: string): WebSessionRecord | null {
   const db = getDb();
   const row = db
@@ -47,11 +51,13 @@ export function getWebSession(token: string): WebSessionRecord | null {
   return row;
 }
 
+/** Delete a specific web auth session token. */
 export function deleteWebSession(token: string): void {
   const db = getDb();
   db.prepare("DELETE FROM web_sessions WHERE token = ?").run(token);
 }
 
+/** Delete expired session rows and return number of removed records. */
 export function deleteExpiredWebSessions(now = new Date()): number {
   const db = getDb();
   const nowIso = now.toISOString();

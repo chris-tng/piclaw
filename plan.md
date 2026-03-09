@@ -7,11 +7,11 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
 
 - Backend size: **169 TS files / 22,946 LOC** (`src/`)
 - Frontend size: **7,095 LOC** (`web/src/`)
-- Tests: **613 passing, 0 failing**
+- Tests: baseline **613 passing, 0 failing** on prior clean tranche; current workspace run is **612 passing, 1 failing** due to an unrelated in-progress extension-count expectation drift in `test/agent-pool/agent-pool-tools.test.ts` (`8 -> 9` factories).
 - Lint: passing (for current backend tranche)
 - Coverage (line): **57.97%** (`coverage/lcov.info`)
 - Review comment coverage: Added focused regression/unit tests for each recent extraction seam (`web/recovery.ts`, `web/agent-buffers.ts`, `web/auth-runtime.ts`, `web/auth-gateway.ts`, `web/auth-endpoints.ts`, `web/channel-endpoint-context-factory.ts`, `web/endpoint-contexts.ts`, `web/agent-status-store.ts`, `web/pending-steering.ts`, `web/interaction-broadcaster.ts`, `web/followup-placeholders.ts`, `web/chat-run-control.ts`, `web/message-write-flows.ts`, `web/handlers/workspace.ts`, `web/http/dispatch-workspace.ts`, `web/http/dispatch-media.ts`, `web/http/dispatch-auth.ts`, `web/http/request-guards.ts`, `runtime/composition.ts`, `runtime/bootstrap.ts`, runtime wiring/provider bootstrap) so refactors remain behavior-preserving.
-- Commenting standards coverage: New extraction seams include module headers plus exported type/function JSDoc, and this remains an explicit tracked goal (see checklist + quality bars below). Re-audit (2026-03-09): module headers are present across `src/**/*.ts`; exported-JSDoc heuristic still reports **133** uncovered exports across **52** files (largest hotspots: `src/db/webauthn.ts`, `src/channels/web/auth-runtime.ts`, `src/channels/web/endpoint-contexts.ts`, `src/db/web-sessions.ts`).
+- Commenting standards coverage: New extraction seams include module headers plus exported type/function JSDoc, and this remains an explicit tracked goal (see checklist + quality bars below). Re-audit (2026-03-09, refreshed): module headers are present across `src/**/*.ts` (shebang-aware check); exported-JSDoc heuristic now reports **101** uncovered exports across **49** files after documenting `src/db/webauthn.ts`, `src/db/web-sessions.ts`, and `src/channels/web/auth-runtime.ts` (largest remaining hotspots: `src/channels/web/endpoint-contexts.ts`, `src/channels/web/content-endpoints.ts`, `src/channels/web/webauthn-challenges.ts`).
 
 ---
 
@@ -91,9 +91,24 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
   - added module header and exported JSDoc coverage for `src/utils/totp-qr.ts` (QR/TOTP options/results and generator APIs)
   - expanded exported contract JSDoc coverage in runtime orchestration seams (`src/runtime/wiring.ts`, `src/runtime/shutdown.ts`) for worker/send/shutdown dependency interfaces
   - added exported JSDoc coverage for web request metadata and throttling contracts in `src/channels/web/request-origin.ts` and `src/channels/web/http/rate-limit-rules.ts`
+  - added exported JSDoc coverage for web/passkey session persistence helpers in `src/db/webauthn.ts` and `src/db/web-sessions.ts`
+  - added exported JSDoc coverage for auth mode/context evaluation helpers in `src/channels/web/auth-runtime.ts`
 
 ### Recent commit sequence (latest first)
 
+- `34d424f` Record commenting standards re-audit snapshot
+- `7ebcdd4` Document request-origin and rate-limit rule contracts
+- `18a5d7b` Document runtime wiring/shutdown seam contracts
+- `65676aa` Document TOTP QR helper contracts
+- `5eb5a55` Document remote nonce-cache and limit contracts
+- `3ecb0b0` Expand remote auth/identity/signature/ssrf module docs
+- `540075f` Expand remote interop DB contract documentation
+- `488e6db` Document remote service and Azure tool-call limit seams
+- `06460e4` Tighten agent-control helper event/content typing
+- `fbc7f0e` Remove residual SQL spread casts in task/remote DB helpers
+- `de05c60` Harden Azure tool-call limit parsing contracts
+- `31d75ff` Harden remote interop payload parsing contracts
+- `3542795` Tighten slash-command event/content typing
 - `7469eb3` Extract web endpoint-context factory from web channel orchestration
 - `294c7a3` Extract web message-write flows and narrow preview/store boundaries
 - `ad7358c` Decompose web media/workspace routing and narrow bootstrap core contracts
@@ -218,8 +233,8 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
 
 - [ ] **Commenting/documentation standards consistency**
   - In progress: extracted seam modules include module-level purpose headers and JSDoc on exported contracts/helpers (recently reaffirmed for `runtime/composition.ts`, `runtime/bootstrap.ts`, `runtime/wiring.ts`, `runtime/shutdown.ts`, `remote/service.ts`, `utils/azure-tool-call-limit.ts`, `db/remote-interop.ts`, `remote/auth.ts`, `remote/identity.ts`, `remote/signature.ts`, `remote/ssrf.ts`, `remote/nonce-cache.ts`, `remote/limits.ts`, `utils/totp-qr.ts`, `channels/web/request-origin.ts`, and `channels/web/http/rate-limit-rules.ts`).
-  - Re-audit snapshot (2026-03-09): module headers are complete across `src/**/*.ts`; exported-JSDoc heuristic flags 133 missing export docblocks across 52 files.
-  - Pending: burn down remaining hotspots in focused batches (starting with `src/db/webauthn.ts`, `src/channels/web/auth-runtime.ts`, `src/channels/web/endpoint-contexts.ts`, `src/db/web-sessions.ts`) and enforce in review checklist.
+  - Re-audit snapshot (2026-03-09, refreshed): module headers are complete across `src/**/*.ts`; exported-JSDoc heuristic flags 101 missing export docblocks across 49 files.
+  - Pending: burn down remaining hotspots in focused batches (starting with `src/channels/web/endpoint-contexts.ts`, `src/channels/web/content-endpoints.ts`, `src/channels/web/webauthn-challenges.ts`, `src/channels/web/webauthn-auth.ts`) and enforce in review checklist.
 
 - [ ] **Test redundancy analysis (suite signal-to-noise)**
   - In progress: initial inventory captured in `docs/testing/test-redundancy-inventory.md` covering web/runtime hotspots and concrete dedupe candidates (JSON response/request fixtures, route-flag fixture builders, env/workspace setup helpers).
