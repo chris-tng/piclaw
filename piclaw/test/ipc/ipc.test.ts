@@ -171,6 +171,32 @@ test("IPC update_task with invalid model reports error", async () => {
   expect(task?.model ?? null).toBe(null);
 });
 
+test("IPC update_task ignores invalid schedule values", async () => {
+  const taskId = `task_schedule_${Date.now()}`;
+  const originalNextRun = new Date(Date.now() + 60_000).toISOString();
+  db.createTask({
+    id: taskId,
+    chat_jid: "web:default",
+    prompt: "hello",
+    model: null,
+    schedule_type: "interval",
+    schedule_value: "60000",
+    next_run: originalNextRun,
+    status: "active",
+    created_at: new Date().toISOString(),
+  });
+
+  await ipc.processTaskCommand({
+    type: "update_task",
+    taskId,
+    schedule_type: "interval",
+    schedule_value: "not-a-number",
+  }, deps);
+
+  const task = db.getTaskById(taskId);
+  expect(task?.next_run).toBe(originalNextRun);
+});
+
 test("IPC cleanup_tasks removes completed tasks and logs", async () => {
   const tasksDir = join(config.DATA_DIR, "ipc", "tasks");
   mkdirSync(tasksDir, { recursive: true });

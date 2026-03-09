@@ -48,6 +48,8 @@ export interface IpcDeps {
 let running = false;
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
+type IpcScheduleType = "cron" | "interval" | "once";
+
 async function processIpcDir(
   dirPath: string,
   ipcDir: string,
@@ -71,6 +73,29 @@ async function processIpcDir(
       }
     }
   }
+}
+
+function computeScheduledNextRun(
+  scheduleType: IpcScheduleType,
+  scheduleValue: string
+): string | undefined {
+  if (scheduleType === "cron") {
+    try {
+      return CronExpressionParser.parse(scheduleValue, { tz: TIMEZONE }).next().toISOString();
+    } catch {
+      return undefined;
+    }
+  }
+
+  if (scheduleType === "interval") {
+    const ms = parseInt(scheduleValue, 10);
+    if (isNaN(ms) || ms <= 0) return undefined;
+    return new Date(Date.now() + ms).toISOString();
+  }
+
+  const d = new Date(scheduleValue);
+  if (isNaN(d.getTime())) return undefined;
+  return d.toISOString();
 }
 
 /**
@@ -142,19 +167,12 @@ export async function processTaskCommand(data: Record<string, any>, deps: IpcDep
     // --- Create a new scheduled task ---
     case "schedule_task": {
       if (!data.schedule_type || !data.schedule_value || !data.chatJid) return;
+      if (!["cron", "interval", "once"].includes(data.schedule_type)) return;
+      const scheduleType = data.schedule_type as IpcScheduleType;
+      const scheduleValue = String(data.schedule_value);
       const taskKind = data.task_kind === "shell" || data.command ? "shell" : "agent";
-      let nextRun: string | null = null;
-      if (data.schedule_type === "cron") {
-        try { nextRun = CronExpressionParser.parse(data.schedule_value, { tz: TIMEZONE }).next().toISOString(); } catch { return; }
-      } else if (data.schedule_type === "interval") {
-        const ms = parseInt(data.schedule_value, 10);
-        if (isNaN(ms) || ms <= 0) return;
-        nextRun = new Date(Date.now() + ms).toISOString();
-      } else if (data.schedule_type === "once") {
-        const d = new Date(data.schedule_value);
-        if (isNaN(d.getTime())) return;
-        nextRun = d.toISOString();
-      }
+      const nextRun = computeScheduledNextRun(scheduleType, scheduleValue);
+      if (nextRun === undefined) return;
 
       if (taskKind === "shell") {
         const validated = validateShellCommand(data.command);
@@ -181,8 +199,8 @@ export async function processTaskCommand(data: Record<string, any>, deps: IpcDep
           command: validated.command || null,
           cwd: cwdResult.cwd,
           timeout_sec: Number.isFinite(data.timeout_sec) ? Number(data.timeout_sec) : null,
-          schedule_type: data.schedule_type,
-          schedule_value: data.schedule_value,
+          schedule_type: scheduleType,
+          schedule_value: scheduleValue,
           next_run: nextRun,
           status: "active",
           created_at: new Date().toISOString(),
@@ -217,8 +235,8 @@ export async function processTaskCommand(data: Record<string, any>, deps: IpcDep
         command: null,
         cwd: null,
         timeout_sec: null,
-        schedule_type: data.schedule_type,
-        schedule_value: data.schedule_value,
+        schedule_type: scheduleType,
+        schedule_value: scheduleValue,
         next_run: nextRun,
         status: "active",
         created_at: new Date().toISOString(),
@@ -299,17 +317,14 @@ export async function processTaskCommand(data: Record<string, any>, deps: IpcDep
 
       // Recalculate next_run if schedule changed.
       if (updates.schedule_type || updates.schedule_value) {
-        const sType = updates.schedule_type || t.schedule_type;
-        const sValue = updates.schedule_value || t.schedule_value;
-        try {
-          if (sType === "cron") {
-            updates.next_run = CronExpressionParser.parse(sValue, { tz: TIMEZONE }).next().toISOString();
-          } else if (sType === "interval") {
-            updates.next_run = new Date(Date.now() + parseInt(sValue, 10)).toISOString();
-          } else if (sType === "once") {
-            updates.next_run = new Date(sValue).toISOString();
+        const sType = (updates.schedule_type || t.schedule_type) as IpcScheduleType;
+        const sValue = String(updates.schedule_value || t.schedule_value);
+        if (["cron", "interval", "once"].includes(sType)) {
+          const nextRun = computeScheduledNextRun(sType, sValue);
+          if (nextRun !== undefined) {
+            updates.next_run = nextRun;
           }
-        } catch { /* keep existing next_run */ }
+        }
       }
       if (Object.keys(updates).length > 0) updateTask(data.taskId, updates);
       break;

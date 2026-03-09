@@ -27,7 +27,8 @@
 import { extname, resolve } from "path";
 import type { WebChannel } from "../web.js";
 import { rememberWebOrigin } from "./request-origin.js";
-import { getClientKey, getRequestOriginParts } from "../../utils/request-client.js";
+import { getClientKey } from "../../utils/request-client.js";
+import { checkCsrfOrigin, rateLimitResponse, withSecurityHeaders } from "./http/security.js";
 
 const STATIC_DIR = resolve(import.meta.dir, "..", "..", "..", "..", "web", "static");
 const STATIC_MIME_TYPES: Record<string, string> = {
@@ -108,47 +109,6 @@ function isRateLimited(req: Request, bucket: string, windowMs: number, limit: nu
   return trimmed.length > limit;
 }
 
-// ── Security headers ──
-// Applied to every response via withSecurityHeaders(). These defend against:
-//   X-Content-Type-Options: nosniff    → MIME sniffing attacks
-//   X-Frame-Options: DENY              → clickjacking (iframe embedding)
-//   Referrer-Policy                    → referrer leakage on navigation
-//   Permissions-Policy                 → disable camera/mic/geolocation APIs
-//   Content-Security-Policy            → XSS mitigation (inline scripts allowed
-//                                        for login page; blob: for file downloads)
-//   Strict-Transport-Security          → HSTS (TLS only, added dynamically)
-const SECURITY_HEADERS: Record<string, string> = {
-  "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "DENY",
-  "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-  "Content-Security-Policy":
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
-    "img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; " +
-    "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
-};
-
-/**
- * Clone a response with security headers appended.
- * Called once at the end of handle() so ALL responses (API, static, SSE)
- * get consistent security headers. Existing headers are not overwritten.
- * HSTS is only added when the connection is TLS.
- */
-function withSecurityHeaders(response: Response, isTls: boolean): Response {
-  const headers = new Headers(response.headers);
-  for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
-    if (!headers.has(key)) headers.set(key, value);
-  }
-  if (isTls && !headers.has("Strict-Transport-Security")) {
-    headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-  }
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-}
-
 /**
  * Determine which /static/ paths are safe to serve without authentication.
  * Public pages only need styling, icons, and the login bundle.
@@ -170,64 +130,6 @@ function isPublicStaticPath(pathname: string): boolean {
   // Static images/icons used by favicon/PWA/login branding.
   if (pathname.startsWith("/static/") && /\.(png|ico|svg|jpg|jpeg|webp|gif)$/i.test(pathname)) return true;
   return false;
-}
-
-/**
- * CSRF origin validation for state-changing requests (POST/PUT/DELETE/PATCH).
- *
- * Compares the Origin header against the Host header to ensure the request
- * comes from the same origin. This prevents cross-origin form submissions
- * and fetch attacks when the user has an active session cookie.
- *
- * Design choices:
- *   - No Origin header → allow (non-browser clients like curl, internal tools)
- *   - Origin "null" → block (sandboxed iframes, data: URLs)
- *   - No Host header → allow (direct connections without proxy)
- *   - Hostname comparison ignores port (works behind port-forwarding proxies)
- *   - Auth endpoints are exempt (handled before this check by the caller)
- *
- * Note: SameSite=Strict cookies provide the primary CSRF defense; this is
- * a defense-in-depth layer against same-site but cross-origin attacks.
- */
-function checkCsrfOrigin(req: Request): boolean {
-  const origin = req.headers.get("origin");
-  // Non-browser clients (curl, internal) may not send Origin — allow
-  if (!origin) return true;
-  // "null" origin comes from sandboxed iframes — block
-  if (origin === "null") return false;
-
-  const normalizePort = (proto: string, port: string): string => {
-    if (port) return port;
-    return proto === "https" ? "443" : proto === "http" ? "80" : "";
-  };
-
-  try {
-    const originUrl = new URL(origin);
-    const expected = getRequestOriginParts(req);
-    const expectedProto = expected.proto.toLowerCase();
-    const expectedHost = expected.host;
-    if (!expectedHost) return false;
-
-    const expectedUrl = new URL(`${expectedProto}://${expectedHost}`);
-    const expectedHostname = expectedUrl.hostname.toLowerCase();
-    const expectedPort = normalizePort(expectedProto, expectedUrl.port);
-
-    const originProto = originUrl.protocol.replace(":", "").toLowerCase();
-    const originHostname = originUrl.hostname.toLowerCase();
-    const originPort = normalizePort(originProto, originUrl.port);
-
-    return originProto === expectedProto && originHostname === expectedHostname && originPort === expectedPort;
-  } catch {
-    return false;
-  }
-}
-
-/** Return a 429 JSON response. */
-function rateLimitResponse(msg: string): Response {
-  return new Response(JSON.stringify({ error: msg }), {
-    status: 429,
-    headers: { "Content-Type": "application/json" },
-  });
 }
 
 /** Business logic for handling compose-box submissions and agent runs. */
