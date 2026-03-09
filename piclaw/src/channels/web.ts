@@ -85,13 +85,7 @@ import {
 import type { InteractionRow } from "../db.js";
 import { WebChannelState } from "./web/channel-state.js";
 import { storeWebMessage } from "./web/message-store.js";
-import {
-  deletePostResponse,
-  getHashtagResponse,
-  getSearchResponse,
-  getThreadResponse,
-  getTimelineResponse,
-} from "./web/timeline-service.js";
+import { deletePostResponse } from "./web/timeline-service.js";
 import { getAgentsResponse } from "./web/agents-service.js";
 import { buildAvatarResponse, ensureAvatarCache, resolveAvatarUrl } from "./web/avatar-service.js";
 import {
@@ -101,6 +95,14 @@ import {
   type AgentStatusContext,
 } from "./web/agent-status.js";
 import { bindWebUiSessionBinder } from "./web/agent-pool-binder.js";
+import {
+  handleHashtagRequest,
+  handleSearchRequest,
+  handleThoughtRequest,
+  handleThreadRequest,
+  handleTimelineRequest,
+  type ContentEndpointsContext,
+} from "./web/content-endpoints.js";
 import { handleManifestRequest } from "./web/manifest.js";
 import {
   handleInternalPostRequest,
@@ -596,6 +598,14 @@ export class WebChannel {
     };
   }
 
+  private getContentEndpointsContext(): ContentEndpointsContext {
+    return {
+      defaultChatJid: DEFAULT_CHAT_JID,
+      json: (payload, status = 200) => this.json(payload, status),
+      getBuffer: (turnId, panel) => this.getBuffer(turnId, panel),
+    };
+  }
+
   private getUiEndpointsContext(): UiEndpointsContext {
     return {
       json: (payload, status = 200) => this.json(payload, status),
@@ -691,31 +701,23 @@ export class WebChannel {
   }
 
   handleTimeline(limit: number, before?: number): Response {
-    const result = getTimelineResponse(DEFAULT_CHAT_JID, limit, before);
-    return this.json(result.body, result.status);
+    return handleTimelineRequest(limit, before, this.getContentEndpointsContext());
   }
 
   handleHashtag(tag: string, limit: number, offset: number): Response {
-    const result = getHashtagResponse(DEFAULT_CHAT_JID, tag, limit, offset);
-    return this.json(result.body, result.status);
+    return handleHashtagRequest(tag, limit, offset, this.getContentEndpointsContext());
   }
 
   handleSearch(query: string, limit: number, offset: number): Response {
-    const result = getSearchResponse(DEFAULT_CHAT_JID, query, limit, offset);
-    return this.json(result.body, result.status);
+    return handleSearchRequest(query, limit, offset, this.getContentEndpointsContext());
   }
 
   handleThread(id: number | null): Response {
-    const result = getThreadResponse(DEFAULT_CHAT_JID, id);
-    return this.json(result.body, result.status);
+    return handleThreadRequest(id, this.getContentEndpointsContext());
   }
 
   handleThought(panel: string | null, turnId: string | null): Response {
-    if (!turnId) return this.json({ error: "Missing turn_id" }, 400);
-    const normalized = panel === "draft" ? "draft" : "thought";
-    const buffer = this.getBuffer(turnId, normalized);
-    if (!buffer) return this.json({ error: "Thought not found" }, 404);
-    return this.json({ text: buffer.text, total_lines: buffer.totalLines }, 200);
+    return handleThoughtRequest(panel, turnId, this.getContentEndpointsContext());
   }
 
   async handleThoughtVisibility(req: Request): Promise<Response> {

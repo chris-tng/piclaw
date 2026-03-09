@@ -36,22 +36,32 @@ function listDirEntries(absPath: string, includeHidden: boolean) {
   return includeHidden ? visibleEntries.concat(hiddenEntries) : visibleEntries;
 }
 
+export interface WorkspaceTreeNode {
+  name: string;
+  path: string;
+  type: "dir" | "file";
+  size: number | null;
+  mtime: string;
+  child_count: number | undefined;
+  children: WorkspaceTreeNode[] | undefined;
+}
+
 /** Recursively build a directory tree starting from the given root. */
 export function buildTree(
   absPath: string,
   depth: number,
   state: WorkspaceTreeState,
   options: { includeHidden: boolean }
-): any {
+): WorkspaceTreeNode {
   const stats = statSync(absPath);
-  const node = {
+  const node: WorkspaceTreeNode = {
     name: path.basename(absPath) || "workspace",
     path: toRelativePath(absPath),
     type: stats.isDirectory() ? "dir" : "file",
     size: stats.isDirectory() ? null : stats.size,
     mtime: formatMtime(stats),
-    child_count: undefined as number | undefined,
-    children: [] as any[] | undefined,
+    child_count: undefined,
+    children: [],
   };
 
   state.count += 1;
