@@ -13,7 +13,7 @@
  *   - agent-pool.ts for model label resolution.
  */
 
-import type { AgentSession } from "@mariozechner/pi-coding-agent";
+import type { AgentSession, AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import type { Model } from "@mariozechner/pi-ai";
 import { existsSync } from "fs";
 import { PICLAW_CONFIG_PATH } from "../core/config.js";
@@ -74,13 +74,17 @@ export function truncateText(text: string, maxLength: number): string {
 }
 
 /** Extract plain text from a pi-agent content block array. */
-export function extractTextFromContent(content: any): string {
+export function extractTextFromContent(content: unknown): string {
   if (!content) return "";
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
-      .filter((b) => b && b.type === "text")
-      .map((b) => b.text)
+      .map((block) => {
+        if (!block || typeof block !== "object") return "";
+        const textBlock = block as { type?: unknown; text?: unknown };
+        if (textBlock.type !== "text") return "";
+        return typeof textBlock.text === "string" ? textBlock.text : "";
+      })
       .join("");
   }
   return "";
@@ -215,21 +219,23 @@ export async function runPromptAndCapture(session: AgentSession, text: string): 
   let assistantBuffer = "";
   const customBuffers: string[] = [];
 
-  const onEvent = (event: any) => {
+  const onEvent = (event: AgentSessionEvent) => {
     if (event.type === "message_update") {
-      const me = event.assistantMessageEvent;
-      if (me && me.type === "text_delta") {
-        assistantBuffer += me.delta || "";
+      const messageUpdate = event.assistantMessageEvent;
+      if (messageUpdate?.type === "text_delta") {
+        assistantBuffer += messageUpdate.delta || "";
       }
+      return;
     }
-    if (event.type === "message_end") {
-      const msg = event.message;
-      const text = extractTextFromContent(msg.content);
-      if (msg.role === "assistant") {
-        assistantBuffer = text || assistantBuffer;
-      } else if (text) {
-        customBuffers.push(text);
-      }
+
+    if (event.type !== "message_end") return;
+
+    const message = event.message as { role?: unknown; content?: unknown };
+    const text = extractTextFromContent(message.content);
+    if (message.role === "assistant") {
+      assistantBuffer = text || assistantBuffer;
+    } else if (text) {
+      customBuffers.push(text);
     }
   };
 
@@ -248,7 +254,11 @@ export async function runPromptAndCapture(session: AgentSession, text: string): 
 }
 
 /** Fuzzy-match a model input string against available models. */
-export function normalizeModelMatch(models: Model<any>[], provider: string, modelId: string): Model<any> | undefined {
+export function normalizeModelMatch(
+  models: Model<unknown>[],
+  provider: string,
+  modelId: string
+): Model<unknown> | undefined {
   const providerLower = provider.toLowerCase();
   const modelLower = modelId.toLowerCase();
   return models.find((model) => model.provider.toLowerCase() === providerLower && model.id.toLowerCase() === modelLower);
