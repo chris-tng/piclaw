@@ -49,6 +49,7 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
 
 ### Recent commit sequence (latest first)
 
+- `46dc1ab` Extract web agent status helpers and harden session binder typing
 - `05deb0b` Extract post mutation endpoint orchestration from web channel
 - `fc8a95e` Extract web manifest response helper from web channel
 - `99e5b92` Extract TOTP verify endpoint orchestration from web channel
