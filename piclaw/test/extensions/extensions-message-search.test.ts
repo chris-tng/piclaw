@@ -7,8 +7,7 @@
 
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { getTestWorkspace, setEnv } from "../helpers.js";
-import { initDatabase, storeMessage, storeChatMetadata } from "../../src/db.js";
+import { createTempWorkspace, importFresh, setEnv } from "../helpers.js";
 import { withChatContext } from "../../src/core/chat-context.js";
 
 let restoreEnv: (() => void) | null = null;
@@ -46,28 +45,34 @@ function makeFakeApi() {
 }
 
 describe("message-search extension", () => {
-  let ws: ReturnType<typeof getTestWorkspace>;
+  let ws: ReturnType<typeof createTempWorkspace>;
+  let db: typeof import("../../src/db.js");
+  let chatJid = "web:test";
 
-  beforeEach(() => {
-    ws = getTestWorkspace();
+  beforeEach(async () => {
+    ws = createTempWorkspace("piclaw-message-search-");
+    chatJid = `web:test-${Math.random().toString(36).slice(2, 10)}`;
     restoreEnv = setEnv({
       PICLAW_WORKSPACE: ws.workspace,
       PICLAW_STORE: ws.store,
       PICLAW_DATA: ws.data,
+      PICLAW_DB_IN_MEMORY: "1",
     });
-    initDatabase();
-    storeChatMetadata("web:test", new Date().toISOString(), "Web");
+    db = await importFresh<typeof import("../src/db.js")>("../src/db.js");
+    db.initDatabase();
+    db.storeChatMetadata(chatJid, new Date().toISOString(), "Web");
   });
 
   afterEach(() => {
     restoreEnv?.();
     restoreEnv = null;
+    ws.cleanup();
   });
 
   function insertMessage(content: string, overrides: Record<string, any> = {}) {
-    storeMessage({
+    db.storeMessage({
       id: `msg-${Math.random()}`,
-      chat_jid: "web:test",
+      chat_jid: chatJid,
       sender: "user",
       sender_name: "Alice",
       content,
@@ -78,25 +83,30 @@ describe("message-search extension", () => {
     });
   }
 
-  async function getSearchTool() {
-    const { messageSearch } = await import("../../src/extensions/message-search.js");
+  async function getTools() {
+    const { messageSearch } = await importFresh<typeof import("../src/extensions/message-search.js")>("../src/extensions/message-search.js");
     const fake = makeFakeApi();
     messageSearch(fake.api);
-    return fake.tools.get("search_messages")!;
+    return {
+      search: fake.tools.get("search_messages")!,
+      getMessage: fake.tools.get("get_message")!,
+    };
   }
 
   async function executeWithContext(tool: any, id: string, params: Record<string, unknown>) {
-    return withChatContext("web:test", "web", () => tool.execute(id, params));
+    return withChatContext(chatJid, "web", () => tool.execute(id, params));
   }
 
-  test("registers search_messages tool", async () => {
-    const tool = await getSearchTool();
-    expect(tool).toBeDefined();
-    expect(tool.name).toBe("search_messages");
+  test("registers search_messages and get_message tools", async () => {
+    const tools = await getTools();
+    expect(tools.search).toBeDefined();
+    expect(tools.search.name).toBe("search_messages");
+    expect(tools.getMessage).toBeDefined();
+    expect(tools.getMessage.name).toBe("get_message");
   });
 
   test("returns empty when no query or row_id", async () => {
-    const tool = await getSearchTool();
+    const { search: tool } = await getTools();
     const result = await executeWithContext(tool, "c1", {});
     expect(result.content[0].text).toContain("Provide a query or row_id");
     expect(result.details.count).toBe(0);
@@ -106,7 +116,7 @@ describe("message-search extension", () => {
     insertMessage("The weather is sunny today");
     insertMessage("It might rain tomorrow");
 
-    const tool = await getSearchTool();
+    const { search: tool } = await getTools();
     const result = await executeWithContext(tool, "c1", { query: "sunny" });
     expect(result.details.count).toBe(1);
     expect(result.content[0].text).toContain("sunny");
@@ -116,14 +126,14 @@ describe("message-search extension", () => {
     insertMessage("Working on #project-alpha");
     insertMessage("Just a normal message");
 
-    const tool = await getSearchTool();
+    const { search: tool } = await getTools();
     const result = await executeWithContext(tool, "c1", { query: "#project-alpha" });
     expect(result.details.count).toBe(1);
     expect(result.content[0].text).toContain("project-alpha");
   });
 
   test("returns no match message", async () => {
-    const tool = await getSearchTool();
+    const { search: tool } = await getTools();
     const result = await executeWithContext(tool, "c1", { query: "nonexistent-xyz-99" });
     expect(result.content[0].text).toContain("No matching messages");
     expect(result.details.count).toBe(0);
@@ -132,7 +142,7 @@ describe("message-search extension", () => {
   test("fetches by row_id", async () => {
     insertMessage("Specific message for lookup");
 
-    const tool = await getSearchTool();
+    const { search: tool } = await getTools();
     // First search to get a rowid
     const searchResult = await executeWithContext(tool, "c1", { query: "Specific message" });
     expect(searchResult.details.count).toBe(1);
@@ -145,7 +155,7 @@ describe("message-search extension", () => {
   });
 
   test("row_id not found", async () => {
-    const tool = await getSearchTool();
+    const { search: tool } = await getTools();
     const result = await executeWithContext(tool, "c1", { row_id: 999999 });
     expect(result.content[0].text).toContain("No message found");
     expect(result.details.count).toBe(0);
@@ -156,7 +166,7 @@ describe("message-search extension", () => {
       insertMessage(`Message number ${i}`);
     }
 
-    const tool = await getSearchTool();
+    const { search: tool } = await getTools();
     const result = await executeWithContext(tool, "c1", { query: "Message number", limit: 2, offset: 0 });
     expect(result.details.count).toBe(2);
     expect(result.content[0].text).toContain("limit 2");
@@ -166,7 +176,7 @@ describe("message-search extension", () => {
     const longContent = "The quick brown fox ".repeat(25);
     insertMessage(longContent);
 
-    const tool = await getSearchTool();
+    const { search: tool } = await getTools();
     const result = await executeWithContext(tool, "c1", { query: "quick brown fox", details_max_chars: 50 });
     expect(result.details.count).toBe(1);
     expect(result.details.results[0].content.length).toBeLessThanOrEqual(51);
@@ -178,7 +188,7 @@ describe("message-search extension", () => {
   test("details_max_chars 0 omits content", async () => {
     insertMessage("Some content here");
 
-    const tool = await getSearchTool();
+    const { search: tool } = await getTools();
     const result = await executeWithContext(tool, "c1", { query: "Some content", details_max_chars: 0 });
     expect(result.details.results[0].content).toBe("");
     expect(result.details.results[0].content_truncated).toBe(true);
@@ -187,8 +197,8 @@ describe("message-search extension", () => {
   test("chat_jid 'all' searches across chats", async () => {
     insertMessage("In test chat");
 
-    storeChatMetadata("web:other", new Date().toISOString(), "Web");
-    storeMessage({
+    db.storeChatMetadata("web:other", new Date().toISOString(), "Web");
+    db.storeMessage({
       id: `msg-other-${Math.random()}`,
       chat_jid: "web:other",
       sender: "user",
@@ -199,7 +209,7 @@ describe("message-search extension", () => {
       is_bot_message: false,
     });
 
-    const tool = await getSearchTool();
+    const { search: tool } = await getTools();
     const result = await executeWithContext(tool, "c1", { query: "In", chat_jid: "all" });
     expect(result.details.count).toBe(2);
   });
@@ -207,7 +217,7 @@ describe("message-search extension", () => {
   test("chat_jid '*' searches across chats", async () => {
     insertMessage("Wildcard test");
 
-    const tool = await getSearchTool();
+    const { search: tool } = await getTools();
     const result = await executeWithContext(tool, "c1", { query: "Wildcard", chat_jid: "*" });
     expect(result.details.count).toBe(1);
   });
@@ -215,14 +225,14 @@ describe("message-search extension", () => {
   test("defaults to chat context", async () => {
     insertMessage("Default chat message");
 
-    const tool = await getSearchTool();
+    const { search: tool } = await getTools();
     const result = await executeWithContext(tool, "c1", { query: "Default chat" });
     expect(result.details.count).toBe(1);
-    expect(result.details.results[0].chat_jid).toBe("web:test");
+    expect(result.details.results[0].chat_jid).toBe(chatJid);
   });
 
   test("empty hashtag returns nothing", async () => {
-    const tool = await getSearchTool();
+    const { search: tool } = await getTools();
     const result = await executeWithContext(tool, "c1", { query: "#" });
     expect(result.content[0].text).toContain("No matching messages");
   });
@@ -230,7 +240,7 @@ describe("message-search extension", () => {
   test("FTS syntax error falls back to LIKE", async () => {
     insertMessage("Special chars: foo(bar)");
 
-    const tool = await getSearchTool();
+    const { search: tool } = await getTools();
     // Invalid FTS5 syntax should fall back to LIKE
     const result = await executeWithContext(tool, "c1", { query: "foo(bar)" });
     expect(result.details.count).toBe(1);
@@ -240,7 +250,7 @@ describe("message-search extension", () => {
     insertMessage("User says hello", { sender: "user" });
     insertMessage("Assistant says hello", { sender: "assistant", is_bot_message: true, sender_name: "Pi" });
 
-    const tool = await getSearchTool();
+    const { search: tool } = await getTools();
     const userOnly = await executeWithContext(tool, "c1", { query: "hello", role: "user" });
     expect(userOnly.details.count).toBe(1);
     expect(userOnly.details.results[0].is_bot_message).toBe(0);
@@ -253,8 +263,8 @@ describe("message-search extension", () => {
   test("chat_jid all includes assistant messages", async () => {
     insertMessage("Local user message");
 
-    storeChatMetadata("web:other", new Date().toISOString(), "Web");
-    storeMessage({
+    db.storeChatMetadata("web:other", new Date().toISOString(), "Web");
+    db.storeMessage({
       id: `msg-other-${Math.random()}`,
       chat_jid: "web:other",
       sender: "assistant",
@@ -265,9 +275,41 @@ describe("message-search extension", () => {
       is_bot_message: true,
     });
 
-    const tool = await getSearchTool();
+    const { search: tool } = await getTools();
     const result = await executeWithContext(tool, "c1", { query: "other chat unique", chat_jid: "all", role: "assistant" });
     expect(result.details.count).toBe(1);
     expect(result.details.results[0].chat_jid).toBe("web:other");
+  });
+
+  test("get_message returns full content and context", async () => {
+    insertMessage("before message one");
+    insertMessage("before message two");
+    insertMessage("target body content");
+    insertMessage("after message one");
+
+    const { search, getMessage } = await getTools();
+    const lookup = await executeWithContext(search, "c1", { query: "target body content" });
+    const rowid = lookup.details.results[0].rowid;
+
+    const result = await executeWithContext(getMessage, "c2", { row_id: rowid, before: 2, after: 1 });
+    expect(result.details.found).toBe(true);
+    expect(result.details.result?.content).toContain("target body content");
+    expect(result.details.context_before.length).toBe(2);
+    expect(result.details.context_after.length).toBe(1);
+  });
+
+  test("get_message supports larger details_max_chars", async () => {
+    const longContent = "longtoken ".repeat(7000); // 70k chars
+    insertMessage(longContent);
+
+    const { search, getMessage } = await getTools();
+    const lookup = await executeWithContext(search, "c1", { query: "longtoken" });
+    const rowid = lookup.details.results[0].rowid;
+
+    const result = await executeWithContext(getMessage, "c2", { row_id: rowid, details_max_chars: 40000 });
+    expect(result.details.found).toBe(true);
+    expect(result.details.result?.content.length).toBeGreaterThan(20000);
+    expect(result.details.result?.content_truncated).toBe(true);
+    expect(result.details.details_max_chars).toBe(40000);
   });
 });

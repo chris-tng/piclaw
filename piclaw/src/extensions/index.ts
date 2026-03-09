@@ -7,7 +7,7 @@
  *
  * Extensions registered here:
  *   - fileAttachments: attach_file tool for delivering workspace files.
- *   - messageSearch: search_messages tool for querying chat history.
+ *   - messageSearch: search_messages + get_message tools for querying/retrieving chat history.
  *   - modelControl: get_model_state, list_models, switch_model, switch_thinking.
  *   - internalTools: list_internal_tools for tool discovery.
  *   - keychainTools: keychain for listing/retrieving keychain entries.

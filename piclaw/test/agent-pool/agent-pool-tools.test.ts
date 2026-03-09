@@ -2,7 +2,7 @@
  * test/agent-pool/agent-pool-tools.test.ts – Tests for built-in extension tool registration.
  *
  * Verifies that builtinExtensionFactories register the expected tools
- * (attach_file, search_messages, model control, tool discovery, keychain, SQL introspection, workspace search)
+ * (attach_file, search_messages/get_message, model control, tool discovery, keychain, SQL introspection, workspace search)
  * and slash commands (/tasks, /scheduled) on a mock ExtensionAPI.
  */
 
@@ -55,6 +55,7 @@ describe("builtin extension factories", () => {
     // Tools from extensions
     expect(fake.tools.has("attach_file")).toBe(true);
     expect(fake.tools.has("search_messages")).toBe(true);
+    expect(fake.tools.has("get_message")).toBe(true);
     expect(fake.tools.has("search_workspace")).toBe(true);
     expect(fake.tools.has("get_model_state")).toBe(true);
     expect(fake.tools.has("list_models")).toBe(true);

@@ -45,7 +45,34 @@ const SearchMessagesSchema = Type.Object({
   ),
 });
 
+const GetMessageSchema = Type.Object({
+  row_id: Type.Integer({ description: "Message rowid to retrieve.", minimum: 1 }),
+  chat_jid: Type.Optional(
+    Type.String({
+      description: "Optional chat scope. Use 'all' or '*' to disable chat filtering. Defaults to current chat.",
+    }),
+  ),
+  role: Type.Optional(
+    Type.Union([
+      Type.Literal("user"),
+      Type.Literal("assistant"),
+    ], {
+      description: "Optional sender role filter for the target/context rows.",
+    }),
+  ),
+  before: Type.Optional(Type.Integer({ description: "Context rows before row_id (same chat, 0-20).", minimum: 0, maximum: 20 })),
+  after: Type.Optional(Type.Integer({ description: "Context rows after row_id (same chat, 0-20).", minimum: 0, maximum: 20 })),
+  details_max_chars: Type.Optional(
+    Type.Integer({
+      description: "Limit content size in details payload (0 omits content). Max 200000 for full retrieval.",
+      minimum: 0,
+      maximum: 200000,
+    }),
+  ),
+});
+
 type SearchMessagesParams = Static<typeof SearchMessagesSchema>;
+type GetMessageParams = Static<typeof GetMessageSchema>;
 
 // ── Types ─────────────────────────────────────────────────
 
@@ -70,6 +97,14 @@ type SearchMessagesDetails = {
   details_max_chars?: number;
 };
 
+type GetMessageDetails = {
+  found: boolean;
+  result: MessageResultRow | null;
+  context_before: MessageResultRow[];
+  context_after: MessageResultRow[];
+  details_max_chars?: number;
+};
+
 // ── Helpers ───────────────────────────────────────────────
 
 function clampNumber(value: number | undefined, fallback: number, min: number, max: number): number {
@@ -84,6 +119,13 @@ function normalizeDetailsMax(value: number | undefined): number | undefined {
   const num = Number(value);
   if (Number.isNaN(num)) return undefined;
   return Math.min(Math.max(num, 0), 20000);
+}
+
+function normalizeGetMessageDetailsMax(value: number | undefined): number | undefined {
+  if (!Number.isFinite(value)) return undefined;
+  const num = Number(value);
+  if (Number.isNaN(num)) return undefined;
+  return Math.min(Math.max(num, 0), 200000);
 }
 
 function applyDetailsLimit(row: MessageRow, maxChars: number | undefined): MessageResultRow {
@@ -120,11 +162,25 @@ function normalizeRole(input: string | undefined): number | null {
   return null;
 }
 
+function roleLabel(row: MessageRow): "assistant" | "user" {
+  return row.is_bot_message ? "assistant" : "user";
+}
+
 function formatRow(row: MessageRow): string {
-  const role = row.is_bot_message ? "assistant" : "user";
+  const role = roleLabel(row);
   const sender = row.sender_name || row.sender || role;
   const preview = truncate(row.content, 160);
   return `• [${row.rowid}] (${row.chat_jid}) ${sender} (${role}) — ${preview} (${row.timestamp})`;
+}
+
+function formatFullRow(row: MessageResultRow): string {
+  const role = roleLabel(row);
+  const sender = row.sender_name || row.sender || role;
+  const meta = `[${row.rowid}] (${row.chat_jid}) ${sender} (${role}) — ${row.timestamp}`;
+  const body = row.content?.length ? row.content : "(content omitted)";
+  if (!row.content_truncated) return `${meta}\n\n${body}`;
+  const fullLen = row.content_full_length ?? row.content.length;
+  return `${meta}\n\n${body}\n\n[content truncated, original length ${fullLen} chars]`;
 }
 
 function getDefaultChatJid(): string {
@@ -150,6 +206,53 @@ function fetchByRowId(
     return (db.prepare(`SELECT ${cols} FROM messages WHERE rowid = ? AND is_bot_message = ?`).get(rowId, roleFilter) as MessageRow | undefined) ?? null;
   }
   return (db.prepare(`SELECT ${cols} FROM messages WHERE rowid = ?`).get(rowId) as MessageRow | undefined) ?? null;
+}
+
+function fetchContextRows(
+  db: ReturnType<typeof getDb>,
+  row: MessageRow,
+  before: number,
+  after: number,
+  roleFilter: number | null
+): { beforeRows: MessageRow[]; afterRows: MessageRow[] } {
+  const cols = "rowid, chat_jid, sender, sender_name, content, timestamp, is_bot_message";
+  let beforeRows: MessageRow[] = [];
+  let afterRows: MessageRow[] = [];
+
+  if (before > 0) {
+    if (roleFilter !== null) {
+      beforeRows = db.prepare(
+        `SELECT ${cols} FROM messages
+         WHERE chat_jid = ? AND rowid < ? AND is_bot_message = ?
+         ORDER BY rowid DESC LIMIT ?`
+      ).all(row.chat_jid, row.rowid, roleFilter, before) as MessageRow[];
+    } else {
+      beforeRows = db.prepare(
+        `SELECT ${cols} FROM messages
+         WHERE chat_jid = ? AND rowid < ?
+         ORDER BY rowid DESC LIMIT ?`
+      ).all(row.chat_jid, row.rowid, before) as MessageRow[];
+    }
+    beforeRows.reverse();
+  }
+
+  if (after > 0) {
+    if (roleFilter !== null) {
+      afterRows = db.prepare(
+        `SELECT ${cols} FROM messages
+         WHERE chat_jid = ? AND rowid > ? AND is_bot_message = ?
+         ORDER BY rowid ASC LIMIT ?`
+      ).all(row.chat_jid, row.rowid, roleFilter, after) as MessageRow[];
+    } else {
+      afterRows = db.prepare(
+        `SELECT ${cols} FROM messages
+         WHERE chat_jid = ? AND rowid > ?
+         ORDER BY rowid ASC LIMIT ?`
+      ).all(row.chat_jid, row.rowid, after) as MessageRow[];
+    }
+  }
+
+  return { beforeRows, afterRows };
 }
 
 function searchMessages(
@@ -258,6 +361,57 @@ async function execute(
   return { content: [{ type: "text", text: `${header}\n${lines.join("\n")}` }], details };
 }
 
+async function executeGetMessage(
+  _toolCallId: string,
+  params: GetMessageParams,
+  _signal?: AbortSignal,
+  _onUpdate?: unknown,
+  _ctx?: ExtensionContext,
+): Promise<AgentToolResult<GetMessageDetails>> {
+  const db = getDb();
+  const chatJid = normalizeChatJid(params.chat_jid, getDefaultChatJid());
+  const roleFilter = normalizeRole(params.role);
+  const before = clampNumber(params.before, 0, 0, 20);
+  const after = clampNumber(params.after, 0, 0, 20);
+  const detailsMaxChars = normalizeGetMessageDetailsMax(params.details_max_chars);
+  const rowId = Number(params.row_id);
+
+  const row = fetchByRowId(db, rowId, chatJid, roleFilter);
+  if (!row) {
+    return {
+      content: [{ type: "text", text: `No message found for rowid ${rowId}.` }],
+      details: { found: false, result: null, context_before: [], context_after: [] },
+    };
+  }
+
+  const { beforeRows, afterRows } = fetchContextRows(db, row, before, after, roleFilter);
+  const detailRow = applyDetailsLimit(row, detailsMaxChars);
+  const detailBefore = detailsMaxChars === undefined
+    ? beforeRows
+    : beforeRows.map((contextRow) => applyDetailsLimit(contextRow, detailsMaxChars));
+  const detailAfter = detailsMaxChars === undefined
+    ? afterRows
+    : afterRows.map((contextRow) => applyDetailsLimit(contextRow, detailsMaxChars));
+
+  const details: GetMessageDetails = {
+    found: true,
+    result: detailRow,
+    context_before: detailBefore,
+    context_after: detailAfter,
+  };
+  if (detailsMaxChars !== undefined) details.details_max_chars = detailsMaxChars;
+
+  const chunks = [formatFullRow(detailRow)];
+  if (beforeRows.length > 0) {
+    chunks.push(`Context before (${beforeRows.length}):\n${beforeRows.map(formatRow).join("\n")}`);
+  }
+  if (afterRows.length > 0) {
+    chunks.push(`Context after (${afterRows.length}):\n${afterRows.map(formatRow).join("\n")}`);
+  }
+
+  return { content: [{ type: "text", text: chunks.join("\n\n") }], details };
+}
+
 // ── System prompt hint ─────────────────────────────────────
 
 const SEARCH_HINT = [
@@ -265,6 +419,7 @@ const SEARCH_HINT = [
   "Use search_messages to look up previous conversations, find messages by",
   "keyword, or retrieve messages by hashtag. Supports full-text search,",
   "#hashtag filtering, and row_id lookup for specific messages.",
+  "Use get_message for direct full-content retrieval by row_id with optional context rows.",
 ].join("\n");
 
 // ── Factory ───────────────────────────────────────────────
@@ -281,5 +436,13 @@ export const messageSearch: ExtensionFactory = (pi: ExtensionAPI) => {
     description: "Search piclaw message history using the FTS index and retrieve matching messages.",
     parameters: SearchMessagesSchema,
     execute,
+  });
+
+  pi.registerTool({
+    name: "get_message",
+    label: "get_message",
+    description: "Retrieve a specific message by row_id with full content and optional context rows.",
+    parameters: GetMessageSchema,
+    execute: executeGetMessage,
   });
 };
