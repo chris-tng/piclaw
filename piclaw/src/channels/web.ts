@@ -32,6 +32,12 @@ import {
   isRequestTotpSession,
 } from "./web/session-auth.js";
 import { isInternalSecretRequestAuthorized } from "./web/internal-secret.js";
+import {
+  base64UrlToBuffer,
+  bufferToBase64Url,
+  resolveWebauthnRpInfo,
+  WebauthnChallengeTracker,
+} from "./web/webauthn-challenges.js";
 import { TotpFailureTracker } from "./web/totp-failure-tracker.js";
 import {
   ASSISTANT_AVATAR,
@@ -102,7 +108,7 @@ import { getAgentsResponse } from "./web/agents-service.js";
 import { buildAvatarResponse, ensureAvatarCache, resolveAvatarUrl } from "./web/avatar-service.js";
 import { broadcastAgentResponse, broadcastInteractionUpdated } from "./web/interaction-service.js";
 import { RemoteInteropService } from "../remote/service.js";
-import { getClientKey as getRequestClientKey, getRequestOriginParts } from "./web/http/client.js";
+import { getClientKey as getRequestClientKey } from "./web/http/client.js";
 
 const DEFAULT_CHAT_JID = "web:default";
 const DEFAULT_AGENT_ID = "default";
@@ -130,14 +136,7 @@ export class WebChannel {
   pendingSteering = new Map<string, string[]>();
   activeAgentStatuses = new Map<string, Record<string, unknown>>();
   lastCommandInteractionId: number | null = null;
-  pendingWebauthnRegistrations = new Map<
-    string,
-    { challenge: string; rpId: string; userId: string; createdAt: number }
-  >();
-  pendingWebauthnLogins = new Map<
-    string,
-    { challenge: string; rpId: string; userId: string; createdAt: number }
-  >();
+  webauthnChallenges = new WebauthnChallengeTracker();
   totpFailureTracker = new TotpFailureTracker();
   thoughtBuffers = new Map<string, { text: string; totalLines: number; updatedAt: number }>();
   draftBuffers = new Map<string, { text: string; totalLines: number; updatedAt: number }>();
@@ -515,42 +514,6 @@ export class WebChannel {
     return buildSessionCookieHeader(token, req, WEB_SESSION_TTL, Boolean(WEB_TLS_CERT && WEB_TLS_KEY));
   }
 
-  private cleanupWebauthnChallenges(now = Date.now()): void {
-    const cutoff = now - 10 * 60 * 1000;
-    for (const [token, entry] of this.pendingWebauthnRegistrations.entries()) {
-      if (entry.createdAt < cutoff) this.pendingWebauthnRegistrations.delete(token);
-    }
-    for (const [token, entry] of this.pendingWebauthnLogins.entries()) {
-      if (entry.createdAt < cutoff) this.pendingWebauthnLogins.delete(token);
-    }
-  }
-
-  private getWebauthnRpInfo(req: Request): { rpId: string; origin: string } {
-    const url = new URL(req.url);
-    const originHeader = req.headers.get("origin");
-    if (originHeader && originHeader !== "null") {
-      try {
-        const originUrl = new URL(originHeader);
-        return { rpId: originUrl.hostname, origin: originUrl.origin };
-      } catch {
-        // ignore invalid Origin header
-      }
-    }
-
-    const { proto, host } = getRequestOriginParts(req);
-    const rpId = host ? host.split(":")[0] : url.hostname;
-    const origin = `${proto}://${host || url.host}`;
-    return { rpId, origin };
-  }
-
-  private bufferToBase64Url(value: Uint8Array): string {
-    return Buffer.from(value).toString("base64url");
-  }
-
-  private base64UrlToBuffer(value: string): Uint8Array<ArrayBuffer> {
-    return Buffer.from(value, "base64url") as Uint8Array<ArrayBuffer>;
-  }
-
   async handleAuthVerify(req: Request): Promise<Response> {
     if (!this.isAuthEnabled() || !this.isTotpEnabled()) return this.json({ error: "Auth disabled" }, 404);
     let body: { code?: string };
@@ -600,7 +563,7 @@ export class WebChannel {
   async handleWebauthnLoginStart(req: Request): Promise<Response> {
     if (!this.isPasskeyEnabled()) return this.json({ error: "Passkeys disabled" }, 404);
 
-    const { rpId } = this.getWebauthnRpInfo(req);
+    const { rpId } = resolveWebauthnRpInfo(req);
     const credentials = getWebauthnCredentialsForRpId(DEFAULT_WEB_USER_ID, rpId);
     if (credentials.length === 0) {
       this.logAuthEvent(req, "WebAuthn login requested but no passkeys registered");
@@ -622,12 +585,10 @@ export class WebChannel {
     });
 
     const challengeToken = randomSessionToken();
-    this.cleanupWebauthnChallenges();
-    this.pendingWebauthnLogins.set(challengeToken, {
+    this.webauthnChallenges.trackLogin(challengeToken, {
       challenge: options.challenge,
       rpId,
       userId: DEFAULT_WEB_USER_ID,
-      createdAt: Date.now(),
     });
 
     return this.json({ token: challengeToken, options });
@@ -648,13 +609,11 @@ export class WebChannel {
       return this.json({ error: "Missing credential" }, 400);
     }
 
-    this.cleanupWebauthnChallenges();
-    const pending = this.pendingWebauthnLogins.get(token);
+    const pending = this.webauthnChallenges.consumeLogin(token);
     if (!pending) {
       this.logAuthEvent(req, "WebAuthn login expired or unknown token");
       return this.json({ error: "Login expired" }, 400);
     }
-    this.pendingWebauthnLogins.delete(token);
 
     const stored = getWebauthnCredentialById(credential.id);
     if (!stored || stored.rp_id !== pending.rpId) {
@@ -664,12 +623,12 @@ export class WebChannel {
 
     const credentialRecord: WebAuthnCredential = {
       id: stored.credential_id,
-      publicKey: this.base64UrlToBuffer(stored.public_key),
+      publicKey: base64UrlToBuffer(stored.public_key),
       counter: stored.sign_count || 0,
       transports: stored.transports ? JSON.parse(stored.transports) : undefined,
     };
 
-    const { origin } = this.getWebauthnRpInfo(req);
+    const { origin } = resolveWebauthnRpInfo(req);
     let result;
     try {
       result = await verifyAuthenticationResponse({
@@ -727,7 +686,7 @@ export class WebChannel {
       return this.json({ error: "Invalid or expired enrol token" }, 400);
     }
 
-    const { rpId } = this.getWebauthnRpInfo(req);
+    const { rpId } = resolveWebauthnRpInfo(req);
     const existing = getWebauthnCredentialsForRpId(enrollment.user_id, rpId);
     const excludeCredentials = existing.map((cred) => ({
       id: cred.credential_id,
@@ -743,12 +702,10 @@ export class WebChannel {
       excludeCredentials,
     });
 
-    this.cleanupWebauthnChallenges();
-    this.pendingWebauthnRegistrations.set(token, {
+    this.webauthnChallenges.trackRegistration(token, {
       challenge: options.challenge,
       rpId,
       userId: enrollment.user_id,
-      createdAt: Date.now(),
     });
 
     return this.json({ token, options });
@@ -769,13 +726,11 @@ export class WebChannel {
       return this.json({ error: "Missing credential" }, 400);
     }
 
-    this.cleanupWebauthnChallenges();
-    const pending = this.pendingWebauthnRegistrations.get(token);
+    const pending = this.webauthnChallenges.consumeRegistration(token);
     if (!pending) {
       this.logAuthEvent(req, "WebAuthn registration expired or unknown token");
       return this.json({ error: "Registration expired" }, 400);
     }
-    this.pendingWebauthnRegistrations.delete(token);
 
     const enrollment = consumeWebauthnEnrollment(token);
     if (!enrollment) {
@@ -787,7 +742,7 @@ export class WebChannel {
       return this.json({ error: "Enrollment mismatch" }, 400);
     }
 
-    const { origin } = this.getWebauthnRpInfo(req);
+    const { origin } = resolveWebauthnRpInfo(req);
     let result;
     try {
       result = await verifyRegistrationResponse({
@@ -816,7 +771,7 @@ export class WebChannel {
       user_id: pending.userId,
       rp_id: pending.rpId,
       credential_id: info.credential.id,
-      public_key: this.bufferToBase64Url(info.credential.publicKey),
+      public_key: bufferToBase64Url(info.credential.publicKey),
       sign_count: info.credential.counter || 0,
       transports,
     });
