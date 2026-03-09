@@ -132,7 +132,7 @@ function replaceNodeAtPath(node, targetPath, nextNode) {
     return changed ? { ...node, children } : node;
 }
 
-const STARBURST_MAX_DEPTH = 2;
+const STARBURST_MAX_DEPTH = 4;
 const STARBURST_MAX_CHILDREN = 14;
 
 function computeSubtreeBytes(node) {
@@ -205,20 +205,24 @@ function buildFolderSizeHierarchy(node, depth = 0) {
     return out;
 }
 
-function hashColorSeed(value) {
-    const text = String(value || 'seed');
-    let hash = 0;
-    for (let i = 0; i < text.length; i += 1) {
-        hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
-    }
-    return Math.abs(hash);
+function detectDarkTheme() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return false;
+    const root = document.documentElement;
+    const body = document.body;
+    const rootTheme = root?.getAttribute?.('data-theme')?.toLowerCase?.() || '';
+    if (rootTheme === 'dark') return true;
+    if (rootTheme === 'light') return false;
+    if (root?.classList?.contains('dark') || body?.classList?.contains('dark')) return true;
+    if (root?.classList?.contains('light') || body?.classList?.contains('light')) return false;
+    return Boolean(window.matchMedia?.('(prefers-color-scheme: dark)')?.matches);
 }
 
-function segmentColor(path, depth) {
-    const hue = hashColorSeed(path) % 360;
-    const sat = depth === 1 ? 72 : 62;
-    const light = depth === 1 ? 52 : 62;
-    return `hsl(${hue} ${sat}% ${light}%)`;
+function segmentColorFromAngle(startAngle, depth, isDarkTheme) {
+    // Daisy-like palette: hue follows segment angle; depth controls saturation/lightness.
+    const hue = ((((startAngle + Math.PI / 2) * 180) / Math.PI) + 360) % 360;
+    const sat = isDarkTheme ? Math.max(30, 70 - depth * 10) : Math.max(34, 66 - depth * 8);
+    const light = isDarkTheme ? Math.min(70, 45 + depth * 5) : Math.min(60, 42 + depth * 4);
+    return `hsl(${hue.toFixed(1)} ${sat}% ${light}%)`;
 }
 
 function polar(cx, cy, radius, angle) {
@@ -243,15 +247,17 @@ function describeDonutSegment(cx, cy, innerRadius, outerRadius, startAngle, endA
     ].join(' ');
 }
 
-function createFolderStarburstPayload(root, truncated = false) {
+function createFolderStarburstPayload(root, truncated = false, isDarkTheme = false) {
     if (!root) return null;
     const totalSize = computeSubtreeBytes(root);
     const hierarchy = buildFolderSizeHierarchy(root, 0);
     const segments = [];
     const legend = [];
     const ringByDepth = {
-        1: [30, 68],
-        2: [70, 104],
+        1: [26, 46],
+        2: [48, 68],
+        3: [70, 90],
+        4: [92, 112],
     };
 
     const walk = (node, start, end, depth) => {
@@ -273,7 +279,7 @@ function createFolderStarburstPayload(root, truncated = false) {
 
             const ring = ringByDepth[depth];
             if (ring) {
-                const color = segmentColor(child.path, depth);
+                const color = segmentColorFromAngle(childStart, depth, isDarkTheme);
                 segments.push({
                     key: `${child.path}:${depth}`,
                     path: child.path,
@@ -397,6 +403,7 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
     const [dropTarget,   setDropTarget]    = useState(null);
     const [uploading,    setUploading]     = useState(false);
     const [folderChart,  setFolderChart]   = useState(null);
+    const [isDarkTheme,  setIsDarkTheme]   = useState(() => detectDarkTheme());
 
     // ── Stable refs (never trigger re-renders) ────────────────────────────────
     const expandedRef     = useRef(expanded);
@@ -439,6 +446,38 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
     useEffect(() => { dragActiveRef.current = dragActive; }, [dragActive]);
     useEffect(() => { selectedPathRef.current = selectedPath; }, [selectedPath]);
     useEffect(() => { previewRef.current = preview; }, [preview]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+        const syncTheme = () => setIsDarkTheme(detectDarkTheme());
+        syncTheme();
+
+        const media = window.matchMedia?.('(prefers-color-scheme: dark)');
+        const onMediaChange = () => syncTheme();
+        if (media?.addEventListener) media.addEventListener('change', onMediaChange);
+        else if (media?.addListener) media.addListener(onMediaChange);
+
+        const observer = typeof MutationObserver !== 'undefined'
+            ? new MutationObserver(() => syncTheme())
+            : null;
+        observer?.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['class', 'data-theme'],
+        });
+        if (document.body) {
+            observer?.observe(document.body, {
+                attributes: true,
+                attributeFilter: ['class', 'data-theme'],
+            });
+        }
+
+        return () => {
+            if (media?.removeEventListener) media.removeEventListener('change', onMediaChange);
+            else if (media?.removeListener) media.removeListener(onMediaChange);
+            observer?.disconnect();
+        };
+    }, []);
 
     // ── loadPreview ───────────────────────────────────────────────────────────
     const loadPreview = async (path) => {
@@ -648,14 +687,14 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
         getWorkspaceTree(selectedPath, 8, showHidden)
             .then((data) => {
                 if (folderChartRequestRef.current !== requestId) return;
-                const payload = createFolderStarburstPayload(data?.root, Boolean(data?.truncated));
+                const payload = createFolderStarburstPayload(data?.root, Boolean(data?.truncated), isDarkTheme);
                 setFolderChart({ loading: false, error: null, payload });
             })
             .catch((err) => {
                 if (folderChartRequestRef.current !== requestId) return;
                 setFolderChart({ loading: false, error: err?.message || 'Failed to load folder size chart', payload: null });
             });
-    }, [selectedPath, selectedIsDir, showHidden]);
+    }, [selectedPath, selectedIsDir, showHidden, isDarkTheme]);
 
     const canEdit = Boolean(preview && preview.kind === 'text' && !selectedIsDir && (!preview.size || preview.size <= 256 * 1024));
     const editTitle = canEdit
