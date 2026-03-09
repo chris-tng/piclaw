@@ -34,9 +34,27 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function extractTextContent(content: Array<{ type: string; text?: string }> | undefined): string {
-  if (!content) return "";
-  return content.map((item) => (item.type === "text" ? item.text || "" : "")).join("");
+type BashToolInstance = ReturnType<typeof createBashTool>;
+type BashToolParams = Parameters<BashToolInstance["execute"]>[1];
+type BashToolSignal = Parameters<BashToolInstance["execute"]>[2];
+type BashToolUpdate = Parameters<BashToolInstance["execute"]>[3];
+
+function extractTextContent(content: unknown): string {
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((item) => {
+      if (!item || typeof item !== "object") return "";
+      const block = item as { type?: unknown; text?: unknown };
+      if (block.type !== "text") return "";
+      return typeof block.text === "string" ? block.text : "";
+    })
+    .join("");
+}
+
+function readDetailsStringField(details: unknown, key: string): string | undefined {
+  if (!details || typeof details !== "object") return undefined;
+  const value = (details as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : undefined;
 }
 
 function shouldStoreOutput(text: string, lineCount: number): boolean {
@@ -52,14 +70,14 @@ export function createContextBashTool(cwd: string) {
     ...base,
     label: "bash",
     description: `${base.description} Large outputs are stored and summarized to save context.`,
-    execute: async (toolCallId: string, params: any, signal?: AbortSignal, onUpdate?: any) => {
+    execute: async (toolCallId: string, params: BashToolParams, signal?: BashToolSignal, onUpdate?: BashToolUpdate) => {
       const result = await base.execute(toolCallId, params, signal, onUpdate);
-      const text = extractTextContent(result.content as any);
-      const details: any = result.details ?? {};
+      const text = extractTextContent(result.content);
 
       let fullOutput = text;
-      if (details.fullOutputPath && existsSync(details.fullOutputPath)) {
-        const fileText = readToolOutputFile(details.fullOutputPath);
+      const fullOutputPath = readDetailsStringField(result.details, "fullOutputPath");
+      if (fullOutputPath && existsSync(fullOutputPath)) {
+        const fileText = readToolOutputFile(fullOutputPath);
         if (fileText !== null) fullOutput = fileText;
       }
 
@@ -154,7 +172,7 @@ export function createBatchExecTool(cwd: string, bashTool = createContextBashToo
       for (const command of params.commands || []) {
         try {
           const result = await base.execute("", { command, timeout: params.timeout }, undefined, undefined);
-          const text = extractTextContent(result.content as any).trim() || "(no output)";
+          const text = extractTextContent(result.content).trim() || "(no output)";
           outputs.push(`Command: ${command}\n${text}`);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);

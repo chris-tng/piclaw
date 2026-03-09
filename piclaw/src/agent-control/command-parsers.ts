@@ -19,6 +19,28 @@ const simple = (type: AgentControlCommand["type"]): CommandParser => {
   return (_args, raw) => ({ type, raw } as AgentControlCommand);
 };
 
+type PasskeyAction = Extract<AgentControlCommand, { type: "passkey" }>["action"];
+type TotpAction = Extract<AgentControlCommand, { type: "totp" }>["action"];
+type SearchScope = Extract<AgentControlCommand, { type: "search_workspace" }>["scope"];
+
+function parsePasskeyAction(action: string | undefined): PasskeyAction {
+  if (!action) return undefined;
+  return ["enrol", "enroll", "list", "delete", "remove"].includes(action) ? (action as PasskeyAction) : undefined;
+}
+
+function parseTotpAction(action: string | undefined): TotpAction {
+  if (!action) return undefined;
+  return action === "enrol" || action === "enroll" ? action : undefined;
+}
+
+function parseSearchScope(value: string | undefined): SearchScope {
+  if (!value) return undefined;
+  const normalized = value.toLowerCase();
+  return normalized === "notes" || normalized === "skills" || normalized === "all"
+    ? normalized
+    : undefined;
+}
+
 /** Parse /model arguments: provider/modelId or bare model name. */
 export function parseModel(args: string, raw: string): AgentControlCommand {
   const tokens = args.split(/\s+/).filter(Boolean);
@@ -197,11 +219,11 @@ export function parseExportHtml(args: string, raw: string): AgentControlCommand 
 /** Parse /passkey arguments: action + optional target. */
 export function parsePasskey(args: string, raw: string): AgentControlCommand {
   const tokens = splitArgs(args);
-  const action = tokens[0] ? tokens[0].toLowerCase() : undefined;
+  const action = parsePasskeyAction(tokens[0]?.toLowerCase());
   const target = tokens.slice(1).join(" ").trim() || undefined;
   return {
     type: "passkey",
-    action: action as any,
+    action,
     target,
     raw,
   };
@@ -210,10 +232,10 @@ export function parsePasskey(args: string, raw: string): AgentControlCommand {
 /** Parse /totp arguments: action. */
 export function parseTotp(args: string, raw: string): AgentControlCommand {
   const tokens = splitArgs(args);
-  const action = tokens[0] ? tokens[0].toLowerCase() : undefined;
+  const action = parseTotpAction(tokens[0]?.toLowerCase());
   return {
     type: "totp",
-    action: action as any,
+    action,
     raw,
   };
 }
@@ -334,7 +356,7 @@ export function parseSearch(args: string, raw: string): AgentControlCommand {
     if (token === "--scope") {
       const next = tokens[i + 1];
       if (next && !next.startsWith("--")) {
-        scope = next as any;
+        scope = parseSearchScope(next);
         i += 2;
         continue;
       }
@@ -342,7 +364,7 @@ export function parseSearch(args: string, raw: string): AgentControlCommand {
       continue;
     }
     if (token.startsWith("--scope=")) {
-      scope = token.slice("--scope=".length) as any;
+      scope = parseSearchScope(token.slice("--scope=".length));
       i += 1;
       continue;
     }

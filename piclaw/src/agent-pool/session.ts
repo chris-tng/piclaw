@@ -25,6 +25,7 @@ import {
   type AuthStorage,
   type ModelRegistry,
   type SettingsManager,
+  type Tool,
 } from "@mariozechner/pi-coding-agent";
 
 import { SESSIONS_DIR, WORKSPACE_DIR } from "../core/config.js";
@@ -98,7 +99,7 @@ export async function createDefaultSession(
     authStorage: AuthStorage;
     modelRegistry: ModelRegistry;
     settingsManager: SettingsManager;
-    tools: unknown[];
+    tools: Tool[];
   }
 ): Promise<AgentSession> {
   const chatSessionDir = ensureSessionDir(chatJid);
@@ -119,7 +120,7 @@ export async function createDefaultSession(
     settingsManager: options.settingsManager,
     resourceLoader,
     sessionManager: SessionManager.continueRecent(WORKSPACE_DIR, chatSessionDir),
-    tools: options.tools as any,
+    tools: options.tools,
   });
 
   return session;

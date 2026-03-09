@@ -39,7 +39,7 @@ export async function handleModel(session: AgentSession, modelRegistry: ModelReg
       };
     }
 
-    const uniqueModels = new Map<string, Model<any>>();
+    const uniqueModels = new Map<string, Model<unknown>>();
     for (const model of available) {
       const key = `${model.provider}/${model.id}`;
       if (!uniqueModels.has(key)) {
@@ -64,7 +64,7 @@ export async function handleModel(session: AgentSession, modelRegistry: ModelReg
   }
 
   const models = registry.getAll();
-  let selected: Model<any> | undefined;
+  let selected: Model<unknown> | undefined;
 
   if (command.provider) {
     selected = normalizeModelMatch(models, command.provider, command.modelId);

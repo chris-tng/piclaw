@@ -14,6 +14,57 @@ import { extractTextFromContent, formatCompactNumber, truncateText } from "../ag
 type TreeCommand = Extract<AgentControlCommand, { type: "tree" }>;
 type LabelCommand = Extract<AgentControlCommand, { type: "label" }>;
 type LabelsCommand = Extract<AgentControlCommand, { type: "labels" }>;
+type SessionTreeNode = ReturnType<AgentSession["sessionManager"]["getTree"]>[number];
+type SessionTreeEntry = SessionTreeNode["entry"];
+
+function getToolCallName(content: unknown): string | null {
+  if (!Array.isArray(content)) return null;
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+    const candidate = block as { type?: unknown; name?: unknown };
+    if (candidate.type === "toolCall" && typeof candidate.name === "string") {
+      return candidate.name;
+    }
+  }
+  return null;
+}
+
+function describeEntry(entry: SessionTreeEntry): string {
+  switch (entry.type) {
+    case "message": {
+      const msg = entry.message;
+      const role = msg?.role || "message";
+      if (role === "toolResult") {
+        return `toolResult: ${msg.toolName || "tool"}`;
+      }
+      const text = extractTextFromContent(msg?.content);
+      if (text) {
+        return `${role}: "${truncateText(text, 80)}"`;
+      }
+      const toolCallName = getToolCallName(msg?.content);
+      if (toolCallName) return `${role}: [tool ${toolCallName}]`;
+      return role;
+    }
+    case "compaction":
+      return `[compaction: ${formatCompactNumber(entry.tokensBefore)} tokens]`;
+    case "branch_summary":
+      return `[branch summary from ${entry.fromId}]`;
+    case "thinking_level_change":
+      return `[thinking ${entry.thinkingLevel}]`;
+    case "model_change":
+      return `[model ${entry.provider}/${entry.modelId}]`;
+    case "custom":
+      return `[custom ${entry.customType}]`;
+    case "custom_message":
+      return `[custom message ${entry.customType}]`;
+    case "label":
+      return `[label ${entry.label || "clear"}]`;
+    case "session_info":
+      return `[session name ${entry.name || "none"}]`;
+    default:
+      return `[${entry.type}]`;
+  }
+}
 
 /** Handle /tree: render the session message tree in text format. */
 export async function handleTree(session: AgentSession, command: TreeCommand): Promise<AgentControlResult> {
@@ -26,49 +77,10 @@ export async function handleTree(session: AgentSession, command: TreeCommand): P
       return { status: "success", message: "Tree is empty." };
     }
 
-    const describeEntry = (entry: any): string => {
-      switch (entry.type) {
-        case "message": {
-          const msg = entry.message;
-          const role = msg?.role || "message";
-          if (role === "toolResult") {
-            return `toolResult: ${msg.toolName || "tool"}`;
-          }
-          const text = extractTextFromContent(msg?.content);
-          if (text) {
-            return `${role}: \"${truncateText(text, 80)}\"`;
-          }
-          if (Array.isArray(msg?.content)) {
-            const toolCall = msg.content.find((c: any) => c?.type === "toolCall");
-            if (toolCall) return `${role}: [tool ${toolCall.name}]`;
-          }
-          return role;
-        }
-        case "compaction":
-          return `[compaction: ${formatCompactNumber(entry.tokensBefore)} tokens]`;
-        case "branch_summary":
-          return `[branch summary from ${entry.fromId}]`;
-        case "thinking_level_change":
-          return `[thinking ${entry.thinkingLevel}]`;
-        case "model_change":
-          return `[model ${entry.provider}/${entry.modelId}]`;
-        case "custom":
-          return `[custom ${entry.customType}]`;
-        case "custom_message":
-          return `[custom message ${entry.customType}]`;
-        case "label":
-          return `[label ${entry.label || "clear"}]`;
-        case "session_info":
-          return `[session name ${entry.name || "none"}]`;
-        default:
-          return `[${entry.type}]`;
-      }
-    };
-
     const lines: string[] = ["Session tree:"];
     const flatLines: string[] = [];
 
-    const walk = (node: any, depth: number) => {
+    const walk = (node: SessionTreeNode, depth: number) => {
       const indent = "  ".repeat(depth);
       const label = node.label ? ` [${node.label}]` : "";
       const active = node.entry.id === leafId ? " ← active" : "";
@@ -154,24 +166,24 @@ export async function handleLabel(session: AgentSession, command: LabelCommand):
   };
 }
 
-/** Handle /label: set or clear a label on a specific entry. */
+/** Handle /labels: list all currently labeled entries. */
 export async function handleLabels(session: AgentSession, _command: LabelsCommand): Promise<AgentControlResult> {
   const roots = session.sessionManager.getTree();
   const labels: Array<{ id: string; label: string; summary: string }> = [];
 
-  const describeEntry = (entry: any): string => {
+  const describeLabelEntry = (entry: SessionTreeEntry): string => {
     if (entry.type === "message") {
       const role = entry.message?.role || "message";
       const text = extractTextFromContent(entry.message?.content);
-      if (text) return `${role}: \"${truncateText(text, 60)}\"`;
+      if (text) return `${role}: "${truncateText(text, 60)}"`;
       return role;
     }
     return `[${entry.type}]`;
   };
 
-  const walk = (node: any) => {
+  const walk = (node: SessionTreeNode) => {
     if (node.label) {
-      labels.push({ id: node.entry.id, label: node.label, summary: describeEntry(node.entry) });
+      labels.push({ id: node.entry.id, label: node.label, summary: describeLabelEntry(node.entry) });
     }
     for (const child of node.children || []) {
       walk(child);

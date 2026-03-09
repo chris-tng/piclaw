@@ -84,7 +84,7 @@ export function createMedia(
   contentType: string,
   data: Uint8Array,
   thumbnail: Uint8Array | null,
-  metadata: Record<string, any> | null
+  metadata: Record<string, unknown> | null
 ): number {
   const db = getDb();
   const res = db
@@ -217,7 +217,16 @@ function appendMediaTextToFts(
     .prepare(
       "SELECT content, chat_jid, sender, sender_name, timestamp, is_bot_message FROM messages WHERE rowid = ?",
     )
-    .get(messageRowId) as Record<string, any> | undefined;
+    .get(messageRowId) as
+    | {
+        content: string;
+        chat_jid: string;
+        sender: string;
+        sender_name: string | null;
+        timestamp: string;
+        is_bot_message: number;
+      }
+    | undefined;
   if (!msg) return;
 
   const combined = msg.content + "\n\n" + textParts.join("\n");

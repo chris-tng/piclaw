@@ -94,7 +94,7 @@ export interface MediaRecord {
   /** Optional down-scaled thumbnail for image previews. */
   thumbnail: Uint8Array | null;
   /** Arbitrary metadata (dimensions, EXIF, etc.). */
-  metadata: Record<string, any> | null;
+  metadata: Record<string, unknown> | null;
   /** ISO-8601 timestamp of when the file was stored. */
   created_at: string;
 }

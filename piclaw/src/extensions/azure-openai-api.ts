@@ -16,11 +16,43 @@ export { applyToolCallLimit } from "../utils/azure-tool-call-limit.js";
 /** Re-exported response-input conversion helper from pi-ai internals. */
 export { convertResponsesMessages, convertResponsesTools, processResponsesStream };
 
+/** Input contract accepted by buildBaseOptions(). */
+export interface AzureBaseOptionsInput {
+  temperature?: number;
+  maxTokens?: number;
+  signal?: AbortSignal;
+  apiKey?: string;
+  cacheRetention?: string | number;
+  sessionId?: string;
+  headers?: Record<string, string>;
+  onPayload?: (payload: unknown) => void;
+  maxRetryDelayMs?: number;
+  metadata?: Record<string, unknown>;
+}
+
+/** Output contract returned by buildBaseOptions(). */
+export interface AzureBaseOptions {
+  temperature?: number;
+  maxTokens: number;
+  signal?: AbortSignal;
+  apiKey?: string;
+  cacheRetention?: string | number;
+  sessionId?: string;
+  headers?: Record<string, string>;
+  onPayload?: (payload: unknown) => void;
+  maxRetryDelayMs?: number;
+  metadata?: Record<string, unknown>;
+}
+
 /**
  * Build base stream options for simple stream wrappers.
  * Mirrors pi-ai's simple-options behavior without requiring extension-side deep imports.
  */
-export function buildBaseOptions(model: { maxTokens: number }, options: any, apiKey: string | undefined) {
+export function buildBaseOptions(
+  model: { maxTokens: number },
+  options: AzureBaseOptionsInput | undefined,
+  apiKey: string | undefined
+): AzureBaseOptions {
   return {
     temperature: options?.temperature,
     maxTokens: options?.maxTokens || Math.min(model.maxTokens, 32000),

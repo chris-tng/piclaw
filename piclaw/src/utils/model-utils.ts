@@ -44,10 +44,10 @@ export function parseModelInput(input: string): ParsedModelInput {
  * across multiple providers.
  */
 export function findModel(
-  models: Model<any>[],
+  models: Model<unknown>[],
   provider: string | undefined,
   modelId: string
-): { model?: Model<any>; error?: string } {
+): { model?: Model<unknown>; error?: string } {
   if (provider) {
     const match = models.find(
       (m) =>
