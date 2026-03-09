@@ -1,16 +1,56 @@
 # piclaw code quality improvement plan
 
-Date: 2026-03-08
+Date: 2026-03-09
 Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/web/src`, packaging/build config.
 
-## Review snapshot
+## Review snapshot (updated)
 
-- Backend size: **125 TS files / 20,738 LOC** (`src/`)
-- Frontend size: **6,838 LOC** (`web/src/`)
-- Tests: **480 passing**
-- Lint: passing
+- Backend size: **142 TS files / 21,389 LOC** (`src/`)
+- Frontend size: **7,095 LOC** (`web/src/`)
+- Tests: **527 passing, 0 failing**
+- Lint: passing (for current backend tranche)
 - Coverage (line): **57.97%** (`coverage/lcov.info`)
-- Pack dry-run: **420 files / 8.34 MB**, including `src/`, `dist/`, `test/`, `coverage/` temp files
+
+---
+
+## Progress summary
+
+### Completed tranches
+
+- Security + packaging hardening (P0)
+  - cwd boundary validation hardened
+  - trusted-proxy support + request client helper centralization
+  - strict CSRF origin tuple check (scheme+host+port)
+  - SSRF callback DNS/IP private-range protections
+  - package hygiene + stale-dist quality scripts
+- Runtime lifecycle hardening
+  - stoppable IPC and scheduler loops with explicit shutdown hooks
+- Runtime decomposition (ongoing, non-destructive)
+  - extracted provider bootstrap and shutdown orchestration from `runtime.ts`
+  - extracted startup/wiring helpers (`runtime/startup.ts`, `runtime/wiring.ts`)
+- Web architecture decomposition (P1, non-destructive)
+  - `src/channels/web/http/` modular namespace introduced and standardized
+  - extracted route/security helpers:
+    - `client.ts`, `security.ts`, `rate-limit.ts`, `rate-limit-rules.ts`, `route-flags.ts`, `request-guards.ts`
+  - extracted route dispatchers:
+    - `dispatch-auth.ts`, `dispatch-shell.ts`, `dispatch-content.ts`, `dispatch-workspace.ts`, `dispatch-agent.ts`, `dispatch-media.ts`
+
+### Recent commit sequence (latest first)
+
+- `8ddcb06` Decompose runtime provider bootstrap and shutdown orchestration
+- `00d74b9` Extract auth route dispatch into web/http module
+- `259281d` Extract shell/static route dispatch into web/http module
+- `9adb245` Extract content route dispatch into web/http module
+- `0527837` Extract workspace route dispatch into web/http module
+- `c7cfa3a` Extract agent route dispatch into web/http module
+- `160b71f` Extract media route dispatch into web/http module
+- `ebeecb4` Extract web request security guards into http module
+- `176faf3` Modularize web route flags and rate-limit rule mapping
+- `814762c` Unify web http module namespace and extract rate limiting
+- `5a93b8c` Extract web security helpers and simplify IPC schedule handling
+- `a584982` Add stoppable IPC/scheduler loops and tighten stale-dist guard
+- `f31c6e8` Add package quality guard scripts and TRUST_PROXY config coverage
+- `c4c63e6` Harden request trust, CSRF, SSRF, cwd checks, and package contents
 
 ---
 
@@ -18,141 +58,131 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
 
 | Area | Current state | Risk | Priority | Main improvements |
 |---|---|---:|---:|---|
-| Architecture boundaries | Core orchestration is concentrated in large modules (`src/runtime.ts`, `src/channels/web.ts`, `src/channels/web/request-router-service.ts`) with dynamic imports and cross-layer knowledge | High | P0 | Split into domain services + explicit ports/adapters; reduce god modules; remove internal field peeking (`runtime.ts` casts into `agentPool` internals) |
-| Maintainability | Very large files (e.g. `web.ts` 1524 LOC, `web/src/app.ts` 1533 LOC), duplicated helper logic, mixed sync I/O in runtime paths | High | P1 | File/module decomposition, shared utility extraction, async I/O in request-heavy paths |
-| Reusability | Optional extensions import internal `src/*` and deep `node_modules/*/dist/*` paths; runtime has provider registration logic partly duplicated with extension behavior | High | P1 | Define stable internal extension API, remove fragile deep imports, consolidate provider registration responsibilities |
-| Type safety / best practices | `any` usage is still broad (**89 hits** in `src`) and weakly-typed inter-module contracts | Medium | P1 | Add typed DTOs/schemas for IPC, events, and external payloads; tighten lint rules in stages |
-| Security (local execution) | `validateShellCwd()` uses `startsWith()` path check (`src/utils/task-validation.ts`) | High | **P0** | Replace with `path.relative()` boundary check (same approach used in workspace path logic) |
-| Security (web + remote) | Rate-limit keys trust `x-forwarded-for`; CSRF check compares hostname only; SSRF callback validation does not perform DNS/IP resolution | High | P0 | Trusted-proxy mode, strict Origin check (scheme+host+port), DNS/IP resolution + deny private ranges for callback hosts |
-| Dead code / stale artifacts | `src/db/auto-compaction.ts` appears unused; `src/channels/web/ui-context.ts` appears prod-unused; `dist/` contains stale extra JS artifacts; package ships coverage/test artifacts | Medium | P0 | Remove or wire dead modules, clean dist before build, add packaging allowlist (`files`) |
-| Quality gates | Good test breadth but moderate coverage and no architecture/static dead-code gate | Medium | P1 | Add CI bars: coverage floor, dead-export scan, import-boundary checks, tarball content check |
+| Architecture boundaries | Web router is now modularized under `src/channels/web/http/*`; `runtime.ts` and `web.ts` still large | Medium | P1 | Continue decomposition of runtime/bootstrap and `web.ts` orchestration services |
+| Maintainability | Significant improvement in web routing/service extraction; large core files remain | Medium | P1 | Continue focused decomposition + reduce module LOC concentration |
+| Reusability | Web helpers now centralized; extension API boundaries still mixed (`src/*` and deep imports in some areas) | Medium | P1 | Stabilize extension-facing internal API and remove brittle deep import paths |
+| Type safety / best practices | `any` usage still elevated in selected core modules | Medium | P1 | Add typed DTO/schemas for IPC/runtime/events and reduce high-density `any` hotspots |
+| Security (local/web/remote) | P0 hardening implemented and covered by tests | Low | P0 (done) | Maintain + regressions + audit for new surfaces |
+| Dead code / stale artifacts | Stale-dist detection in place (allowlist-based); destructive cleanup deferred due in-progress feature constraint | Medium | P1 | Non-destructive inventory -> confirm ownership -> gradual allowlist burn-down |
+| Quality gates | Lint/tests/package guard checks in use; coverage bar still below target | Medium | P1 | Add CI coverage floor + architecture/static analysis guardrails |
 
 ---
 
 ## 2) Detailed checklist of fixes
 
-## P0 (do first)
+## P0 (security/release safety)
 
-- [ ] **Fix path traversal boundary check for scheduled shell cwd**
-  - File: `src/utils/task-validation.ts`
-  - Replace `resolved.startsWith(workspaceDir)` with robust relative-path check.
-  - Add regression tests for `/workspace2`, `/workspace-malicious`, symlink cases.
+- [x] **Fix path traversal boundary check for scheduled shell cwd**
+  - `src/utils/task-validation.ts` now uses robust containment validation.
+  - Regression tests added.
 
-- [ ] **Harden client identity for rate limiting/auth logs**
-  - Files: `src/channels/web/request-router-service.ts`, `src/channels/web.ts`, `src/remote/service.ts`
-  - Add trusted-proxy config; only honor `x-forwarded-*` when enabled.
-  - Default to socket address / Bun request metadata when not proxied.
+- [x] **Harden client identity for rate limiting/auth logs**
+  - Trusted proxy mode added.
+  - Centralized request client/origin extraction.
 
-- [ ] **Strengthen CSRF origin validation**
-  - File: `src/channels/web/request-router-service.ts`
-  - Validate full origin tuple (scheme + host + port), not hostname-only.
-  - Add tests for same-host-different-port and mixed http/https behavior.
+- [x] **Strengthen CSRF origin validation**
+  - Full origin tuple validation (scheme+host+port).
+  - Security tests updated.
 
-- [ ] **Harden remote callback SSRF defenses**
-  - File: `src/remote/ssrf.ts`
-  - Add DNS resolution and reject callbacks resolving to loopback/private/link-local ranges (IPv4 + IPv6).
-  - Re-check resolved IPs on connect if possible.
+- [x] **Harden remote callback SSRF defenses**
+  - DNS resolve + private/loopback/link-local IP blocking (IPv4/IPv6).
+  - Remote SSRF tests added.
 
-- [ ] **Packaging cleanup / release safety**
-  - Files: `piclaw/piclaw/package.json`, `piclaw/piclaw/.gitignore`, build scripts
-  - Add `files` allowlist so tarball excludes `test/`, `coverage/`, temp lcov files, and non-runtime artifacts.
-  - Ensure `dist/` is either the runtime artifact or not shipped at all (single strategy).
+- [x] **Packaging cleanup / release safety**
+  - Runtime packaging guardrails and tarball hygiene checks added.
+  - `files` allowlist + stale-dist checks integrated.
 
-- [ ] **Dead/stale artifact cleanup**
-  - Remove stale extra `dist` outputs (examples from pack: `dist/chat-context.js`, `dist/config.js`, `dist/channels/web/request-router.js`, etc.).
-  - Clean build output before compile.
+- [ ] **Dead/stale artifact cleanup (final destructive pass)**
+  - Partial: stale-dist quality gate active with explicit allowlist.
+  - Pending: safely retire allowlisted legacy artifacts once in-progress work stabilizes.
 
-## P1 (next wave)
+## P1 (active wave)
 
-- [ ] **Refactor god modules into smaller services**
-  - `src/channels/web.ts` → auth/session service, status service, passkey service, transport wrapper.
-  - `src/channels/web/request-router-service.ts` → middleware pipeline + route map.
-  - `src/runtime.ts` → composition root + startup tasks + shutdown manager.
+- [x] **Refactor web router into middleware + route-map style modules**
+  - Security, classification, rate-limits, and route dispatch now split under `web/http/*`.
+  - Behavior preserved (non-destructive).
+
+- [ ] **Refactor `src/channels/web.ts` into narrower services**
+  - Pending: split auth/session/status/passkey and orchestration responsibilities further.
+
+- [ ] **Refactor `src/runtime.ts` into composition root + startup/shutdown managers**
+  - In progress: provider bootstrap, shutdown orchestration, startup/wiring helpers extracted.
+  - Pending: split remaining runtime message-loop orchestration dependencies behind narrower interfaces.
 
 - [ ] **Architectural dependency boundaries**
-  - Introduce domain interfaces for messaging, auth, scheduler, and remote interop.
-  - Prevent runtime/adapters from reaching into internals via casts (e.g. `runtime.ts` model registry access).
+  - Pending: remove internal peeking/casts and formalize service interfaces/ports.
 
 - [ ] **Extension contract hardening**
-  - Files: `extensions/azure-openai.ts`, `extensions/context-mode.ts`, `src/agent-pool/session.ts`
-  - Remove deep imports into `../node_modules/.../dist/...`.
-  - Replace direct `../src/...` imports with a stable exported internal API package/module.
+  - Pending: remove deep/dist imports and `src/*` coupling where avoidable.
 
 - [ ] **Type quality pass**
-  - Prioritize files with highest `any` usage (`src/ipc.ts`, `src/runtime.ts`, `src/channels/web.ts`, `src/agent-pool.ts`).
-  - Add typed schemas for IPC command payloads, remote requests, and agent event payloads.
+  - Pending: reduce `any` density in `src/ipc.ts`, `src/runtime.ts`, `src/channels/web.ts`, `src/agent-pool.ts`.
 
 - [ ] **Dead code review and removal**
-  - Confirm whether `src/db/auto-compaction.ts` should be deleted or integrated.
-  - Confirm if `src/channels/web/ui-context.ts` is public API or test-only shim; remove/relocate if shim.
+  - Pending confirmation for `src/db/auto-compaction.ts`, `src/channels/web/ui-context.ts`, and stale dist allowlist items.
 
-- [ ] **I/O and concurrency hygiene**
-  - Move synchronous disk operations out of hot request paths where possible.
-  - Add stop/dispose handles for long-running polling loops (`ipc`, scheduler) for cleaner lifecycle/testability.
+- [x] **I/O and concurrency hygiene (loop lifecycle controls)**
+  - Stoppable IPC/scheduler loops implemented and shutdown-aware.
 
-## P2 (stabilization and polish)
+## P2 (stabilization/polish)
 
-- [ ] **Frontend modularization**
-  - Split `web/src/app.ts` and large component files into feature modules/hooks.
-  - Introduce view-model/state boundaries to reduce cross-component coupling.
-
-- [ ] **Security-in-depth extras**
-  - Consider hashing session tokens at rest in DB.
-  - Consider encrypted-at-rest remote private identity key (or key-provider abstraction).
-
-- [ ] **Operational observability**
-  - Add structured logging with request IDs for web/remote endpoints.
-  - Add metrics around queue depth, retry counts, scheduler task failure rate.
+- [ ] Frontend modularization of large UI components (`web/src/app.ts`, larger components)
+- [ ] Security-in-depth extras (session token storage hardening, key-provider abstraction)
+- [ ] Operational observability (request IDs, queue/scheduler metrics)
 
 ---
 
-## 3) Dead code / stale code inventory (initial)
+## 3) Dead code / stale code inventory (current)
 
-- `src/db/auto-compaction.ts` appears unreferenced in production code.
-- `src/channels/web/ui-context.ts` appears only used by tests/shim layer, not runtime path.
-- `dist/` contains stale extra JS files not mapped from current `src` layout (likely old build leftovers).
-- Tarball currently includes non-runtime artifacts:
-  - `coverage/*.tmp`, `coverage/lcov.info`
-  - full `test/` tree
-  - both `src/` and `dist/` (duplication)
-
-Action: validate each item, then remove or rewire intentionally.
+- Potentially removable or reintegrate-with-justification:
+  - `src/db/auto-compaction.ts`
+  - `src/channels/web/ui-context.ts` (verify runtime vs test-only role)
+- Stale dist artifacts:
+  - Guarded by `check:stale-dist` + explicit allowlist (non-destructive mode)
+  - Planned burn-down after in-progress/legacy streams stabilize
 
 ---
 
 ## 4) Quality bars (acceptance criteria)
 
 ## Security bars
-- [ ] No path-boundary checks using raw `startsWith` for workspace containment.
-- [ ] Forwarded headers only trusted when proxy mode is explicitly enabled.
-- [ ] CSRF origin validation matches scheme+host+port.
-- [ ] SSRF callback validation includes DNS/IP private-range protections.
+- [x] No raw `startsWith` containment checks for workspace path security.
+- [x] Forwarded headers trusted only under explicit proxy mode.
+- [x] CSRF validation includes scheme+host+port.
+- [x] SSRF callback validation includes DNS/IP private-range protections.
 
 ## Architecture bars
-- [ ] No backend module > 600 LOC in `src/` (except explicitly justified generated/vendor code).
-- [ ] `runtime.ts` reduced to composition/bootstrap responsibility only.
-- [ ] No cross-layer internal field peeking via `as any` or private property casts.
+- [ ] No backend module > 600 LOC in `src/` (except justified cases).
+- [ ] `runtime.ts` reduced to composition/bootstrap responsibilities.
+- [ ] No cross-layer internal peeking via `as any`/private field casts.
 
 ## Maintainability/reusability bars
-- [ ] `any` references in `src/` reduced from 89 to < 25.
-- [ ] Common helpers (client key extraction, JSON parse guards, response wrappers) centralized.
-- [ ] Optional extensions depend only on stable exported APIs (no deep `node_modules/dist` imports).
+- [ ] `any` usage reduced to target threshold.
+- [x] Shared web request helpers and routing logic centralized.
+- [ ] Optional extensions depend only on stable exported APIs.
 
 ## Testing/quality bars
 - [ ] Line coverage >= 75% overall and >= 85% for security-critical modules.
-- [ ] Add CI check for dead exports/modules and stale build artifacts.
-- [ ] Add packaging CI check: tarball includes runtime-only allowlisted files.
+- [ ] CI checks for dead exports/modules and import-boundary rules.
+- [x] Packaging CI-style checks in place (`check:pack-hygiene`, `check:stale-dist`).
 
 ## Release/package bars
-- [ ] Tarball excludes coverage, test files, and stale artifacts.
-- [ ] Single runtime strategy: either `src`-runtime or `dist`-runtime (not both).
+- [x] Tarball hygiene guardrails implemented.
+- [ ] Single final runtime artifact strategy fully enforced with legacy artifacts retired.
 
 ---
 
-## 5) Suggested execution order
+## 5) Suggested execution order (next)
 
-1. Security-critical fixes (path validation, CSRF, forwarded headers, SSRF) + tests.
-2. Packaging/dead artifact cleanup to prevent shipping risk.
-3. Architecture split of web/runtime and typed boundary contracts.
-4. Type-safety reduction (`any`) and frontend modularization.
-5. Add/enforce quality bars in CI.
+1. **Runtime decomposition tranche**
+   - Split `runtime.ts` into composition root + lifecycle managers.
+2. **Web channel service decomposition tranche**
+   - Continue extracting responsibilities from `web.ts` while preserving behavior.
+3. **Type-safety tranche**
+   - Add schemas/DTOs for IPC/runtime/remote payload boundaries.
+4. **Extension API hardening tranche**
+   - Remove deep/internal imports and define stable integration surface.
+5. **Dead-code and stale-artifact burn-down (safe mode first)**
+   - Produce non-destructive reports, then remove with explicit confirmation.
+6. **Coverage/CI bars uplift**
+   - Raise coverage and enforce architecture/packaging gates in CI.
