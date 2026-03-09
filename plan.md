@@ -102,7 +102,6 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
 
 ### Recent commit sequence (latest first)
 
-- `c5f47d8` Consolidate Azure extension imports behind stable bridge
 - `4c6029a` Harden extension import boundaries and update factory coverage
 - `1b99938` Complete src exported JSDoc coverage sweep
 - `1ea15c5` Document webauthn auth endpoint exports
