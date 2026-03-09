@@ -5,24 +5,30 @@
 import { startIpcWatcher, type IpcDeps } from "../ipc.js";
 import { startSchedulerLoop, type SchedulerDeps } from "../task-scheduler.js";
 
+/** Minimal sender contract exposed to runtime worker wiring. */
 export type RuntimeSenders = Pick<IpcDeps, "sendMessage" | "sendNudge">;
 
+/** Optional sendMessage options accepted by web message dispatch. */
 export type RuntimeSendMessageOptions = Parameters<RuntimeSenders["sendMessage"]>[2];
 
+/** Web-channel capabilities required by runtime worker startup. */
 export interface RuntimeWebWorkerChannel {
   sendMessage: RuntimeSenders["sendMessage"];
   resumeChat: (chatJid: string, threadRootId?: number | null) => void;
   resumePendingChats: (chatJid?: string) => void;
 }
 
+/** WhatsApp-channel capability required by runtime worker startup. */
 export interface RuntimeWhatsAppWorkerChannel {
   sendMessage: (jid: string, text: string) => Promise<void>;
 }
 
+/** Optional Pushover-channel capability required by runtime worker startup. */
 export interface RuntimePushoverWorkerChannel {
   sendMessage: (jid: string, text: string) => Promise<void>;
 }
 
+/** Agent-pool model resolution capability required by IPC update_task handling. */
 export interface RuntimeModelResolver {
   resolveModelInput: NonNullable<IpcDeps["resolveModel"]>;
 }

@@ -2,6 +2,7 @@
  * runtime/shutdown.ts – Graceful shutdown orchestration helpers.
  */
 
+/** Runtime resources required to perform graceful shutdown. */
 export type ShutdownDeps = {
   queue: { shutdown: (timeoutMs?: number) => Promise<unknown> };
   agentPool: { shutdown: () => Promise<unknown> };
