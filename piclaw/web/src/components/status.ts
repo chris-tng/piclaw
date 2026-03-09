@@ -99,6 +99,7 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, turn
         const isExpanded = expandedPanels.has(panelKey);
         const sourceText = fullText || text || '';
         const isCollapsible = typeof maxLines === 'number';
+        const showClose = isExpanded && isCollapsible;
         const truncated = isCollapsible
             ? truncateLines(sourceText, maxLines, totalLines)
             : { text: sourceText || '', omitted: 0, totalLines: Number.isFinite(totalLines) ? totalLines : 0 };
@@ -115,6 +116,15 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, turn
                 <div class="agent-thinking-title ${titleClass || ''}">
                     ${turnColor && html`<span class=${dotClass} aria-hidden="true"></span>`}
                     ${panelTitle}
+                    ${showClose && html`
+                        <button
+                            class="agent-thinking-close"
+                            aria-label=${`Close ${panelTitle} panel`}
+                            onClick=${() => toggleExpand(panelKey)}
+                        >
+                            ×
+                        </button>
+                    `}
                 </div>
                 <div
                     class=${bodyClass}
