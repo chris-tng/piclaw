@@ -14,7 +14,7 @@ import { createMedia, getMediaById, getMediaInfoById } from "../../db.js";
 /**
  * Max upload size: 10 MB.
  * This is enforced at the application level. The Bun.serve()
- * maxRequestBodySize (50 MB) is a separate hard cap.
+ * maxRequestBodySize (512 MB) is a separate hard cap.
  */
 const MAX_MEDIA_UPLOAD_BYTES = 10 * 1024 * 1024;
 

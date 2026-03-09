@@ -200,10 +200,11 @@ export class WebChannel {
       port: WEB_PORT,
       idleTimeout: WEB_IDLE_TIMEOUT,
       // Hard limit on request body size. Individual endpoints enforce tighter
-      // limits (e.g., 10 MB for media uploads, 100 KB for message content).
+      // limits (e.g., 10 MB for media uploads, 512 MB for workspace uploads,
+      // 100 KB for message content).
       // This is the outermost safety net; Bun rejects bodies exceeding this
       // before any handler code runs.
-      maxRequestBodySize: 50 * 1024 * 1024, // 50 MB hard cap
+      maxRequestBodySize: 512 * 1024 * 1024, // 512 MB hard cap
       fetch: (req) => this.handleRequest(req),
       ...(tls ? { tls } : {}),
     });

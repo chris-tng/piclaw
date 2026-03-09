@@ -202,18 +202,19 @@ export class WorkspaceFileService {
     }
 
     try {
-      const buffer = Buffer.from(await file.arrayBuffer());
-      if (buffer.length > MAX_UPLOAD_BYTES) {
+      await Bun.write(destPath, file);
+      const updated = statSync(destPath);
+      if (updated.size > MAX_UPLOAD_BYTES) {
+        try { unlinkSync(destPath); } catch {}
         return { status: 400, body: { error: "File too large to upload" } };
       }
-      writeFileSync(destPath, buffer);
       const relPath = toRelativePath(destPath);
       return {
         status: 200,
         body: {
           path: relPath,
           name: filename,
-          size: buffer.length,
+          size: updated.size,
           overwritten: existed,
         },
       };
