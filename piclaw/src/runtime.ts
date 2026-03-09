@@ -12,57 +12,12 @@
  *   - index.ts calls startRuntime() as the entry point.
  */
 
-import {
-  ASSISTANT_NAME,
-  DATA_DIR,
-  POLL_INTERVAL,
-  TRIGGER_PATTERN,
-} from "./core/config.js";
-import { stopIpcWatcher } from "./ipc.js";
-import { createRuntimeCoreServices, registerRuntimeShutdownSignals } from "./runtime/composition.js";
-import { startRuntimeLoop } from "./runtime/coordinator.js";
-import { registerOptionalProviders } from "./runtime/provider-bootstrap.js";
-import { createShutdownHandler } from "./runtime/shutdown.js";
-import { initializeRuntimeEnvironment, startOptionalPushoverChannel, startWebChannel, createWhatsAppChannel } from "./runtime/startup.js";
-import { createRuntimeSenders, startRuntimeWorkers } from "./runtime/wiring.js";
-import { stopSchedulerLoop } from "./task-scheduler.js";
+import { DATA_DIR } from "./core/config.js";
+import { bootstrapRuntime, createDefaultRuntimeBootstrapDeps } from "./runtime/bootstrap.js";
+import { createRuntimeCoreServices } from "./runtime/composition.js";
 
 /** Boot all subsystems (DB, channels, agent pool, scheduler) and enter the main loop. */
 export async function main(): Promise<void> {
-  const { queue, agentPool, state } = createRuntimeCoreServices({ dataDir: DATA_DIR });
-
-  initializeRuntimeEnvironment(state);
-  registerOptionalProviders(agentPool);
-
-  console.log("=== Piclaw - Pi Coding Agent Assistant ===");
-
-  const web = await startWebChannel(queue, agentPool);
-  const pushover = await startOptionalPushoverChannel();
-  const whatsapp = createWhatsAppChannel(state);
-
-  const shutdown = createShutdownHandler({
-    queue,
-    agentPool,
-    whatsapp,
-    web,
-    pushover,
-    stopIpcWatcher,
-    stopSchedulerLoop,
-  });
-  registerRuntimeShutdownSignals(process, shutdown);
-
-  const senders = createRuntimeSenders(web, whatsapp, pushover);
-  startRuntimeWorkers(queue, agentPool, web, senders);
-
-  await whatsapp.connect();
-
-  await startRuntimeLoop({
-    queue,
-    state,
-    agentPool,
-    whatsapp,
-    assistantName: ASSISTANT_NAME,
-    triggerPattern: TRIGGER_PATTERN,
-    pollIntervalMs: POLL_INTERVAL,
-  });
+  const core = createRuntimeCoreServices({ dataDir: DATA_DIR });
+  await bootstrapRuntime(createDefaultRuntimeBootstrapDeps(core));
 }
