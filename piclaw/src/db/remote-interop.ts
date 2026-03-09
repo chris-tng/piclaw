@@ -123,7 +123,7 @@ export function updateRemotePeer(instanceId: string, updates: Partial<RemotePeer
   if (!fields.length) return;
   values.push(instanceId);
   const db = getDb();
-  db.prepare(`UPDATE remote_peers SET ${fields.join(", ")} WHERE instance_id = ?`).run(...(values as [any, ...any[]]));
+  db.prepare(`UPDATE remote_peers SET ${fields.join(", ")} WHERE instance_id = ?`).run(...values);
 }
 
 export function createPairRequest(request: RemotePairRequestRecord): void {
@@ -227,7 +227,7 @@ export function updateRemoteRequest(id: string, updates: Partial<RemoteRequestRe
   if (!fields.length) return;
   values.push(id);
   const db = getDb();
-  db.prepare(`UPDATE remote_requests SET ${fields.join(", ")} WHERE id = ?`).run(...(values as [any, ...any[]]));
+  db.prepare(`UPDATE remote_requests SET ${fields.join(", ")} WHERE id = ?`).run(...values);
 }
 
 export function logRemoteAudit(entry: RemoteAuditRecord): void {

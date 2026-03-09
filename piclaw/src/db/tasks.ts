@@ -81,7 +81,7 @@ export function updateTask(
 
   values.push(id);
   const db = getDb();
-  db.prepare(`UPDATE scheduled_tasks SET ${fields.join(", ")} WHERE id = ?`).run(...(values as [any, ...any[]]));
+  db.prepare(`UPDATE scheduled_tasks SET ${fields.join(", ")} WHERE id = ?`).run(...values);
 }
 
 /**
