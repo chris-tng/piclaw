@@ -8,7 +8,6 @@
  * Consumers: web/posts-service.ts, web/agent-message-service.ts.
  */
 
-import type { WebChannel } from "../web.js";
 import {
   attachMediaToMessage,
   clampWebContent,
@@ -19,7 +18,7 @@ import {
   storeMessage,
 } from "../../db.js";
 import { getWebPreviewMaxChars, shouldPreviewWebContent } from "../../db/web-content.js";
-import { scheduleLinkPreviews } from "./link-previews.js";
+import { scheduleLinkPreviews, type LinkPreviewChannel } from "./link-previews.js";
 import type { InteractionRow } from "../../db.js";
 import type { NewMessage } from "../../types.js";
 import { createUuid } from "../../utils/ids.js";
@@ -43,7 +42,7 @@ export interface StoreWebMessageParams {
 
 /** Store a web channel message in the database and attach media. */
 export function storeWebMessage(
-  channel: WebChannel,
+  channel: LinkPreviewChannel,
   params: StoreWebMessageParams,
   options: StoreWebMessageOptions = {}
 ): InteractionRow | null {

@@ -10,7 +10,6 @@
  *            a new user message is stored.
  */
 
-import type { WebChannel } from "../web.js";
 import { getMessageByRowId, updateMessageLinkPreviews } from "../../db.js";
 import { lookup } from "dns/promises";
 import { isIP } from "net";
@@ -22,6 +21,12 @@ export interface LinkPreview {
   description?: string;
   image?: string;
   site_name?: string;
+}
+
+/** Channel contract required to schedule and broadcast link-preview updates. */
+export interface LinkPreviewChannel {
+  pendingLinkPreviews: Set<number>;
+  broadcastEvent(eventType: string, data: unknown): void;
 }
 
 const MAX_URLS = 3;
@@ -250,7 +255,7 @@ export async function fetchLinkPreviews(urls: string[]): Promise<LinkPreview[]> 
 
 /** Asynchronously fetch link previews for a message and broadcast updates. */
 export function scheduleLinkPreviews(
-  channel: WebChannel,
+  channel: LinkPreviewChannel,
   chatJid: string,
   rowId: number,
   content: string,

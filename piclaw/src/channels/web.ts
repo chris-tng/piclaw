@@ -65,6 +65,13 @@ import { AgentStatusStore } from "./web/agent-status-store.js";
 import { FollowupPlaceholderStore } from "./web/followup-placeholders.js";
 import { PendingSteeringStore } from "./web/pending-steering.js";
 import { storeWebMessage } from "./web/message-store.js";
+import {
+  queueFollowupPlaceholderMessage,
+  replaceQueuedFollowupPlaceholderMessage,
+  sendWebMessage,
+  type MessageWriteContext,
+  type SendMessageOptions,
+} from "./web/message-write-flows.js";
 import { deletePostResponse } from "./web/timeline-service.js";
 import { ensureAvatarCache, resolveAvatarUrl } from "./web/avatar-service.js";
 import {
@@ -224,37 +231,34 @@ export class WebChannel {
     }
   }
 
-  async sendMessage(
-    chatJid: string,
-    text: string,
-    options?: number | null | { threadId?: number | null; forceRoot?: boolean; source?: string }
-  ): Promise<void> {
-    const normalized = typeof options === "number" || options === null
-      ? { threadId: options ?? null }
-      : (options ?? {});
-    const threadId = normalized.threadId ?? null;
-    const forceRoot = Boolean(normalized.forceRoot);
+  private getMessageWriteContext(): MessageWriteContext {
+    return {
+      defaultAgentId: DEFAULT_AGENT_ID,
+      store: {
+        storeMessage: (chatJid, content, isBot, mediaIds, options) =>
+          this.storeMessage(chatJid, content, isBot, mediaIds, options),
+        replaceMessageContent: (chatJid, rowId, text, mediaIds, contentBlocks) =>
+          replaceMessageContent(chatJid, rowId, text, { contentBlocks, mediaIds }),
+        setMessageThreadToSelf: (messageId) => {
+          getDb().prepare("UPDATE messages SET thread_id = ? WHERE rowid = ?").run(messageId, messageId);
+        },
+      },
+      broadcaster: {
+        broadcastAgentResponse: (interaction) => this.interactionBroadcaster.broadcastAgentResponse(interaction),
+        broadcastInteractionUpdated: (interaction) => this.interactionBroadcaster.broadcastInteractionUpdated(interaction),
+      },
+      followups: {
+        enqueue: (chatJid, rowId) => this.followupPlaceholderStore.enqueue(chatJid, rowId),
+      },
+    };
+  }
 
-    const interaction = this.storeMessage(chatJid, text, true, [], threadId ? { threadId } : undefined);
-    if (interaction) {
-      if (forceRoot && !threadId) {
-        // Ensure scheduled messages start new threads (not replies to inflight turns).
-        getDb().prepare("UPDATE messages SET thread_id = ? WHERE rowid = ?").run(interaction.id, interaction.id);
-        interaction.data.thread_id = interaction.id;
-      }
-      this.interactionBroadcaster.broadcastAgentResponse(interaction);
-    }
+  async sendMessage(chatJid: string, text: string, options?: SendMessageOptions): Promise<void> {
+    sendWebMessage(chatJid, text, options, this.getMessageWriteContext());
   }
 
   queueFollowupPlaceholder(chatJid: string, text: string, threadId?: number): InteractionRow | null {
-    const interaction = this.storeMessage(chatJid, text, true, [], { threadId });
-    if (!interaction) return null;
-
-    this.followupPlaceholderStore.enqueue(chatJid, interaction.id);
-
-    this.interactionBroadcaster.broadcastAgentResponse(interaction);
-
-    return interaction;
+    return queueFollowupPlaceholderMessage(chatJid, text, threadId, this.getMessageWriteContext());
   }
 
   consumeQueuedFollowupPlaceholder(chatJid: string): number | null {
@@ -285,18 +289,15 @@ export class WebChannel {
     contentBlocks: Array<Record<string, unknown>> | undefined,
     threadId?: number
   ): InteractionRow | null {
-    const updated = replaceMessageContent(chatJid, rowId, text, {
-      contentBlocks,
+    return replaceQueuedFollowupPlaceholderMessage(
+      chatJid,
+      rowId,
+      text,
       mediaIds,
-    });
-    if (!updated) return null;
-
-    updated.data.agent_id = DEFAULT_AGENT_ID;
-    if (threadId) updated.data.thread_id = threadId;
-
-    this.interactionBroadcaster.broadcastInteractionUpdated(updated);
-
-    return updated;
+      contentBlocks,
+      threadId,
+      this.getMessageWriteContext()
+    );
   }
 
   getThreadRootId(chatJid: string, messageId: string): number | null {
