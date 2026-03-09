@@ -17,13 +17,14 @@ import {
   type ToolResultMessage,
 } from "@mariozechner/pi-ai";
 import {
+  applyToolCallLimit,
+  buildBaseOptions,
+  clampReasoning,
   convertResponsesMessages,
   convertResponsesTools,
   processResponsesStream,
-} from "@mariozechner/pi-ai/dist/providers/openai-responses-shared.js";
-import { applyToolCallLimit } from "../src/extensions/azure-openai-api.js";
+} from "../src/extensions/azure-openai-api.js";
 import { streamSimpleOpenAICompletions } from "@mariozechner/pi-ai";
-import { buildBaseOptions, clampReasoning } from "@mariozechner/pi-ai/dist/providers/simple-options.js";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
