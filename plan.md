@@ -5,9 +5,9 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
 
 ## Review snapshot (updated)
 
-- Backend size: **158 TS files / 22,224 LOC** (`src/`)
+- Backend size: **159 TS files / 22,295 LOC** (`src/`)
 - Frontend size: **7,095 LOC** (`web/src/`)
-- Tests: **578 passing, 0 failing**
+- Tests: **581 passing, 0 failing**
 - Lint: passing (for current backend tranche)
 - Coverage (line): **57.97%** (`coverage/lcov.info`)
 
@@ -51,11 +51,13 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
   - extracted timeline/hashtag/search/thread/thought endpoint orchestration from `web.ts` into `web/content-endpoints.ts`
   - extracted agents/avatar endpoint orchestration from `web.ts` into `web/identity-endpoints.ts`
   - extracted thought/draft buffer + panel expansion state from `web.ts` into `web/agent-buffers.ts`
+  - extracted inflight-recovery and pending-resume orchestration from `web.ts` into `web/recovery.ts`
   - replaced `as any` session-binder bridge with typed helper `web/agent-pool-binder.ts`
   - removed `any` from web UI bridge pending/custom flow and narrowed UI-context channel typing
 
 ### Recent commit sequence (latest first)
 
+- `3cad033` Extract web recovery and pending-resume orchestration
 - `4ca7068` Extract web agent buffer state service
 - `2fa15d4` Harden runtime provider and IPC typing boundaries
 - `4b9711e` Narrow runtime wiring interfaces and add coverage
@@ -140,7 +142,7 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
   - Behavior preserved (non-destructive).
 
 - [ ] **Refactor `src/channels/web.ts` into narrower services**
-  - In progress: extracted route dispatching, TOTP lockout bookkeeping, session cookie/auth helpers, internal-secret verification helper, WebAuthn challenge helpers, WebAuthn auth endpoint orchestration, passkey enrol page response, TOTP verify endpoint orchestration, manifest response helper, post mutation endpoint orchestration, agent status/context/models helpers, workspace/thought/ui-response endpoint helpers, timeline/hashtag/search/thread/thought endpoint helpers, agents/avatar endpoint helpers, and thought/draft buffer/panel state service.
+  - In progress: extracted route dispatching, TOTP lockout bookkeeping, session cookie/auth helpers, internal-secret verification helper, WebAuthn challenge helpers, WebAuthn auth endpoint orchestration, passkey enrol page response, TOTP verify endpoint orchestration, manifest response helper, post mutation endpoint orchestration, agent status/context/models helpers, workspace/thought/ui-response endpoint helpers, timeline/hashtag/search/thread/thought endpoint helpers, agents/avatar endpoint helpers, thought/draft buffer/panel state service, and inflight-recovery/pending-resume orchestration.
   - Pending: split auth/session/status/passkey and orchestration responsibilities further.
 
 - [ ] **Refactor `src/runtime.ts` into composition root + startup/shutdown managers**
@@ -148,14 +150,14 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
   - Pending: complete remaining runtime-owned interface narrowing and reduce residual global composition coupling.
 
 - [ ] **Architectural dependency boundaries**
-  - In progress: removed web session-binder `as any` cast path, tightened UI bridge/context typing (including pending/custom flow and typed context bridge access), shifted runtime wiring/coordinator to interface-based dependency contracts, removed runtime provider-bootstrap peeking into private `AgentPool` internals, and encapsulated web thought/draft/panel mutable state behind a dedicated service.
+  - In progress: removed web session-binder `as any` cast path, tightened UI bridge/context typing (including pending/custom flow and typed context bridge access), shifted runtime wiring/coordinator to interface-based dependency contracts, removed runtime provider-bootstrap peeking into private `AgentPool` internals, and encapsulated web mutable state/orchestration (thought/draft/panel + recovery/resume flows) behind dedicated services.
   - Pending: remove remaining internal peeking/casts and formalize service interfaces/ports.
 
 - [ ] **Extension contract hardening**
   - Pending: remove deep/dist imports and `src/*` coupling where avoidable.
 
 - [ ] **Type quality pass**
-  - In progress: removed high-risk `any` usage from `src/ipc.ts` payload/update paths, from runtime provider bootstrap + `AgentPool` provider-registration boundary, and unified web thought/draft buffer typing via shared `web/agent-buffers.ts` contracts.
+  - In progress: removed high-risk `any` usage from `src/ipc.ts` payload/update paths, from runtime provider bootstrap + `AgentPool` provider-registration boundary, unified web thought/draft buffer typing via shared `web/agent-buffers.ts` contracts, and introduced typed recovery/resume context boundaries in `web/recovery.ts`.
   - Pending: continue reducing `any` density in remaining hotspots (`src/runtime.ts`, `src/channels/web.ts`, and broader `src/agent-pool.ts` paths).
 
 - [ ] **Dead code review and removal**
