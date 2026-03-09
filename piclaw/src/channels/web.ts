@@ -25,12 +25,13 @@ import {
   type RegistrationResponseJSON,
   type WebAuthnCredential,
 } from "@simplewebauthn/server";
-import { randomSessionToken, safeEqual, verifyTotp } from "./web/auth.js";
+import { randomSessionToken, verifyTotp } from "./web/auth.js";
 import {
   buildSessionCookieHeader,
   isRequestAuthenticated,
   isRequestTotpSession,
 } from "./web/session-auth.js";
+import { isInternalSecretRequestAuthorized } from "./web/internal-secret.js";
 import { TotpFailureTracker } from "./web/totp-failure-tracker.js";
 import {
   ASSISTANT_AVATAR,
@@ -503,16 +504,7 @@ export class WebChannel {
   }
 
   verifyInternalSecret(req: Request): boolean {
-    const secret = (WEB_INTERNAL_SECRET || "").trim();
-    if (!secret) return false;
-    const header = req.headers.get("x-piclaw-internal-secret") || "";
-    if (header && safeEqual(header, secret)) return true;
-    const auth = req.headers.get("authorization") || "";
-    if (auth.toLowerCase().startsWith("bearer ")) {
-      const token = auth.slice(7).trim();
-      if (token && safeEqual(token, secret)) return true;
-    }
-    return false;
+    return isInternalSecretRequestAuthorized(req, WEB_INTERNAL_SECRET || "");
   }
 
   isAuthenticated(req: Request): boolean {
