@@ -5,9 +5,9 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
 
 ## Review snapshot (updated)
 
-- Backend size: **156 TS files / 22,004 LOC** (`src/`)
+- Backend size: **157 TS files / 22,068 LOC** (`src/`)
 - Frontend size: **7,095 LOC** (`web/src/`)
-- Tests: **567 passing, 0 failing**
+- Tests: **569 passing, 0 failing**
 - Lint: passing (for current backend tranche)
 - Coverage (line): **57.97%** (`coverage/lcov.info`)
 
@@ -47,11 +47,13 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
   - extracted agent status/context/models endpoint orchestration from `web.ts` into `web/agent-status.ts`
   - extracted workspace/thought visibility + agent respond endpoint orchestration from `web.ts` into `web/ui-endpoints.ts`
   - extracted timeline/hashtag/search/thread/thought endpoint orchestration from `web.ts` into `web/content-endpoints.ts`
+  - extracted agents/avatar endpoint orchestration from `web.ts` into `web/identity-endpoints.ts`
   - replaced `as any` session-binder bridge with typed helper `web/agent-pool-binder.ts`
   - removed `any` from web UI bridge pending/custom flow and narrowed UI-context channel typing
 
 ### Recent commit sequence (latest first)
 
+- `79833ab` Extract web identity endpoint helpers
 - `b16e931` Extract web content endpoint helpers and type workspace tree
 - `da4d198` Extract web UI endpoint helpers and tighten UI bridge typing
 - `46dc1ab` Extract web agent status helpers and harden session binder typing
@@ -132,7 +134,7 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
   - Behavior preserved (non-destructive).
 
 - [ ] **Refactor `src/channels/web.ts` into narrower services**
-  - In progress: extracted route dispatching, TOTP lockout bookkeeping, session cookie/auth helpers, internal-secret verification helper, WebAuthn challenge helpers, WebAuthn auth endpoint orchestration, passkey enrol page response, TOTP verify endpoint orchestration, manifest response helper, post mutation endpoint orchestration, agent status/context/models helpers, workspace/thought/ui-response endpoint helpers, and timeline/hashtag/search/thread/thought endpoint helpers.
+  - In progress: extracted route dispatching, TOTP lockout bookkeeping, session cookie/auth helpers, internal-secret verification helper, WebAuthn challenge helpers, WebAuthn auth endpoint orchestration, passkey enrol page response, TOTP verify endpoint orchestration, manifest response helper, post mutation endpoint orchestration, agent status/context/models helpers, workspace/thought/ui-response endpoint helpers, timeline/hashtag/search/thread/thought endpoint helpers, and agents/avatar endpoint helpers.
   - Pending: split auth/session/status/passkey and orchestration responsibilities further.
 
 - [ ] **Refactor `src/runtime.ts` into composition root + startup/shutdown managers**
