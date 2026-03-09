@@ -38,6 +38,7 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
 
 ### Recent commit sequence (latest first)
 
+- `c0e59d9` Extract runtime message-loop coordinator and update plan
 - `a4f7ddc` Extract runtime startup/wiring helpers and refresh plan status
 - `8ddcb06` Decompose runtime provider bootstrap and shutdown orchestration
 - `00d74b9` Extract auth route dispatch into web/http module
