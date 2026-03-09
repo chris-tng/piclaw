@@ -5,9 +5,9 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
 
 ## Review snapshot (updated)
 
-- Backend size: **157 TS files / 22,068 LOC** (`src/`)
+- Backend size: **157 TS files / 22,071 LOC** (`src/`)
 - Frontend size: **7,095 LOC** (`web/src/`)
-- Tests: **569 passing, 0 failing**
+- Tests: **572 passing, 0 failing**
 - Lint: passing (for current backend tranche)
 - Coverage (line): **57.97%** (`coverage/lcov.info`)
 
@@ -29,6 +29,7 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
   - extracted provider bootstrap and shutdown orchestration from `runtime.ts`
   - extracted startup/wiring helpers (`runtime/startup.ts`, `runtime/wiring.ts`)
   - extracted message-loop orchestration coordinator (`runtime/coordinator.ts`)
+  - narrowed runtime coordinator/wiring to interface-based contracts (message-loop/scheduler/IPC deps) and localized channel instances inside `main()` composition
 - Web architecture decomposition (P1, non-destructive)
   - `src/channels/web/http/` modular namespace introduced and standardized
   - extracted route/security helpers:
@@ -53,6 +54,7 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
 
 ### Recent commit sequence (latest first)
 
+- `4b9711e` Narrow runtime wiring interfaces and add coverage
 - `79833ab` Extract web identity endpoint helpers
 - `b16e931` Extract web content endpoint helpers and type workspace tree
 - `da4d198` Extract web UI endpoint helpers and tighten UI bridge typing
@@ -138,11 +140,11 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
   - Pending: split auth/session/status/passkey and orchestration responsibilities further.
 
 - [ ] **Refactor `src/runtime.ts` into composition root + startup/shutdown managers**
-  - In progress: provider bootstrap, shutdown orchestration, startup/wiring helpers, and message-loop coordinator extracted.
-  - Pending: finalize interface narrowing around runtime-owned dependencies and reduce remaining global composition coupling.
+  - In progress: provider bootstrap, shutdown orchestration, startup/wiring helpers, message-loop coordinator extraction, and interface narrowing across runtime wiring/coordinator.
+  - Pending: complete remaining runtime-owned interface narrowing and reduce residual global composition coupling.
 
 - [ ] **Architectural dependency boundaries**
-  - In progress: removed web session-binder `as any` cast path and tightened UI bridge/context typing (including pending/custom flow and typed context bridge access).
+  - In progress: removed web session-binder `as any` cast path, tightened UI bridge/context typing (including pending/custom flow and typed context bridge access), and shifted runtime wiring/coordinator to interface-based dependency contracts.
   - Pending: remove remaining internal peeking/casts and formalize service interfaces/ports.
 
 - [ ] **Extension contract hardening**
