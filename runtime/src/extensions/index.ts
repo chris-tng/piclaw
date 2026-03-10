@@ -15,6 +15,7 @@
  *   - sqlIntrospect: introspect_sql for read-only DB introspection.
  *   - scheduledTasks: /tasks and /scheduled commands for task listing.
  *   - workspaceSearch: search_workspace tool for FTS over workspace files.
+ *   - providerBridge: runtime provider alias registration (openai-c/g/t/w).
  *   - sendAdaptiveCard: send_adaptive_card for agent-owned Adaptive Card posting.
  *   - sendDashboardWidget: send_dashboard_widget for posting the built-in live dashboard widget.
  *
@@ -41,12 +42,14 @@ import { sendAdaptiveCard } from "./send-adaptive-card.js";
 import { sendDashboardWidget } from "./send-dashboard-widget.js";
 import { exitProcess } from "./exit-process.js";
 import { autoresearchSupervisor } from "./autoresearch-supervisor.js";
+import { providerBridge } from "./provider-bridge.js";
 
 /** Array of all built-in extension factories to register on session creation. */
 export const builtinExtensionFactories: ExtensionFactory[] = [
   fileAttachments,
   messagesCrud,
   modelControl,
+  providerBridge,
   internalTools,
   toolActivation,
   keychainTools,
