@@ -22,7 +22,7 @@ type ProviderModelConfig = NonNullable<
   Parameters<ProviderBootstrapAgentPool["registerModelProvider"]>[1]["models"]
 >[number];
 
-type ProviderApi = ProviderModelConfig["api"];
+type ProviderApi = Exclude<ProviderModelConfig["api"], undefined>;
 
 const AZURE_OPENAI_PROVIDER = "azure-openai";
 const AZURE_OPENAI_API: ProviderApi = "azure-openai-responses-mi";
@@ -39,6 +39,14 @@ function splitCsv(value: string | undefined): string[] {
 
 function isApiProviderRegistered(api: ProviderApi): boolean {
   return Boolean(getApiProvider(api));
+}
+
+function toProviderStreamSimple(
+  fn: typeof streamSimpleAzureOpenAIResponses | typeof streamSimpleOpenAICompletions
+): NonNullable<Parameters<ProviderBootstrapAgentPool["registerModelProvider"]>[1]["streamSimple"]> {
+  return fn as unknown as NonNullable<
+    Parameters<ProviderBootstrapAgentPool["registerModelProvider"]>[1]["streamSimple"]
+  >;
 }
 
 function buildAzureOpenAiModels(modelIds: string[], modelNames: string[]): ProviderModelConfig[] {
@@ -85,7 +93,7 @@ export function registerOptionalProviders(agentPool: ProviderBootstrapAgentPool)
         baseUrl: aoaiBaseUrl,
         api: AZURE_OPENAI_API,
         apiKey: aoaiToken,
-        streamSimple: streamSimpleAzureOpenAIResponses,
+        streamSimple: toProviderStreamSimple(streamSimpleAzureOpenAIResponses),
         models: buildAzureOpenAiModels(modelIds, names),
       });
     } else if (!azureApiRegistered) {
@@ -93,7 +101,7 @@ export function registerOptionalProviders(agentPool: ProviderBootstrapAgentPool)
         baseUrl: aoaiBaseUrl,
         api: AZURE_OPENAI_API,
         apiKey: aoaiToken,
-        streamSimple: streamSimpleAzureOpenAIResponses,
+        streamSimple: toProviderStreamSimple(streamSimpleAzureOpenAIResponses),
       });
     }
   }
@@ -113,7 +121,7 @@ export function registerOptionalProviders(agentPool: ProviderBootstrapAgentPool)
         baseUrl: foundryBaseUrl,
         api: AZURE_FOUNDRY_API,
         apiKey: foundryToken,
-        streamSimple: streamSimpleOpenAICompletions,
+        streamSimple: toProviderStreamSimple(streamSimpleOpenAICompletions),
         models: buildAzureFoundryModels(modelIds, names),
       });
     } else if (!foundryApiRegistered) {
@@ -121,7 +129,7 @@ export function registerOptionalProviders(agentPool: ProviderBootstrapAgentPool)
         baseUrl: foundryBaseUrl,
         api: AZURE_FOUNDRY_API,
         apiKey: foundryToken,
-        streamSimple: streamSimpleOpenAICompletions,
+        streamSimple: toProviderStreamSimple(streamSimpleOpenAICompletions),
       });
     }
   }

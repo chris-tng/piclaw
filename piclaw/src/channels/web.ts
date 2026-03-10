@@ -229,7 +229,7 @@ export class WebChannel {
         storeMessage: (chatJid, content, isBot, mediaIds, options) =>
           this.storeMessage(chatJid, content, isBot, mediaIds, options),
         replaceMessageContent: (chatJid, rowId, text, mediaIds, contentBlocks) =>
-          replaceMessageContent(chatJid, rowId, text, { contentBlocks, mediaIds }),
+          replaceMessageContent(chatJid, rowId, text, { contentBlocks, mediaIds }) ?? null,
         setMessageThreadToSelf: (messageId) => {
           getDb().prepare("UPDATE messages SET thread_id = ? WHERE rowid = ?").run(messageId, messageId);
         },

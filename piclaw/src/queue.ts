@@ -139,7 +139,7 @@ export class AgentQueue {
    * Gracefully shut down the queue: clear pending items and wait up to `ms`
    * milliseconds for the currently running item to finish.
    */
-  async shutdown(ms: number): Promise<void> {
+  async shutdown(ms = 5000): Promise<void> {
     this.shuttingDown = true;
     this.pending = [];
     if (this.runningPromise) {

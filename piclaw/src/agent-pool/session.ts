@@ -25,13 +25,14 @@ import {
   type AuthStorage,
   type ModelRegistry,
   type SettingsManager,
-  type Tool,
 } from "@mariozechner/pi-coding-agent";
 
 import { SESSIONS_DIR, WORKSPACE_DIR } from "../core/config.js";
 import { builtinExtensionFactories } from "../extensions/index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+type AgentSessionCreateOptions = NonNullable<Parameters<typeof createAgentSession>[0]>;
 
 /**
  * Bundled extension paths that are loaded when their activation env vars
@@ -99,7 +100,7 @@ export async function createDefaultSession(
     authStorage: AuthStorage;
     modelRegistry: ModelRegistry;
     settingsManager: SettingsManager;
-    tools: Tool[];
+    tools: NonNullable<AgentSessionCreateOptions["tools"]>;
   }
 ): Promise<AgentSession> {
   const chatSessionDir = ensureSessionDir(chatJid);

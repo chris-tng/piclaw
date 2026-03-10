@@ -42,7 +42,7 @@ export interface WorkspaceTreeNode {
   path: string;
   type: "dir" | "file";
   size: number | null;
-  mtime: string;
+  mtime: string | null;
   child_count: number | undefined;
   children: WorkspaceTreeNode[] | undefined;
 }

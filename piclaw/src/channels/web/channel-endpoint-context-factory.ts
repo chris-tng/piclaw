@@ -53,7 +53,7 @@ export function createWebChannelEndpointContexts(
       defaultChatJid: options.defaultChatJid,
       getLastCommandInteractionId: () => channel.lastCommandInteractionId,
       json: (payload, status = 200) => channel.json(payload, status),
-      replaceMessageContent: (chatJid, id, content) => replaceMessageContent(chatJid, id, content, {}),
+      replaceMessageContent: (chatJid, id, content) => replaceMessageContent(chatJid, id, content, {}) ?? null,
       setThreadId: (messageId, threadId) => {
         getDb().prepare("UPDATE messages SET thread_id = ? WHERE rowid = ?").run(threadId, messageId);
       },

@@ -7,7 +7,7 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
 
 - Backend size: **184 TS files / 24,278 LOC** (`src/`)
 - Frontend size: **7,574 LOC** (`web/src/`)
-- Tests: **628 passing, 0 failing**
+- Tests: **629 passing, 0 failing**
 - Lint: passing
 - Coverage (line): **77.76%** (`coverage/lcov.info`)
 - Review comment coverage: Added focused regression/unit tests for each recent extraction seam (`web/recovery.ts`, `web/agent-buffers.ts`, `web/auth-runtime.ts`, `web/auth-gateway.ts`, `web/auth-endpoints.ts`, `web/channel-endpoint-context-factory.ts`, `web/endpoint-contexts.ts`, `web/agent-status-store.ts`, `web/pending-steering.ts`, `web/interaction-broadcaster.ts`, `web/followup-placeholders.ts`, `web/chat-run-control.ts`, `web/message-write-flows.ts`, `web/handlers/workspace.ts`, `web/http/dispatch-workspace.ts`, `web/http/dispatch-media.ts`, `web/http/dispatch-auth.ts`, `web/http/request-guards.ts`, `runtime/composition.ts`, `runtime/bootstrap.ts`, runtime wiring/provider bootstrap, `agent-pool/orphan-tool-results.ts`, `remote/execute-concurrency.ts`, and `utils/totp-qr.ts`) so refactors remain behavior-preserving.
@@ -86,6 +86,8 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
   - decomposed `src/utils/totp-qr.ts` by extracting QR lookup tables (`src/utils/qr/tables.ts`), low-level encoding engine (`src/utils/qr/engine.ts`), mask-loss scoring (`src/utils/qr/lost-point.ts`), and SVG rendering (`src/utils/qr/svg.ts`), leaving `totp-qr.ts` focused on TOTP payload assembly + public export surface
   - reduced control/tooling type looseness by removing `any` from context tool execution wrappers (`src/tools/context-tools.ts`), tree rendering walkers (`src/agent-control/handlers/tree.ts`), command parser action/scope casting (`src/agent-control/command-parsers.ts`), model helper generics (`src/utils/model-utils.ts`, `src/extensions/model-control.ts`, `src/agent-control/handlers/model.ts`), Azure bridge base options (`src/extensions/azure-openai-api.ts`), session tool registration (`src/agent-pool/session.ts`), media metadata/FTS row typing (`src/db/media.ts`, `src/db/types.ts`), and Baileys logging/disconnect parsing (`src/channels/whatsapp.ts`)
   - added CI-grade import/export hygiene checks (`scripts/check-import-boundaries.ts`, `scripts/check-unused-exports.ts`) with dedicated tests and integrated scripts in `package.json` quality gates
+  - completed full TypeScript reliability-gate remediation tranche for previously reproduced `make build-piclaw` failures (session option typing, web endpoint-context nullability contracts, cron parser nullable ISO handling, provider bootstrap API constraints, deep-import typing declaration seam) and restored green `make build-piclaw`/`tsc` status
+  - completed 24h web-route audit: extracted route path literals for `request-router-service` + `web/http/dispatch-*` and compared against baseline commit `f31c6e8` (no added/removed route paths); runtime smoke matrix confirms canonical endpoints remain `/timeline`, `/search`, `/hashtag/:tag`, `/agents`, `/agent/status`, `/agent/context`, `/agent/models`, `/manifest.json`, `/sse/stream` with expected 404s on deprecated/non-canonical paths (`/api/*`, `/agent-status`, `/events`, `/manifest.webmanifest`)
   - removed unused `src/db/auto-compaction.ts` and retired stale compiled artifact `dist/db/auto-compaction.js` as part of dead-code burn-down
   - completed stale-dist artifact retirement by removing legacy `dist/*` leftovers and switching `check:stale-dist` to strict mode (no allowlisted stale entries)
   - tightened Azure tool-call limit utilities in `src/utils/azure-tool-call-limit.ts` by removing `any` from message/item handling and introducing guarded record access helpers for reasoning/function-call parsing
@@ -113,7 +115,9 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
 
 ### Recent commit sequence (latest first)
 
-- `0cda21b` Harden session security, observability, and quality gates
+- Close TypeScript gate regressions and enforce typecheck quality (current HEAD)
+- `dc1efe1` Add usage stats totals plus provider/model breakdown
+- `03e23d0` Harden session security, observability, and quality gates
 - `a0c4c0f` Tighten control and tooling type boundaries
 - `b32e237` Decompose remote interop service handlers
 - `ef5d390` Refresh plan after Azure extension bridge tranche
@@ -327,6 +331,7 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
   - Security-critical spot checks in this tranche are >=85% lines for core controls: `src/channels/web/auth.ts` (100%), `src/channels/web/internal-secret.ts` (100%), `src/channels/web/session-auth.ts` (86.05%), `src/channels/web/http/security.ts` (89.58%), `src/remote/auth.ts` (90.91%), `src/remote/ssrf.ts` (93.18%), `src/utils/request-client.ts` (92.00%), `src/db/web-sessions.ts` (85.25%).
 - [x] Redundancy audit completed: overlapping/duplicate tests identified, justified, and reduced without coverage regressions.
 - [x] CI checks for dead exports/modules and import-boundary rules.
+- [x] TypeScript compile gate is mandatory in tranche-end quality flow (`quality` now runs `typecheck` before tests).
 - [x] Packaging CI-style checks in place (`check:pack-hygiene`, `check:stale-dist`).
 
 ## Release/package bars
@@ -338,6 +343,6 @@ Scope reviewed: `piclaw/piclaw/src`, `piclaw/piclaw/extensions`, `piclaw/piclaw/
 ## 5) Suggested execution order (next)
 
 1. **Maintenance cadence**
-   - Keep `quality` + `test:coverage` in tranche-end validation and preserve strict stale-dist/import-boundary/unused-export checks.
+   - Keep `make build-piclaw` + `quality` + `test:coverage` in tranche-end validation and preserve strict stale-dist/import-boundary/unused-export checks.
 2. **Incremental optional polish**
    - Continue opportunistic frontend decomposition (`workspace-explorer.ts`, large UI files) without coupling it to backend safety/refactor gates.

@@ -13,7 +13,7 @@
  *   - agent-pool.ts uses resolveModelLabel() when overriding the model for a run.
  */
 
-import type { Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@mariozechner/pi-ai";
 import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
 
 /** Result of splitting a raw model input string into provider + modelId. */
@@ -44,10 +44,10 @@ export function parseModelInput(input: string): ParsedModelInput {
  * across multiple providers.
  */
 export function findModel(
-  models: Model<unknown>[],
+  models: Model<Api>[],
   provider: string | undefined,
   modelId: string
-): { model?: Model<unknown>; error?: string } {
+): { model?: Model<Api>; error?: string } {
   if (provider) {
     const match = models.find(
       (m) =>

@@ -82,6 +82,13 @@ function sendThemeMessage(pi: ExtensionAPI, content: string) {
   });
 }
 
+type WebUiThemePayload = { name: string; tint: string | null };
+
+function setWebUiTheme(ctx: { ui: unknown }, payload: WebUiThemePayload): { success: boolean; error?: string } {
+  const ui = ctx.ui as { setTheme(theme: string | { name: string; tint: string | null }): { success: boolean; error?: string } };
+  return ui.setTheme(payload);
+}
+
 /** Extension factory that exposes `/theme` command and UI theme controls. */
 export const uiThemeExtension: ExtensionFactory = (pi: ExtensionAPI) => {
   pi.registerCommand("theme", {
@@ -104,7 +111,7 @@ export const uiThemeExtension: ExtensionFactory = (pi: ExtensionAPI) => {
         return;
       }
 
-      const result = ctx.ui.setTheme({ name: theme, tint: null });
+      const result = setWebUiTheme(ctx, { name: theme, tint: null });
       if (!result?.success) {
         sendThemeMessage(pi, `Failed to set theme: ${result?.error || "unknown error"}.`);
         return;
@@ -131,7 +138,7 @@ export const uiThemeExtension: ExtensionFactory = (pi: ExtensionAPI) => {
 
       const normalized = trimmed.toLowerCase();
       if (CLEAR_VALUES.has(normalized)) {
-        const result = ctx.ui.setTheme({ name: "default", tint: null });
+        const result = setWebUiTheme(ctx, { name: "default", tint: null });
         if (!result?.success) {
           sendThemeMessage(pi, `Failed to clear tint: ${result?.error || "unknown error"}.`);
           return;
@@ -146,7 +153,7 @@ export const uiThemeExtension: ExtensionFactory = (pi: ExtensionAPI) => {
         return;
       }
 
-      const result = ctx.ui.setTheme({ name: "default", tint: hex });
+      const result = setWebUiTheme(ctx, { name: "default", tint: hex });
       if (!result?.success) {
         sendThemeMessage(pi, `Failed to set tint: ${result?.error || "unknown error"}.`);
         return;

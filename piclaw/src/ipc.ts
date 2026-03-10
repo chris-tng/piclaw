@@ -105,7 +105,9 @@ function computeScheduledNextRun(
 ): string | undefined {
   if (scheduleType === "cron") {
     try {
-      return CronExpressionParser.parse(scheduleValue, { tz: TIMEZONE }).next().toISOString();
+      const timezone: string | undefined = typeof TIMEZONE === "string" ? TIMEZONE : undefined;
+      const next = CronExpressionParser.parse(scheduleValue, { tz: timezone }).next().toISOString();
+      return next ?? undefined;
     } catch {
       return undefined;
     }

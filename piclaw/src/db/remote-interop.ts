@@ -4,6 +4,8 @@
 
 import { getDb } from "./connection.js";
 
+type SqlBinding = string | number | bigint | boolean | Uint8Array | null;
+
 /** Lifecycle state for a known remote peer. */
 export type RemotePeerStatus = "paired" | "pending" | "denied" | "blocked" | "revoked";
 /** Interop mode negotiated with a remote peer. */
@@ -113,8 +115,8 @@ export function getRemotePeer(instanceId: string): RemotePeerRecord | null {
 /** Apply a partial update to a remote peer record. */
 export function updateRemotePeer(instanceId: string, updates: Partial<RemotePeerRecord>): void {
   const fields: string[] = [];
-  const values: unknown[] = [];
-  const addField = (name: keyof RemotePeerRecord, value: unknown) => {
+  const values: SqlBinding[] = [];
+  const addField = (name: keyof RemotePeerRecord, value: SqlBinding | undefined) => {
     if (value === undefined) return;
     fields.push(`${name} = ?`);
     values.push(value);
@@ -229,8 +231,8 @@ export function getRemoteRequestById(id: string): RemoteRequestRecord | null {
 /** Apply a partial update to a remote request record. */
 export function updateRemoteRequest(id: string, updates: Partial<RemoteRequestRecord>): void {
   const fields: string[] = [];
-  const values: unknown[] = [];
-  const addField = (name: keyof RemoteRequestRecord, value: unknown) => {
+  const values: SqlBinding[] = [];
+  const addField = (name: keyof RemoteRequestRecord, value: SqlBinding | undefined) => {
     if (value === undefined) return;
     fields.push(`${name} = ?`);
     values.push(value);

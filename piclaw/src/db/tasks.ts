@@ -17,6 +17,8 @@
 import type { ScheduledTask, TaskRunLog } from "../types.js";
 import { getDb } from "./connection.js";
 
+type SqlBinding = string | number | bigint | boolean | Uint8Array | null;
+
 /**
  * Insert a new scheduled task into the database.
  * Called by ipc.ts when a `schedule` IPC file is processed.
@@ -64,7 +66,7 @@ export function updateTask(
   >
 ): void {
   const fields: string[] = [];
-  const values: unknown[] = [];
+  const values: SqlBinding[] = [];
 
   if (updates.prompt !== undefined) { fields.push("prompt = ?"); values.push(updates.prompt); }
   if (updates.model !== undefined) { fields.push("model = ?"); values.push(updates.model); }

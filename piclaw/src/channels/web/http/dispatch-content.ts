@@ -2,7 +2,7 @@
  * web/http/dispatch-content.ts – Timeline/post/search/thread route dispatch helpers.
  */
 
-import type { WebChannel } from "../web.js";
+import type { WebChannel } from "../../web.js";
 
 /**
  * Handle primary content routes when the request matches; otherwise return null.

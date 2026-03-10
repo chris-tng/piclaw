@@ -2,7 +2,7 @@
  * web/http/dispatch-shell.ts – Shell/static/avatar route dispatch helpers.
  */
 
-import type { WebChannel } from "../web.js";
+import type { WebChannel } from "../../web.js";
 import type { RouteFlags } from "./route-flags.js";
 
 /** Static asset serving function signature used by shell-route dispatcher. */

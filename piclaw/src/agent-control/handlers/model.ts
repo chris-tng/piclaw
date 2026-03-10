@@ -9,7 +9,7 @@
 
 import type { AgentSession, ModelRegistry } from "@mariozechner/pi-coding-agent";
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
-import type { Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@mariozechner/pi-ai";
 import type { AgentControlCommand, AgentControlResult } from "../agent-control-types.js";
 import { THINKING_LEVELS, normalizeModelMatch } from "../agent-control-helpers.js";
 
@@ -39,7 +39,7 @@ export async function handleModel(session: AgentSession, modelRegistry: ModelReg
       };
     }
 
-    const uniqueModels = new Map<string, Model<unknown>>();
+    const uniqueModels = new Map<string, Model<Api>>();
     for (const model of available) {
       const key = `${model.provider}/${model.id}`;
       if (!uniqueModels.has(key)) {
@@ -64,7 +64,7 @@ export async function handleModel(session: AgentSession, modelRegistry: ModelReg
   }
 
   const models = registry.getAll();
-  let selected: Model<unknown> | undefined;
+  let selected: Model<Api> | undefined;
 
   if (command.provider) {
     selected = normalizeModelMatch(models, command.provider, command.modelId);

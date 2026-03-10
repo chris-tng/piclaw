@@ -2,7 +2,7 @@
  * web/http/dispatch-agent.ts – Agent route dispatch helpers.
  */
 
-import type { WebChannel } from "../web.js";
+import type { WebChannel } from "../../web.js";
 
 /**
  * Handle /agent routes when the request matches; otherwise return null.

@@ -177,7 +177,7 @@ export class UiBridge {
       setTitle: (title) => {
         this.channel.broadcastEvent("extension_ui_title", { chat_jid: chatJid, title });
       },
-      custom: async <T>(_factory, _options) => {
+      custom: async <T>(_factory: unknown, _options?: unknown) => {
         const result = await requestUiResponse("custom", { title: "Custom UI" });
         return result as T;
       },

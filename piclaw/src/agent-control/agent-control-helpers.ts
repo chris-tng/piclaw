@@ -14,7 +14,7 @@
  */
 
 import type { AgentSession, AgentSessionEvent } from "@mariozechner/pi-coding-agent";
-import type { Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@mariozechner/pi-ai";
 import { existsSync } from "fs";
 import { PICLAW_CONFIG_PATH } from "../core/config.js";
 import { readJsonConfig, writeJsonConfig } from "../core/config-store.js";
@@ -255,10 +255,10 @@ export async function runPromptAndCapture(session: AgentSession, text: string): 
 
 /** Fuzzy-match a model input string against available models. */
 export function normalizeModelMatch(
-  models: Model<unknown>[],
+  models: Model<Api>[],
   provider: string,
   modelId: string
-): Model<unknown> | undefined {
+): Model<Api> | undefined {
   const providerLower = provider.toLowerCase();
   const modelLower = modelId.toLowerCase();
   return models.find((model) => model.provider.toLowerCase() === providerLower && model.id.toLowerCase() === modelLower);

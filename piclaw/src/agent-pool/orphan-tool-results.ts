@@ -19,7 +19,7 @@ interface AgentMessageRecord {
   toolCallId?: unknown;
 }
 
-interface SessionWithInternalAgent extends AgentSession {
+interface SessionWithInternalAgent {
   agent?: {
     state?: {
       messages?: AgentMessageRecord[];
@@ -30,7 +30,7 @@ interface SessionWithInternalAgent extends AgentSession {
 
 /** Remove toolResult entries that no longer correspond to assistant tool calls. */
 export function pruneOrphanToolResults(session: AgentSession, chatJid: string): void {
-  const internalSession = session as SessionWithInternalAgent;
+  const internalSession = session as unknown as SessionWithInternalAgent;
   const messages = internalSession.agent?.state?.messages;
   if (!Array.isArray(messages) || messages.length === 0) return;
 

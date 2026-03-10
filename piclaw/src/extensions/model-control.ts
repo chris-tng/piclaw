@@ -5,7 +5,7 @@
  * Tools: get_model_state, list_models, switch_model, switch_thinking
  */
 import type { ExtensionAPI, ExtensionFactory } from "@mariozechner/pi-coding-agent";
-import type { Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@mariozechner/pi-ai";
 import { supportsXhigh } from "@mariozechner/pi-ai";
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 import { Type } from "@sinclair/typebox";
@@ -31,12 +31,12 @@ const TOOL_HINT = [
 // Helpers
 // ---------------------------------------------------------------------------
 
-function modelLabel(model: Model<unknown> | null | undefined): string | null {
+function modelLabel(model: Model<Api> | null | undefined): string | null {
   if (!model?.provider || !model?.id) return null;
   return `${model.provider}/${model.id}`;
 }
 
-function getAvailableLevels(model: Model<unknown> | undefined): ThinkingLevel[] {
+function getAvailableLevels(model: Model<Api> | undefined): ThinkingLevel[] {
   if (!model?.reasoning) return ["off"];
   const base: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high"];
   return supportsXhigh(model) ? [...base, "xhigh"] : base;
@@ -109,7 +109,7 @@ export const modelControl: ExtensionFactory = (pi: ExtensionAPI) => {
     }),
     async execute(_id, params, _signal, _update, ctx) {
       ctx.modelRegistry.refresh();
-      const seen = new Map<string, Model<unknown>>();
+      const seen = new Map<string, Model<Api>>();
       for (const m of ctx.modelRegistry.getAvailable()) {
         if (!m?.provider || !m?.id) continue;
         const key = `${m.provider}/${m.id}`;

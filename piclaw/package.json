@@ -30,7 +30,7 @@
     "check:stale-dist": "bun run scripts/check-stale-dist.ts",
     "check:import-boundaries": "bun run scripts/check-import-boundaries.ts",
     "check:unused-exports": "bun run scripts/check-unused-exports.ts",
-    "quality": "bun run lint && bun run test && bun run check:pack-hygiene && bun run check:stale-dist && bun run check:import-boundaries && bun run check:unused-exports"
+    "quality": "bun run lint && bun run typecheck && bun run test && bun run check:pack-hygiene && bun run check:stale-dist && bun run check:import-boundaries && bun run check:unused-exports"
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "0.57.1",

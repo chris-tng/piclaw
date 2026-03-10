@@ -32,16 +32,20 @@ function getToolCallName(content: unknown): string | null {
 function describeEntry(entry: SessionTreeEntry): string {
   switch (entry.type) {
     case "message": {
-      const msg = entry.message;
-      const role = msg?.role || "message";
+      const msg = (entry.message && typeof entry.message === "object")
+        ? (entry.message as unknown as Record<string, unknown>)
+        : {};
+      const role = typeof msg.role === "string" ? msg.role : "message";
       if (role === "toolResult") {
-        return `toolResult: ${msg.toolName || "tool"}`;
+        const toolName = typeof msg.toolName === "string" ? msg.toolName : "tool";
+        return `toolResult: ${toolName}`;
       }
-      const text = extractTextFromContent(msg?.content);
+      const content = msg.content;
+      const text = extractTextFromContent(content);
       if (text) {
         return `${role}: "${truncateText(text, 80)}"`;
       }
-      const toolCallName = getToolCallName(msg?.content);
+      const toolCallName = getToolCallName(content);
       if (toolCallName) return `${role}: [tool ${toolCallName}]`;
       return role;
     }
@@ -61,9 +65,8 @@ function describeEntry(entry: SessionTreeEntry): string {
       return `[label ${entry.label || "clear"}]`;
     case "session_info":
       return `[session name ${entry.name || "none"}]`;
-    default:
-      return `[${entry.type}]`;
   }
+  return "[entry]";
 }
 
 /** Handle /tree: render the session message tree in text format. */
@@ -173,8 +176,11 @@ export async function handleLabels(session: AgentSession, _command: LabelsComman
 
   const describeLabelEntry = (entry: SessionTreeEntry): string => {
     if (entry.type === "message") {
-      const role = entry.message?.role || "message";
-      const text = extractTextFromContent(entry.message?.content);
+      const msg = (entry.message && typeof entry.message === "object")
+        ? (entry.message as unknown as Record<string, unknown>)
+        : {};
+      const role = typeof msg.role === "string" ? msg.role : "message";
+      const text = extractTextFromContent(msg.content);
       if (text) return `${role}: "${truncateText(text, 60)}"`;
       return role;
     }

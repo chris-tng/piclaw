@@ -52,7 +52,7 @@ export async function handleUpdatePostRequest(
       return ctx.json({ error: "Invalid thread_id" }, 400);
     }
     ctx.setThreadId(id, body.thread_id);
-    (updated.data as Record<string, unknown>).thread_id = body.thread_id;
+    (updated.data as unknown as Record<string, unknown>).thread_id = body.thread_id;
   }
 
   ctx.broadcastInteractionUpdated(updated);
