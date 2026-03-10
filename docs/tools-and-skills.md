@@ -15,6 +15,7 @@ Core tools (from `pi`):
 
 - `attach_file` — attach a workspace file for download in the web UI (cards appear automatically; use `attachment:<filename>` only for inline embeds)
 - `search_messages` — full‑text search across stored messages (FTS + hashtags + row lookup)
+- `get_message` — retrieve full message content by row_id (with optional context)
 - `search_workspace` — full‑text search across notes + skills (FTS, with aggressive cleanup and size limits)
 - `get_model_state` — show current model, thinking level, and context usage
 - `list_models` — list available models/providers
@@ -71,6 +72,8 @@ Direct commands (no LLM round-trip):
 | `/cycle-model [back]` | Cycle to the next available model |
 | `/thinking [level]` | Show or set thinking level |
 | `/cycle-thinking` | Cycle thinking level |
+| `/theme [name]` | Set UI theme (use `/theme list` to see options) |
+| `/tint [#hex|name|off]` | Tint the default light/dark UI (e.g. `/tint #3b82f6`, `/tint orange`) |
 | `/state` | Show current session state |
 | `/stats` | Show session token and cost stats |
 | `/context` (alias `/ctx`) | Show context window usage |

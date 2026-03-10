@@ -10,6 +10,7 @@ PiClaw is a Docker-based sandbox for running the [Pi Coding Agent](https://githu
 
 - **Streaming web UI** — real-time token-by-token updates over SSE, with Markdown, KaTeX, and Mermaid rendering
 - **Workspace explorer** — file tree sidebar with previews, file reference pills, and downloads
+- **Disk usage starburst** — folder-size visualization with hover details and drill-down
 - **Code editor** — built-in CodeMirror 6 with syntax highlighting for 12 languages, search/replace, and save
 - **Persistent storage** — SQLite-backed messages, media, tasks, token usage, and encrypted keychain
 - **Skills** — setup, debugging, Playwright, scheduling, charts, web search, and more
@@ -41,12 +42,12 @@ The UI is single-user, mobile-friendly, and streams updates over SSE:
 - **File attachments** with download links
 - **Link previews** via server-side OpenGraph fetch
 - **Multi-turn threading** — subsequent turns are visually threaded under the first
-- **Dark/Light themes** following system preference
+- **Themes + tinting** — presets plus `/theme` and `/tint` commands (Solarized auto light/dark)
 - **Mobile-first layout** with webapp manifest
 
 ### Workspace explorer
 
-The sidebar shows a file tree of `/workspace` with auto-refresh. Click a file to preview it or add a **file reference pill** to the next prompt. Drag and drop files onto the tree to upload them.
+The sidebar shows a file tree of `/workspace` with auto-refresh. Click a file to preview it or add a **file reference pill** to the next prompt. Drag and drop files onto the tree to upload them. It also includes a **folder-size starburst** preview with hover details and drill-down.
 
 ### Code editor
 

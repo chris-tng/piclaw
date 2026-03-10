@@ -296,6 +296,8 @@ const THEME_VAR_KEYS = [
     '--border-color',
     '--accent-color',
     '--accent-hover',
+    '--accent-soft',
+    '--accent-soft-strong',
     '--danger-color',
     '--success-color',
     '--search-highlight-color',
@@ -333,6 +335,42 @@ function parseHexColor(input) {
         b: int & 255,
         hex: `#${full.toLowerCase()}`,
     };
+}
+
+function parseCssColor(input) {
+    if (!input || typeof document === 'undefined') return null;
+    const raw = String(input).trim();
+    if (!raw) return null;
+
+    const el = document.createElement('div');
+    el.style.color = '';
+    el.style.color = raw;
+    if (!el.style.color) return null;
+
+    let computed = el.style.color;
+    try {
+        if (document.body) {
+            el.style.display = 'none';
+            document.body.appendChild(el);
+            computed = getComputedStyle(el).color || el.style.color;
+            document.body.removeChild(el);
+        }
+    } catch {
+        // fallback to inline style
+    }
+
+    const match = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+    if (!match) return null;
+    const r = parseInt(match[1], 10);
+    const g = parseInt(match[2], 10);
+    const b = parseInt(match[3], 10);
+    if (![r, g, b].every((v) => Number.isFinite(v))) return null;
+    const hex = `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+    return { r, g, b, hex };
+}
+
+function parseColor(input) {
+    return parseHexColor(input) || parseCssColor(input);
 }
 
 function mixColors(base, overlay, ratio) {
@@ -373,7 +411,7 @@ function resolvePalette(themeName, mode) {
 }
 
 function buildTintedPalette(basePalette, tintHex, mode) {
-    const tint = parseHexColor(tintHex);
+    const tint = parseColor(tintHex);
     if (!tint) return basePalette;
     const basePrimary = parseHexColor(basePalette.bgPrimary);
     const baseSecondary = parseHexColor(basePalette.bgSecondary);
@@ -399,10 +437,16 @@ function applyCssVariables(palette, mode) {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
     const accentColor = palette.accent;
-    const accentHex = parseHexColor(accentColor);
+    const accentHex = parseColor(accentColor);
     const searchHighlight = accentHex
         ? rgbaColor(accentHex, mode === 'dark' ? 0.35 : 0.2)
         : palette.searchHighlight || palette.searchHighlightColor;
+    const accentSoft = accentHex
+        ? rgbaColor(accentHex, mode === 'dark' ? 0.16 : 0.12)
+        : 'rgba(29, 155, 240, 0.12)';
+    const accentSoftStrong = accentHex
+        ? rgbaColor(accentHex, mode === 'dark' ? 0.28 : 0.2)
+        : 'rgba(29, 155, 240, 0.2)';
 
     const vars = {
         '--bg-primary': palette.bgPrimary,
@@ -413,6 +457,8 @@ function applyCssVariables(palette, mode) {
         '--border-color': palette.borderColor,
         '--accent-color': accentColor,
         '--accent-hover': palette.accentHover || accentColor,
+        '--accent-soft': accentSoft,
+        '--accent-soft-strong': accentSoftStrong,
         '--danger-color': palette.danger || DEFAULT_LIGHT.danger,
         '--success-color': palette.success || DEFAULT_LIGHT.success,
         '--search-highlight-color': searchHighlight || 'rgba(29, 155, 240, 0.2)',
@@ -457,6 +503,7 @@ function applyThemeState(nextTheme, options = {}) {
     const root = document.documentElement;
     root.dataset.theme = mode;
     root.dataset.colorTheme = themeName;
+    root.dataset.tint = tint ? String(tint) : '';
     root.style.colorScheme = mode;
 
     let palette = paletteBase;

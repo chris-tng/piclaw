@@ -69,6 +69,15 @@ function normalizeHex(input: string): string | null {
   return `#${full.toLowerCase()}`;
 }
 
+function normalizeTint(input: string): string | null {
+  const hex = normalizeHex(input);
+  if (hex) return hex;
+  const named = input.trim().toLowerCase();
+  if (!named) return null;
+  if (/^[a-z]+$/.test(named)) return named;
+  return null;
+}
+
 function formatThemeList(): string {
   const items = THEME_PRESETS.map((theme) => `• ${theme.name} — ${theme.label}`);
   return ["Available themes:", ...items, "", "Usage: /theme <name>"].join("\n");
@@ -132,7 +141,7 @@ export const uiThemeExtension: ExtensionFactory = (pi: ExtensionAPI) => {
 
       const trimmed = args.trim();
       if (!trimmed) {
-        sendThemeMessage(pi, "Usage: /tint #hex (e.g. /tint #3b82f6) or /tint off");
+        sendThemeMessage(pi, "Usage: /tint #hex (e.g. /tint #3b82f6), /tint orange, or /tint off");
         return;
       }
 
@@ -147,19 +156,19 @@ export const uiThemeExtension: ExtensionFactory = (pi: ExtensionAPI) => {
         return;
       }
 
-      const hex = normalizeHex(trimmed);
-      if (!hex) {
-        sendThemeMessage(pi, `Invalid tint value: ${trimmed}. Use a hex color like #3b82f6 or /tint off.`);
+      const tint = normalizeTint(trimmed);
+      if (!tint) {
+        sendThemeMessage(pi, `Invalid tint value: ${trimmed}. Use a hex color (e.g. #3b82f6), a named color (e.g. orange), or /tint off.`);
         return;
       }
 
-      const result = setWebUiTheme(ctx, { name: "default", tint: hex });
+      const result = setWebUiTheme(ctx, { name: "default", tint });
       if (!result?.success) {
         sendThemeMessage(pi, `Failed to set tint: ${result?.error || "unknown error"}.`);
         return;
       }
 
-      sendThemeMessage(pi, `Tint set to ${hex}.`);
+      sendThemeMessage(pi, `Tint set to ${tint}.`);
     },
   });
 };

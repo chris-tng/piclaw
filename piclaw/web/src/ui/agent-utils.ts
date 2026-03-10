@@ -70,6 +70,15 @@ export function getAgentAvatarUrl(agentId, agents) {
 /** Return a consistent palette colour for a conversation turn ID. */
 export function getTurnColor(turnId) {
     if (!turnId) return null;
+    if (typeof document !== 'undefined') {
+        const root = document.documentElement;
+        const themeName = root?.dataset?.colorTheme || '';
+        const tint = root?.dataset?.tint || '';
+        const accent = getComputedStyle(root).getPropertyValue('--accent-color')?.trim();
+        if (accent && (tint || (themeName && themeName !== 'default'))) {
+            return accent;
+        }
+    }
     const palette = [
         '#4ECDC4',
         '#FF6B6B',

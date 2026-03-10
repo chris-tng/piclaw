@@ -554,6 +554,40 @@ body {
     max-width: 260px;
     height: auto;
     margin: 0 auto var(--spacing-sm) auto;
+    transform-origin: center;
+}
+
+.workspace-folder-starburst-svg.is-zooming {
+    animation: starburst-zoom 0.2s ease;
+}
+
+.workspace-folder-starburst-svg path {
+    cursor: pointer;
+    transition: opacity 0.15s ease, filter 0.15s ease;
+}
+
+.workspace-folder-starburst-segment.is-hovered {
+    opacity: 0.92;
+    filter: brightness(1.08);
+}
+
+.workspace-folder-starburst-center.is-drill {
+    cursor: pointer;
+}
+
+.workspace-folder-starburst-center.is-drill:hover {
+    stroke: var(--accent-color);
+}
+
+@keyframes starburst-zoom {
+    from {
+        transform: scale(0.98);
+        opacity: 0.8;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 .workspace-folder-starburst-total-label {
@@ -567,6 +601,37 @@ body {
     fill: var(--text-primary);
     font-size: 10px;
     font-weight: 600;
+}
+
+.workspace-folder-starburst-total-pct {
+    fill: var(--text-secondary);
+    font-size: 9px;
+}
+
+.workspace-folder-starburst-hover {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin: -4px 0 var(--spacing-sm) 0;
+}
+
+.workspace-folder-starburst-hover-label {
+    color: var(--text-primary);
+    font-weight: 600;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workspace-folder-starburst-hover-size,
+.workspace-folder-starburst-hover-pct {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .workspace-folder-starburst-legend {
@@ -1146,7 +1211,7 @@ body {
 .compose-input-wrapper.drag-active {
     border-color: var(--accent-color);
     background-color: var(--bg-hover);
-    box-shadow: 0 0 0 2px rgba(29, 155, 240, 0.2);
+    box-shadow: 0 0 0 2px var(--accent-soft-strong, rgba(29, 155, 240, 0.2));
 }
 
 .compose-input-main {
@@ -1479,7 +1544,7 @@ body {
 }
 
 .icon-btn:hover {
-    background-color: rgba(29, 155, 240, 0.1);
+    background-color: var(--accent-soft, rgba(29, 155, 240, 0.1));
 }
 
 .icon-btn svg {
@@ -2615,7 +2680,7 @@ body {
     width: 40px;
     height: 40px;
     border-radius: 8px;
-    background-color: #1d9bf0;
+    background-color: var(--accent-color);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2735,7 +2800,7 @@ body {
 }
 
 .agent-request-btn:focus {
-    box-shadow: 0 0 0 2px #1d9bf0;
+    box-shadow: 0 0 0 2px var(--accent-color);
 }
 
 .agent-request-btn:active {
@@ -2743,13 +2808,13 @@ body {
 }
 
 .agent-request-btn.primary {
-    background-color: #1d9bf0;
-    border-color: #1d9bf0;
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
     color: #ffffff;
 }
 
 .agent-request-btn.primary:hover {
-    background-color: #1a8cd8;
+    background-color: var(--accent-hover);
 }
 
 .agent-request-btn.always-allow {
@@ -2796,13 +2861,13 @@ body {
     }
     
     .agent-request-btn.primary {
-        background-color: #1d9bf0;
-        border-color: #1d9bf0;
+        background-color: var(--accent-color);
+        border-color: var(--accent-color);
         color: #ffffff;
     }
     
     .agent-request-btn.primary:hover {
-        background-color: #1a8cd8;
+        background-color: var(--accent-hover);
     }
     
     .agent-request-btn.always-allow {

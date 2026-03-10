@@ -15,7 +15,7 @@
 | `message_media` | Message ↔ media join |
 | `scheduled_tasks` | Task definitions |
 | `task_run_logs` | Task run history |
-| `token_usage` | Per‑assistant‑message token + cost usage |
+| `token_usage` | Per‑assistant‑message token + cost usage (includes model/provider/api for per‑model tracking) |
 | `tool_outputs` | Stored tool output summaries |
 | `tool_outputs_fts` | Full‑text index for tool output |
 | `workspace_files` | Indexed workspace files (path, size, mtime) |
@@ -27,7 +27,7 @@
 | `webauthn_enrollments` | One‑time enrolment tokens for passkey registration |
 | `web_sessions` | Persistent web UI sessions (TOTP + passkey logins) |
 
-Attachments and link previews are stored on the message record (`content_blocks`, `link_previews`).
+Attachments and link previews are stored on the message record (`content_blocks`, `link_previews`). Token usage rows include `model`, `provider`, and `api` fields to support per-model tracking.
 
 ## Entity map
 

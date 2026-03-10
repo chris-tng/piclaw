@@ -247,18 +247,17 @@ function describeDonutSegment(cx, cy, innerRadius, outerRadius, startAngle, endA
     ].join(' ');
 }
 
-function createFolderStarburstPayload(root, truncated = false, isDarkTheme = false) {
-    if (!root) return null;
-    const totalSize = computeSubtreeBytes(root);
-    const hierarchy = buildFolderSizeHierarchy(root, 0);
+const STARBURST_RINGS = {
+    1: [26, 46],
+    2: [48, 68],
+    3: [70, 90],
+    4: [92, 112],
+};
+
+function buildStarburstSegments(rootNode, baseSize, isDarkTheme) {
     const segments = [];
     const legend = [];
-    const ringByDepth = {
-        1: [26, 46],
-        2: [48, 68],
-        3: [70, 90],
-        4: [92, 112],
-    };
+    const baseTotal = Math.max(0, Number(baseSize) || 0);
 
     const walk = (node, start, end, depth) => {
         const children = Array.isArray(node?.children) ? node.children : [];
@@ -277,7 +276,7 @@ function createFolderStarburstPayload(root, truncated = false, isDarkTheme = fal
             cursor = childEnd;
             if (childEnd - childStart < 0.003) return;
 
-            const ring = ringByDepth[depth];
+            const ring = STARBURST_RINGS[depth];
             if (ring) {
                 const color = segmentColorFromAngle(childStart, depth, isDarkTheme);
                 segments.push({
@@ -294,7 +293,7 @@ function createFolderStarburstPayload(root, truncated = false, isDarkTheme = fal
                         key: child.path,
                         name: child.name,
                         size: childSize,
-                        pct: totalSize > 0 ? (childSize / totalSize) * 100 : 0,
+                        pct: baseTotal > 0 ? (childSize / baseTotal) * 100 : 0,
                         color,
                     });
                 }
@@ -306,36 +305,142 @@ function createFolderStarburstPayload(root, truncated = false, isDarkTheme = fal
         });
     };
 
-    walk(hierarchy, -Math.PI / 2, (Math.PI * 3) / 2, 1);
+    walk(rootNode, -Math.PI / 2, (Math.PI * 3) / 2, 1);
+    return { segments, legend };
+}
+
+function findHierarchyNode(root, targetPath) {
+    if (!root || !targetPath) return null;
+    if (root.path === targetPath) return root;
+    const children = Array.isArray(root.children) ? root.children : [];
+    for (const child of children) {
+        const found = findHierarchyNode(child, targetPath);
+        if (found) return found;
+    }
+    return null;
+}
+
+function createFolderStarburstPayload(root, truncated = false, isDarkTheme = false) {
+    if (!root) return null;
+    const totalSize = computeSubtreeBytes(root);
+    const hierarchy = buildFolderSizeHierarchy(root, 0);
+    const { segments, legend } = buildStarburstSegments(hierarchy, hierarchy.size || totalSize, isDarkTheme);
     return {
         root: hierarchy,
         totalSize,
         segments,
         legend,
         truncated,
+        isDarkTheme,
     };
 }
 
 function FolderStarburstChart({ payload }) {
     if (!payload) return null;
-    const totalLabel = payload.totalSize > 0 ? formatFileSize(payload.totalSize) : '0 B';
-    const legend = Array.isArray(payload.legend) ? payload.legend.slice(0, 8) : [];
+    const [hovered, setHovered] = useState(null);
+    const [zoomPath, setZoomPath] = useState(payload?.root?.path || '.');
+    const [zoomStack, setZoomStack] = useState(() => [payload?.root?.path || '.']);
+    const [isZooming, setIsZooming] = useState(false);
+
+    useEffect(() => {
+        const rootPath = payload?.root?.path || '.';
+        setZoomPath(rootPath);
+        setZoomStack([rootPath]);
+        setHovered(null);
+    }, [payload?.root?.path, payload?.totalSize]);
+
+    useEffect(() => {
+        if (!zoomPath) return;
+        setIsZooming(true);
+        const timer = setTimeout(() => setIsZooming(false), 180);
+        return () => clearTimeout(timer);
+    }, [zoomPath]);
+
+    const zoomRoot = useMemo(() => {
+        return findHierarchyNode(payload.root, zoomPath) || payload.root;
+    }, [payload?.root, zoomPath]);
+
+    const baseSize = zoomRoot?.size || payload.totalSize || 0;
+    const { segments, legend } = useMemo(() => {
+        return buildStarburstSegments(zoomRoot, baseSize, payload.isDarkTheme);
+    }, [zoomRoot, baseSize, payload.isDarkTheme]);
+
+    const totalLabel = baseSize > 0 ? formatFileSize(baseSize) : '0 B';
+    const rawLabel = zoomRoot?.name || '';
+    const labelBase = rawLabel && rawLabel !== '.' ? rawLabel : 'Total';
+    const activeLabel = hovered?.label || labelBase || 'Total';
+    const activeValue = hovered ? formatFileSize(hovered.size) : totalLabel;
+    const activePct = hovered && baseSize > 0
+        ? `${((hovered.size / baseSize) * 100).toFixed(1)}%`
+        : '';
+    const canZoomOut = zoomStack.length > 1;
+
+    const handleSegmentClick = (segment) => {
+        if (!segment?.path) return;
+        const node = findHierarchyNode(payload.root, segment.path);
+        if (!node || !Array.isArray(node.children) || node.children.length === 0) return;
+        setZoomStack((prev) => [...prev, node.path]);
+        setZoomPath(node.path);
+        setHovered(null);
+    };
+
+    const handleZoomOut = () => {
+        if (!canZoomOut) return;
+        setZoomStack((prev) => {
+            const next = prev.slice(0, -1);
+            setZoomPath(next[next.length - 1] || payload?.root?.path || '.');
+            return next;
+        });
+        setHovered(null);
+    };
+
     return html`
         <div class="workspace-folder-starburst">
-            <svg viewBox="0 0 240 240" class="workspace-folder-starburst-svg" role="img"
-                aria-label=${`Folder sizes for ${payload?.root?.path || '.'}`}>
-                ${payload.segments.map((segment) => html`
-                    <path key=${segment.key} d=${segment.d} fill=${segment.color} stroke="var(--bg-primary)" stroke-width="1">
+            <svg viewBox="0 0 240 240" class=${`workspace-folder-starburst-svg${isZooming ? ' is-zooming' : ''}`} role="img"
+                aria-label=${`Folder sizes for ${zoomRoot?.path || payload?.root?.path || '.'}`}>
+                ${segments.map((segment) => html`
+                    <path
+                        key=${segment.key}
+                        d=${segment.d}
+                        fill=${segment.color}
+                        stroke="var(--bg-primary)"
+                        stroke-width="1"
+                        class=${`workspace-folder-starburst-segment${hovered?.key === segment.key ? ' is-hovered' : ''}`}
+                        onMouseEnter=${() => setHovered(segment)}
+                        onMouseLeave=${() => setHovered(null)}
+                        onTouchStart=${() => setHovered(segment)}
+                        onTouchEnd=${() => setHovered(null)}
+                        onClick=${() => handleSegmentClick(segment)}
+                    >
                         <title>${segment.label} — ${formatFileSize(segment.size)}</title>
                     </path>
                 `)}
-                <circle cx="120" cy="120" r="24" fill="var(--bg-secondary)" stroke="var(--border-color)" stroke-width="1" />
-                <text x="120" y="116" text-anchor="middle" class="workspace-folder-starburst-total-label">Total</text>
-                <text x="120" y="132" text-anchor="middle" class="workspace-folder-starburst-total-value">${totalLabel}</text>
+                <circle
+                    cx="120"
+                    cy="120"
+                    r="24"
+                    fill="var(--bg-secondary)"
+                    stroke="var(--border-color)"
+                    stroke-width="1"
+                    class=${`workspace-folder-starburst-center${canZoomOut ? ' is-drill' : ''}`}
+                    onClick=${handleZoomOut}
+                />
+                <text x="120" y="114" text-anchor="middle" class="workspace-folder-starburst-total-label">${activeLabel}</text>
+                <text x="120" y="130" text-anchor="middle" class="workspace-folder-starburst-total-value">${activeValue}</text>
+                ${activePct && html`
+                    <text x="120" y="144" text-anchor="middle" class="workspace-folder-starburst-total-pct">${activePct}</text>
+                `}
             </svg>
+            ${hovered && html`
+                <div class="workspace-folder-starburst-hover">
+                    <span class="workspace-folder-starburst-hover-label">${hovered.label}</span>
+                    <span class="workspace-folder-starburst-hover-size">${formatFileSize(hovered.size)}</span>
+                    ${activePct && html`<span class="workspace-folder-starburst-hover-pct">${activePct}</span>`}
+                </div>
+            `}
             ${legend.length > 0 && html`
                 <div class="workspace-folder-starburst-legend">
-                    ${legend.map((entry) => html`
+                    ${legend.slice(0, 8).map((entry) => html`
                         <div key=${entry.key} class="workspace-folder-starburst-legend-item">
                             <span class="workspace-folder-starburst-swatch" style=${`background:${entry.color}`}></span>
                             <span class="workspace-folder-starburst-name" title=${entry.name}>${entry.name}</span>
