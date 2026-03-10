@@ -14,6 +14,7 @@
  *   - sqlIntrospect: introspect_sql for read-only DB introspection.
  *   - scheduledTasks: /tasks and /scheduled commands for task listing.
  *   - workspaceSearch: search_workspace tool for FTS over workspace files.
+ *   - providerBridge: runtime provider alias registration (openai-c/g/t/w).
  *
  * Consumers:
  *   - agent-pool/session.ts passes builtinExtensionFactories to the resource loader.
@@ -28,12 +29,14 @@ import { sqlIntrospect } from "./sql-introspect.js";
 import { scheduledTasks } from "./scheduled-tasks.js";
 import { workspaceSearch } from "./workspace-search.js";
 import { uiThemeExtension } from "./ui-theme.js";
+import { providerBridge } from "./provider-bridge.js";
 
 /** Array of all built-in extension factories to register on session creation. */
 export const builtinExtensionFactories: ExtensionFactory[] = [
   fileAttachments,
   messagesCrud,
   modelControl,
+  providerBridge,
   internalTools,
   keychainTools,
   sqlIntrospect,

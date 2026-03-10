@@ -1753,6 +1753,48 @@ body {
     }
 }
 
+/* Mobile/small-screen workspace behavior: show a left drawer and toggle tab */
+@media (max-width: 1023px), (orientation: portrait) {
+    .workspace-toggle-tab {
+        display: flex;
+        left: 0;
+        border-radius: 0 var(--radius-md) var(--radius-md) 0;
+        border-left: 0;
+        z-index: 70;
+    }
+
+    .workspace-sidebar {
+        display: flex;
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: min(86vw, 360px);
+        min-width: min(86vw, 360px);
+        height: 100dvh;
+        z-index: 60;
+        border-right: 1px solid var(--border-color);
+        box-shadow: var(--shadow-md);
+        transform: translateX(-100%);
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .app-shell:not(.workspace-collapsed) .workspace-sidebar {
+        transform: translateX(0);
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .app-shell:not(.workspace-collapsed) .workspace-toggle-tab {
+        left: calc(min(86vw, 360px) - var(--workspace-tab-width, 20px));
+    }
+
+    .workspace-splitter {
+        display: none !important;
+    }
+}
+
 /* Floating controls */
 .floating-controls {
     display: none;

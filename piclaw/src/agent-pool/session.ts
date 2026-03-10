@@ -51,6 +51,8 @@ const OPTIONAL_EXTENSIONS: { path: string; envGate?: string }[] = [
   { path: resolve(EXTENSIONS_DIR, "context-mode.ts") },
 ];
 
+let startupDiagnosticsLogged = false;
+
 /** Walk up from startDir looking for a node_modules that contains @mariozechner/pi-ai. */
 function findNodeModules(startDir: string): string | null {
   let dir = startDir;
@@ -80,6 +82,83 @@ function getBundledExtensionPaths(): string[] {
     }
   }
   return paths;
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
+}
+
+function configuredProviders(settingsManager: SettingsManager): string[] {
+  const providers = new Set<string>();
+  const defaultProvider = settingsManager.getDefaultProvider();
+  if (defaultProvider) providers.add(defaultProvider);
+
+  const enabledModels = settingsManager.getEnabledModels() ?? [];
+  for (const entry of enabledModels) {
+    const slash = entry.indexOf("/");
+    if (slash > 0) {
+      providers.add(entry.slice(0, slash));
+    }
+  }
+
+  return uniqueSorted(Array.from(providers));
+}
+
+function logStartupDiagnosticsOnce(
+  resourceLoader: DefaultResourceLoader,
+  session: AgentSession,
+  settingsManager: SettingsManager,
+): void {
+  if (startupDiagnosticsLogged) return;
+  startupDiagnosticsLogged = true;
+
+  const extensions = resourceLoader.getExtensions();
+  const loadedCount = extensions.extensions.length;
+  const errorCount = extensions.errors.length;
+  const pendingProviders = uniqueSorted(extensions.runtime.pendingProviderRegistrations.map((entry) => entry.name));
+
+  console.log(
+    `[provider-observability] extensions loaded=${loadedCount} errors=${errorCount} pending_provider_registrations=${pendingProviders.length}`,
+  );
+  if (pendingProviders.length > 0) {
+    console.log(`[provider-observability] pending providers: ${pendingProviders.join(", ")}`);
+  }
+
+  if (errorCount > 0) {
+    const sample = extensions.errors.slice(0, 5);
+    for (const item of sample) {
+      const reason = String(item.error ?? "unknown error").split("\n")[0] ?? "unknown error";
+      console.warn(`[provider-observability] extension load error: ${item.path} :: ${reason}`);
+    }
+    if (errorCount > sample.length) {
+      console.warn(`[provider-observability] extension load errors truncated: showing ${sample.length} of ${errorCount}`);
+    }
+  }
+
+  const registry = (session as AgentSession & { modelRegistry?: ModelRegistry }).modelRegistry;
+  const allProviders = uniqueSorted((registry?.getAll() ?? []).map((model) => model.provider));
+  const availableProviders = uniqueSorted((registry?.getAvailable() ?? []).map((model) => model.provider));
+  console.log(
+    `[provider-observability] providers total=${allProviders.length} available=${availableProviders.length}`,
+  );
+  if (availableProviders.length > 0) {
+    console.log(`[provider-observability] available providers: ${availableProviders.join(", ")}`);
+  }
+
+  const configured = configuredProviders(settingsManager);
+  const missingConfigured = configured.filter((provider) => !allProviders.includes(provider));
+  if (missingConfigured.length > 0) {
+    console.warn(
+      `[provider-observability] configured providers not registered: ${missingConfigured.join(", ")}`,
+    );
+  }
+
+  const unresolvedPending = pendingProviders.filter((provider) => !allProviders.includes(provider));
+  if (unresolvedPending.length > 0) {
+    console.warn(
+      `[provider-observability] pending providers not present after session init: ${unresolvedPending.join(", ")}`,
+    );
+  }
 }
 
 /** Ensure the session directory exists for a chat and return its path. */
@@ -129,6 +208,8 @@ export async function createSessionInDir(
     sessionManager: SessionManager.continueRecent(WORKSPACE_DIR, sessionDir),
     tools: options.tools,
   });
+
+  logStartupDiagnosticsOnce(resourceLoader, session, options.settingsManager);
 
   return session;
 }
