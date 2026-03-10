@@ -12,6 +12,8 @@ import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import type { AgentControlCommand, AgentControlResult } from "../agent-control-types.js";
 import { formatCompactNumber, formatCurrency } from "../agent-control-helpers.js";
 import { CONTROL_COMMAND_DEFINITIONS } from "../command-registry.js";
+import { getChatJid } from "../../core/chat-context.js";
+import { getTokenUsageByModel, getTokenUsageByProvider, getTokenUsageTotals } from "../../db.js";
 import { searchWorkspace } from "../../workspace-search.js";
 
 type StateCommand = Extract<AgentControlCommand, { type: "state" }>;
@@ -55,6 +57,44 @@ export async function handleStats(session: AgentSession, _command: StatsCommand)
     `• Tokens: input ${formatCompactNumber(tokens.input)}, output ${formatCompactNumber(tokens.output)}, cache read ${formatCompactNumber(tokens.cacheRead)}, cache write ${formatCompactNumber(tokens.cacheWrite)}, total ${formatCompactNumber(tokens.total)}`,
     `• Cost: ${formatCurrency(stats.cost)}`,
   ];
+
+  const chatJid = getChatJid();
+  try {
+    const totals = getTokenUsageTotals(chatJid);
+    if (totals.runs > 0) {
+      const providerRows = getTokenUsageByProvider(chatJid, 5);
+      const modelRows = getTokenUsageByModel(chatJid, 5);
+
+      lines.push(
+        "",
+        "Tracked usage (persisted):",
+        `• Overall: input ${formatCompactNumber(totals.input_tokens)}, output ${formatCompactNumber(totals.output_tokens)}, cache read ${formatCompactNumber(totals.cache_read_tokens)}, cache write ${formatCompactNumber(totals.cache_write_tokens)}, total ${formatCompactNumber(totals.total_tokens)}, cost ${formatCurrency(totals.cost_total)} (${formatCompactNumber(totals.runs)} run${totals.runs === 1 ? "" : "s"})`
+      );
+
+      if (providerRows.length > 0) {
+        lines.push("• Per provider:");
+        for (const row of providerRows) {
+          const provider = row.provider || "(unknown provider)";
+          lines.push(
+            `  - ${provider}: total ${formatCompactNumber(row.total_tokens)}, cost ${formatCurrency(row.cost_total)} (${formatCompactNumber(row.runs)} run${row.runs === 1 ? "" : "s"})`
+          );
+        }
+      }
+
+      if (modelRows.length > 0) {
+        lines.push("• Per model:");
+        for (const row of modelRows) {
+          const model = row.model || "(unknown model)";
+          lines.push(
+            `  - ${model}: total ${formatCompactNumber(row.total_tokens)}, cost ${formatCurrency(row.cost_total)} (${formatCompactNumber(row.runs)} run${row.runs === 1 ? "" : "s"})`
+          );
+        }
+      }
+    }
+  } catch {
+    // Database may be unavailable in isolated command-handler tests.
+  }
+
   return { status: "success", message: lines.join("\n") };
 }
 

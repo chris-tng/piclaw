@@ -7,6 +7,7 @@
  */
 
 import { afterEach, expect, test } from "bun:test";
+import { withChatContext } from "../../src/core/chat-context.js";
 import { getTestWorkspace, setEnv } from "../helpers.js";
 
 let restoreEnv: (() => void) | null = null;
@@ -232,8 +233,32 @@ test("agent control info and mode commands", async () => {
   const state = await applyControlCommand(session as any, registry, { type: "state", raw: "/state" });
   expect(state.message).toContain("Model:");
 
-  const stats = await applyControlCommand(session as any, registry, { type: "stats", raw: "/stats" });
+  const db = await import("../../src/db.js");
+  db.initDatabase();
+  db.storeTokenUsage({
+    chat_jid: "web:default",
+    run_at: new Date().toISOString(),
+    input_tokens: 120,
+    output_tokens: 30,
+    cache_read_tokens: 0,
+    cache_write_tokens: 0,
+    total_tokens: 150,
+    cost_input: 0,
+    cost_output: 0,
+    cost_cache_read: 0,
+    cost_cache_write: 0,
+    cost_total: 0.15,
+    provider: "openai",
+    model: "gpt-test",
+  });
+
+  const stats = await withChatContext("web:default", "web", () =>
+    applyControlCommand(session as any, registry, { type: "stats", raw: "/stats" })
+  );
   expect(stats.message).toContain("Session stats:");
+  expect(stats.message).toContain("Tracked usage (persisted):");
+  expect(stats.message).toContain("Per provider:");
+  expect(stats.message).toContain("Per model:");
 
   const context = await applyControlCommand(session as any, registry, { type: "context", raw: "/context" });
   expect(context.message).toContain("Context usage:");

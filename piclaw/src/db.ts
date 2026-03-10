@@ -68,7 +68,12 @@ export {
   hasAgentRepliesAfter,
 } from "./db/chat-cursors.js";
 export type { InflightRun, FailedRunRecord } from "./db/chat-cursors.js";
-export { storeTokenUsage } from "./db/token-usage.js";
+export {
+  storeTokenUsage,
+  getTokenUsageTotals,
+  getTokenUsageByProvider,
+  getTokenUsageByModel,
+} from "./db/token-usage.js";
 export {
   upsertRemotePeer,
   getRemotePeer,
