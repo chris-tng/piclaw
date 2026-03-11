@@ -71,7 +71,7 @@ class PaneRegistryImpl {
                     bestPriority = priority;
                     best = ext;
                 }
-            } catch (err) {
+            } catch {
                 // canHandle() threw — skip silently
             }
         }

@@ -9,7 +9,7 @@
  * focus on the public API contract using lightweight mocks.
  */
 
-import { expect, test, describe, beforeEach, mock } from "bun:test";
+import { expect, test, describe, mock } from "bun:test";
 import "../../test/helpers.js";
 
 // ── Inline types (browser modules can't be imported in bun test) ────
@@ -32,15 +32,6 @@ interface PaneInstance {
     onDirtyChange?(cb: (dirty: boolean) => void): void;
     onSaveRequest?(cb: (content: string) => void): void;
     onClose?(cb: () => void): void;
-}
-
-interface WebPaneExtension {
-    id: string;
-    label: string;
-    placement: string;
-    capabilities: string[];
-    canHandle?(context: PaneContext): boolean | number;
-    mount(container: HTMLElement, context: PaneContext): PaneInstance;
 }
 
 // ── Editor loader contract tests ────────────────────────────────
