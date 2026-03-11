@@ -779,7 +779,7 @@ body {
     overflow-y: hidden;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
-    min-height: 28px;
+    min-height: 33px;
     scrollbar-width: none;
     -ms-overflow-style: none;
     flex-shrink: 0;
@@ -790,8 +790,8 @@ body {
     display: flex;
     align-items: center;
     gap: 3px;
-    padding: 0 4px 0 8px;
-    font-size: 11px;
+    padding: 0 6px 0 10px;
+    font-size: 12px;
     font-family: var(--font-family);
     color: var(--text-secondary);
     background: transparent;
