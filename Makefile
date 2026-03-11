@@ -1,7 +1,7 @@
 # Makefile – Top-level build/dev targets for the piclaw project.
 #
 # Targets:
-#   vendor         – Bundle vendored CodeMirror (minified ESM).
+#   vendor         – Bundle vendored mermaid (minified ESM).
 #   build-web      – Build web bundles into static/dist/ (+ sourcemaps).
 #   build-ts       – Type-check TypeScript (tsc --noEmit). No dist/ output.
 #   build-piclaw   – Full build: build-web (vendor + bundles) + build-ts.
@@ -56,9 +56,9 @@ build: ## Build Docker image
 
 # ── Build pipeline ───────────────────────────────────────────────────
 
-vendor: ## Bundle vendored CodeMirror + beautiful-mermaid
+vendor: ## Bundle vendored mermaid (CodeMirror is now part of editor bundle)
 	cd piclaw && bun run build:vendor
-	@ls -lh piclaw/web/static/js/vendor/codemirror.js piclaw/web/static/js/vendor/beautiful-mermaid.js
+	@ls -lh piclaw/web/static/js/vendor/beautiful-mermaid.js
 
 build-web: ## Build web JS/CSS bundles (+ sourcemaps) into static/dist/ (includes vendor bundle)
 	cd piclaw && bun run build:web
@@ -89,10 +89,22 @@ pack: build-piclaw ## Pack piclaw into a .tgz (outside the repo)
 	cd piclaw && bun pm pack --destination $(PACK_DIR)
 	@ls -lh $(PACK_DIR)/piclaw-*.tgz
 
-restart: ## Restart piclaw via supervisorctl
-	supervisorctl restart piclaw 2>/dev/null || true
-	@sleep 2
-	@supervisorctl status piclaw 2>/dev/null || true
+restart: ## Restart piclaw (auto-detects supervisor or systemd)
+	@if command -v supervisorctl >/dev/null 2>&1 && \
+		supervisorctl -c /workspace/.piclaw/supervisor/supervisord.conf status piclaw >/dev/null 2>&1; then \
+		echo "[restart] Using supervisorctl"; \
+		supervisorctl -c /workspace/.piclaw/supervisor/supervisord.conf restart piclaw; \
+		sleep 2; \
+		supervisorctl -c /workspace/.piclaw/supervisor/supervisord.conf status piclaw; \
+	elif command -v systemctl >/dev/null 2>&1 && \
+		systemctl --user list-unit-files piclaw.service 2>/dev/null | grep -q piclaw; then \
+		echo "[restart] Using systemctl --user"; \
+		systemctl --user restart piclaw.service; \
+		sleep 2; \
+		systemctl --user status piclaw.service --no-pager -l | head -5; \
+	else \
+		echo "[restart] No service manager found; try: make local-install"; \
+	fi
 
 local-install: pack ## Pack, install globally, and restart piclaw
 	@set -e; \
