@@ -990,13 +990,37 @@ body {
 }
 
 /* ── Markdown Preview Panel ── */
+.md-preview-splitter {
+    height: 4px;
+    flex-shrink: 0;
+    cursor: row-resize;
+    background: transparent;
+    position: relative;
+    z-index: 10;
+    touch-action: none;
+}
+
+.md-preview-splitter::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 1px;
+    background: var(--border-color);
+    transition: background 0.15s;
+}
+
+.md-preview-splitter:hover::after,
+.md-preview-splitter.dragging::after {
+    background: var(--accent-color);
+}
+
 .md-preview-panel {
     display: flex;
     flex-direction: column;
-    height: var(--preview-split, 40%);
     min-height: 60px;
-    max-height: 70%;
-    border-top: 1px solid var(--border-color);
     background: var(--bg-primary);
     overflow: hidden;
     flex-shrink: 0;

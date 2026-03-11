@@ -5,12 +5,25 @@
  * Renders below the CodeMirror editor when activated via tab context menu.
  * Uses the same renderMarkdown() pipeline as the timeline so output is
  * visually consistent. Updates on a debounced timer to avoid jank.
+ *
+ * Includes a draggable splitter at the top for resizing.
  */
 
-import { html, useCallback, useEffect, useRef, useState } from '../vendor/preact-htm.js';
+import { html, useEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { renderMarkdown, renderMermaidDiagrams } from '../markdown.js';
 
-const DEBOUNCE_MS = 300;
+const POLL_MS = 400;
+const MIN_H = 60;
+const DEFAULT_H = 220;
+const LS_KEY = 'mdPreviewHeight';
+
+function getStoredHeight() {
+    try {
+        const v = localStorage.getItem(LS_KEY);
+        const n = v ? Number(v) : NaN;
+        return Number.isFinite(n) && n >= MIN_H ? n : DEFAULT_H;
+    } catch { return DEFAULT_H; }
+}
 
 /**
  * MarkdownPreview component.
@@ -21,40 +34,110 @@ const DEBOUNCE_MS = 300;
  * @param {() => void} props.onClose - Close the preview.
  */
 export function MarkdownPreview({ getContent, path, onClose }) {
-    const [html_content, setHtmlContent] = useState('');
+    const [renderedHtml, setRenderedHtml] = useState('');
+    const [height, setHeight] = useState(getStoredHeight);
     const previewRef = useRef(null);
-    const timerRef = useRef(null);
-    const contentRef = useRef('');
+    const panelRef = useRef(null);
+    const prevTextRef = useRef('');
+    const getContentRef = useRef(getContent);
 
-    const updatePreview = useCallback(() => {
-        const text = getContent?.() || '';
-        if (text === contentRef.current && html_content) return;
-        contentRef.current = text;
+    // Keep ref in sync without restarting effects
+    getContentRef.current = getContent;
 
-        try {
-            const rendered = renderMarkdown(text, null, { sanitize: false });
-            setHtmlContent(rendered);
-        } catch {
-            setHtmlContent('<p style="color:var(--text-secondary)">Preview unavailable</p>');
-        }
-    }, [getContent]);
-
-    // Initial render + poll for changes (editor has no onChange callback to hook)
+    // Single stable interval — reads getContent via ref
     useEffect(() => {
-        updatePreview();
-        const interval = setInterval(updatePreview, DEBOUNCE_MS);
-        return () => clearInterval(interval);
-    }, [updatePreview]);
+        const tick = () => {
+            const text = getContentRef.current?.() || '';
+            if (text === prevTextRef.current) return;
+            prevTextRef.current = text;
+            try {
+                const h = renderMarkdown(text, null, { sanitize: false });
+                setRenderedHtml(h);
+            } catch {
+                setRenderedHtml('<p style="color:var(--text-secondary)">Preview unavailable</p>');
+            }
+        };
+        tick();
+        const id = setInterval(tick, POLL_MS);
+        return () => clearInterval(id);
+    }, []);
 
     // Render mermaid diagrams after HTML update
     useEffect(() => {
-        if (previewRef.current && html_content) {
+        if (previewRef.current && renderedHtml) {
             renderMermaidDiagrams(previewRef.current).catch(() => {});
         }
-    }, [html_content]);
+    }, [renderedHtml]);
+
+    // ── Splitter drag (mouse) ──
+    const handleMouseDown = (e) => {
+        e.preventDefault();
+        const startY = e.clientY;
+        const startH = panelRef.current?.offsetHeight || height;
+        const container = panelRef.current?.parentElement;
+        const maxH = container ? container.offsetHeight * 0.7 : 500;
+        const splitter = e.currentTarget;
+        splitter.classList.add('dragging');
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+
+        const onMove = (me) => {
+            // Dragging up ⇒ larger preview
+            const h = Math.min(Math.max(startH - (me.clientY - startY), MIN_H), maxH);
+            setHeight(h);
+        };
+        const onUp = () => {
+            splitter.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            try { localStorage.setItem(LS_KEY, String(Math.round(panelRef.current?.offsetHeight || height))); } catch {}
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    };
+
+    // ── Splitter drag (touch) ──
+    const handleTouchStart = (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        if (!touch) return;
+        const startY = touch.clientY;
+        const startH = panelRef.current?.offsetHeight || height;
+        const container = panelRef.current?.parentElement;
+        const maxH = container ? container.offsetHeight * 0.7 : 500;
+        const splitter = e.currentTarget;
+        splitter.classList.add('dragging');
+        document.body.style.userSelect = 'none';
+
+        const onMove = (te) => {
+            const t = te.touches[0];
+            if (!t) return;
+            te.preventDefault();
+            const h = Math.min(Math.max(startH - (t.clientY - startY), MIN_H), maxH);
+            setHeight(h);
+        };
+        const onUp = () => {
+            splitter.classList.remove('dragging');
+            document.body.style.userSelect = '';
+            try { localStorage.setItem(LS_KEY, String(Math.round(panelRef.current?.offsetHeight || height))); } catch {}
+            document.removeEventListener('touchmove', onMove);
+            document.removeEventListener('touchend', onUp);
+            document.removeEventListener('touchcancel', onUp);
+        };
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('touchend', onUp);
+        document.addEventListener('touchcancel', onUp);
+    };
 
     return html`
-        <div class="md-preview-panel">
+        <div
+            class="md-preview-splitter"
+            onMouseDown=${handleMouseDown}
+            onTouchStart=${handleTouchStart}
+        ></div>
+        <div class="md-preview-panel" ref=${panelRef} style=${{ height: height + 'px' }}>
             <div class="md-preview-header">
                 <span class="md-preview-title">Preview</span>
                 <button class="md-preview-close" onClick=${onClose} title="Close preview" aria-label="Close preview">
@@ -67,7 +150,7 @@ export function MarkdownPreview({ getContent, path, onClose }) {
             <div
                 class="md-preview-body post-content"
                 ref=${previewRef}
-                dangerouslySetInnerHTML=${{ __html: html_content }}
+                dangerouslySetInnerHTML=${{ __html: renderedHtml }}
             />
         </div>
     `;
