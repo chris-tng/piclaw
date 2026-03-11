@@ -660,7 +660,7 @@ export function ComposeBox({
                 onDrop=${handleDrop}
             >
                 <div class="compose-input-main">
-                    ${!searchMode && (fileRefs.length > 0 || mediaFiles.length > 0 || messageRefs.length > 0) && html`
+                    ${(fileRefs.length > 0 || mediaFiles.length > 0 || messageRefs.length > 0) && html`
                         <div class="compose-file-refs">
                             ${messageRefs.map((id) => {
                                 return html`

@@ -295,16 +295,7 @@ function App() {
     const addMessageRef = useCallback((id) => {
         if (!id) return;
         setMessageRefs((prev) => (prev.includes(id) ? prev : [...prev, id]));
-        // Exit search/hashtag mode so the compose box shows the pill
-        const { searchQuery: sq, currentHashtag: ht } = viewStateRef.current || {};
-        if (sq || ht) {
-            setSearchOpen(false);
-            setSearchQuery(null);
-            setCurrentHashtag(null);
-            setPosts(null);
-            loadPosts();
-        }
-    }, [loadPosts]);
+    }, []);
 
     const removeMessageRef = useCallback((id) => {
         setMessageRefs((prev) => prev.filter((item) => item !== id));
