@@ -1092,6 +1092,72 @@ body {
     color: var(--danger-color);
 }
 
+/* ── Terminal Dock Pane ── */
+.terminal-pane-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--bg-primary);
+    outline: none;
+}
+
+.terminal-pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px var(--spacing-md);
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+}
+
+.terminal-pane-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.terminal-pane-status {
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+
+.terminal-pane-body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: var(--spacing-sm);
+}
+
+.terminal-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-family: var(--font-family-mono);
+}
+
+/* Dock panel layout (bottom panel) */
+.dock-panel {
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-primary);
+    height: var(--dock-height, 200px);
+    min-height: 100px;
+    max-height: 50vh;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.dock-panel.hidden {
+    display: none;
+}
+
 /* ── CodeMirror syntax highlighting (classHighlighter) ── */
 /* Light mode */
 .tok-keyword { color: #a626a4; }

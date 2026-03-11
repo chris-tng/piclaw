@@ -22,7 +22,7 @@ import { Timeline } from './components/timeline.js';
 import { WorkspaceExplorer } from './components/workspace-explorer.js';
 import { WorkspaceEditor } from './components/editor.js';
 import { TabStrip } from './components/tab-strip.js';
-import { paneRegistry, editorPaneExtension, tabStore } from './panes/index.js';
+import { paneRegistry, editorPaneExtension, terminalPaneExtension, tabStore } from './panes/index.js';
 import { getLocalStorageBoolean, getLocalStorageNumber, setLocalStorageItem } from './utils/storage.js';
 import { useSseConnection } from './ui/use-sse-connection.js';
 import { useNotifications } from './ui/use-notifications.js';
@@ -77,6 +77,7 @@ if (window.marked) {
  */
 // Register built-in pane extensions
 paneRegistry.register(editorPaneExtension);
+paneRegistry.register(terminalPaneExtension);
 
 function App() {
     const [connectionStatus, setConnectionStatus] = useState('disconnected');
@@ -1296,10 +1297,12 @@ function App() {
 
     const openEditor = useCallback(async (path) => {
         if (!path) return;
-        // Save current tab's view state before switching
-        const prevId = tabStore.getActiveId();
-        if (prevId && prevId !== path) {
-            // View state is saved by the editor component via onDirtyChange
+        // Route through pane registry to find the best handler
+        const context = { path, mode: 'edit' };
+        const pane = paneRegistry.resolve(context);
+        if (!pane) {
+            console.warn(`[openEditor] No pane handler for: ${path}`);
+            return;
         }
         tabStore.open(path);
         setEditorSaveError(null);
