@@ -765,6 +765,14 @@ body {
     border-left: 1px solid var(--border-color);
 }
 
+.editor-pane-host {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
 .tab-strip {
     display: flex;
     align-items: stretch;

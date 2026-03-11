@@ -20,9 +20,8 @@ import { ComposeBox } from './components/compose-box.js';
 import { AgentRequestModal, AgentStatus, ConnectionStatus } from './components/status.js';
 import { Timeline } from './components/timeline.js';
 import { WorkspaceExplorer } from './components/workspace-explorer.js';
-import { WorkspaceEditor } from './components/editor.js';
 import { TabStrip } from './components/tab-strip.js';
-import { paneRegistry, editorPaneExtension, terminalPaneExtension } from './panes/index.js';
+import { paneRegistry, editorPaneExtension, terminalPaneExtension, tabStore } from './panes/index.js';
 import { getLocalStorageBoolean, getLocalStorageNumber, setLocalStorageItem } from './utils/storage.js';
 import { useSseConnection } from './ui/use-sse-connection.js';
 import { useNotifications } from './ui/use-notifications.js';
@@ -134,13 +133,75 @@ function App() {
 
     // Editor state hook (file load/save, tabs, dirty, view state, SSE sync)
     const {
-        editorState, editorSaving, editorSaveError, editorSavedAt, editorDirty,
-        tabStripTabs, tabStripActiveId, activeViewState,
-        openEditor, closeEditor, handleEditorSave, handleEditorDirtyChange,
-        handleViewStateChange, handleTabClose, handleTabActivate,
+        editorOpen, tabStripTabs, tabStripActiveId,
+        openEditor, closeEditor, handleTabClose, handleTabActivate,
         handleTabCloseOthers, handleTabCloseAll, handleTabTogglePin,
         revealInExplorer,
     } = useEditorState();
+
+    // Editor extension container ref + instance tracking
+    const editorContainerRef = useRef(null);
+    const editorInstanceRef = useRef(null);
+
+    // Mount/dispose editor extension instance when active tab changes
+    useEffect(() => {
+        const container = editorContainerRef.current;
+        if (!container) return;
+
+        // Dispose previous instance
+        if (editorInstanceRef.current) {
+            editorInstanceRef.current.dispose();
+            editorInstanceRef.current = null;
+        }
+
+        const activeId = tabStripActiveId;
+        if (!activeId) return;
+
+        // Mount new instance
+        const context = { path: activeId, mode: 'edit' };
+        const ext = paneRegistry.resolve(context) || paneRegistry.get('editor');
+        if (!ext) return;
+
+        const instance = ext.mount(container, context);
+        editorInstanceRef.current = instance;
+
+        // Wire PaneInstance callbacks
+        instance.onDirtyChange?.((dirty) => {
+            tabStore.setDirty(activeId, dirty);
+        });
+
+        instance.onSaveRequest?.(() => {
+            // Save is handled internally by the extension now
+        });
+
+        instance.onClose?.(() => {
+            closeEditor();
+        });
+
+        // Restore view state from tab store
+        const viewState = tabStore.getViewState(activeId);
+        if (viewState && typeof instance.restoreViewState === 'function') {
+            // Wait for CodeMirror to settle
+            requestAnimationFrame(() => instance.restoreViewState(viewState));
+        }
+
+        // Track view state changes
+        if (typeof instance.onViewStateChange === 'function') {
+            instance.onViewStateChange((state) => {
+                tabStore.saveViewState(activeId, state);
+            });
+        }
+
+        // Focus the editor
+        requestAnimationFrame(() => instance.focus());
+
+        return () => {
+            if (editorInstanceRef.current === instance) {
+                instance.dispose();
+                editorInstanceRef.current = null;
+            }
+        };
+    }, [tabStripActiveId, closeEditor]);
 
     const [userProfile, setUserProfile] = useState({ name: 'You', avatar_url: null, avatar_background: null });
     const hasConnectedOnceRef = useRef(false);
@@ -1212,7 +1273,7 @@ function App() {
     }, []);
 
     useEffect(() => {
-        if (!editorState.open) return;
+        if (!editorOpen) return;
         if (typeof window === 'undefined') return;
         const shell = appShellRef.current;
         if (!shell) return;
@@ -1227,7 +1288,7 @@ function App() {
             dockHeightRef.current = Number.isFinite(stored) ? stored : 200;
         }
         shell.style.setProperty('--dock-height', `${dockHeightRef.current}px`);
-    }, [editorState.open]);
+    }, [editorOpen]);
 
 
     // Dock (terminal) toggle state — only available when dock panes registered
@@ -1249,7 +1310,6 @@ function App() {
     }, [toggleDock, hasDockPanes]);
 
     const steerQueued = Boolean(steerQueuedTurnId && (steerQueuedTurnId === (agentStatus?.turn_id || currentTurnId)));
-    const editorOpen = Boolean(editorState.open);
 
     return html`
         <div class=${`app-shell${workspaceOpen ? '' : ' workspace-collapsed'}${editorOpen ? ' editor-open' : ''}`} ref=${appShellRef}>
@@ -1283,20 +1343,7 @@ function App() {
                         onToggleDock=${hasDockPanes ? toggleDock : undefined}
                         dockVisible=${hasDockPanes && dockVisible}
                     />
-                    <${WorkspaceEditor}
-                        path=${editorState.path}
-                        content=${editorState.content}
-                        loading=${editorState.loading}
-                        error=${editorState.error}
-                        saving=${editorSaving}
-                        saveError=${editorSaveError}
-                        savedAt=${editorSavedAt}
-                        onSave=${handleEditorSave}
-                        onClose=${closeEditor}
-                        onDirtyChange=${handleEditorDirtyChange}
-                        onViewStateChange=${handleViewStateChange}
-                        initialViewState=${activeViewState}
-                    />
+                    <div class="editor-pane-host" ref=${editorContainerRef}></div>
                     ${hasDockPanes && dockVisible && html`<div class="dock-splitter" onMouseDown=${handleDockSplitterMouseDown} onTouchStart=${handleDockSplitterTouchStart}></div>`}
                     ${hasDockPanes && html`<div class=${`dock-panel${dockVisible ? '' : ' hidden'}`}>
                         <div class="dock-panel-header">
