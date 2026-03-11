@@ -9,7 +9,7 @@
  * (panes/editor-extension.ts). This hook coordinates tabs only.
  */
 
-import { useState, useCallback, useMemo, useEffect } from '../vendor/preact-htm.js';
+import { useState, useCallback, useRef, useEffect } from '../vendor/preact-htm.js';
 import { paneRegistry, tabStore } from '../panes/index.js';
 
 /**
