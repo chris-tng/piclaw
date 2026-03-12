@@ -129,6 +129,7 @@ export function ComposeBox({
     onModelStateChange,
     activeEditorPath = null,
     onAttachEditorFile,
+    onOpenFilePill,
 }) {
     const [content, setContent] = useState('');
     const [searchText, setSearchText] = useState('');
@@ -708,6 +709,7 @@ export function ComposeBox({
                                         prefix="compose"
                                         label=${label}
                                         title=${path}
+                                        onClick=${() => onOpenFilePill?.(path)}
                                         removeTitle="Remove file"
                                         onRemove=${() => onRemoveFileRef?.(path)}
                                     />

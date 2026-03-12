@@ -359,7 +359,7 @@ function highlightHtml(html, query) {
 /**
  * Single post component
  */
-export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMessage, agentName, agentAvatarUrl, userName, userAvatarUrl, userAvatarBackground, onDelete, isThreadReply, isRemoving, highlightQuery }) {
+export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMessage, agentName, agentAvatarUrl, userName, userAvatarUrl, userAvatarBackground, onDelete, isThreadReply, isRemoving, highlightQuery, onFileRef }) {
     const [zoomedImage, setZoomedImage] = useState(null);
     const contentRef = useRef(null);
 
@@ -596,6 +596,7 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
                                     prefix="post"
                                     label=${label}
                                     title=${ref}
+                                    onClick=${() => onFileRef?.(ref)}
                                 />
                             `;
                         })}

@@ -5,7 +5,7 @@ import { renderThinkingMarkdown } from '../markdown.js';
 import { getTurnColor } from '../ui/agent-utils.js';
 
 /** Preact component: agent status bar with draft/thought/plan panels. */
-export function AgentStatus({ status, draft, plan, thought, pendingRequest, turnId, steerQueued, onPanelToggle }) {
+export function AgentStatus({ status, draft, plan, thought, pendingRequest, intent, turnId, steerQueued, onPanelToggle }) {
     const THOUGHT_MAX_LINES = 8;
     const DRAFT_MAX_LINES = 8;
 
@@ -54,7 +54,7 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, turn
     const hasThought = Boolean(thoughtInfo.text) || thoughtInfo.totalLines > 0;
     const hasDraft = Boolean(draftInfo.fullText?.trim() || draftInfo.text?.trim());
 
-    if (!status && !hasDraft && !hasPlan && !hasThought && !pendingRequest) return null;
+    if (!status && !hasDraft && !hasPlan && !hasThought && !pendingRequest && !intent) return null;
 
     const [expandedPanels, setExpandedPanels] = useState(new Set());
     const toggleExpand = (key) =>
@@ -150,6 +150,19 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, turn
 
     return html`
         <div class="agent-status-panel">
+            ${intent && html`
+                <div
+                    class="agent-status agent-status-intent"
+                    aria-live="polite"
+                    style=${turnColor ? `--turn-color: ${turnColor};` : ''}
+                    title=${intent?.detail || ''}
+                >
+                    <span class="agent-status-text">
+                        ${intent.title}
+                    </span>
+                    ${intent.detail && html`<span class="agent-status-intent-detail">${intent.detail}</span>`}
+                </div>
+            `}
             ${pendingRequest && html`
                 <div class="agent-status agent-status-request" aria-live="polite" style=${turnColor ? `--turn-color: ${turnColor};` : ''}>
                     <span class=${dotClass} aria-hidden="true"></span>

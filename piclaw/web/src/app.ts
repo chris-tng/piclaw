@@ -93,6 +93,7 @@ function App() {
     const [searchOpen, setSearchOpen] = useState(false);
     const [fileRefs, setFileRefs] = useState([]);
     const [messageRefs, setMessageRefs] = useState([]);
+    const [intentToast, setIntentToast] = useState(null);
     const {
         agentStatus,
         setAgentStatus,
@@ -230,6 +231,15 @@ function App() {
     const lastActivityTimerRef = useRef(null);
     const lastActivityTokenRef = useRef(0);
     const brandingRef = useRef({ title: null, avatarBase: null });
+    const intentToastTimerRef = useRef(null);
+
+    const clearIntentToast = useCallback(() => {
+        if (intentToastTimerRef.current) {
+            clearTimeout(intentToastTimerRef.current);
+            intentToastTimerRef.current = null;
+        }
+        setIntentToast(null);
+    }, []);
 
     // Refresh timestamps every 30 seconds
     useTimestampRefresh(30000);
@@ -241,6 +251,12 @@ function App() {
     useEffect(() => {
         setLocalStorageItem('workspaceOpen', String(workspaceOpen));
     }, [workspaceOpen]);
+
+    useEffect(() => {
+        return () => {
+            clearIntentToast();
+        };
+    }, [clearIntentToast]);
 
     useEffect(() => {
         agentsRef.current = agents || {};
@@ -287,6 +303,43 @@ function App() {
     const clearFileRefs = useCallback(() => {
         setFileRefs([]);
     }, []);
+
+    const showIntentToast = useCallback((title, detail = null, durationMs = 3000) => {
+        clearIntentToast();
+        setIntentToast({ title, detail: detail || null });
+        intentToastTimerRef.current = setTimeout(() => {
+            setIntentToast((current) => (current?.title === title ? null : current));
+        }, durationMs);
+    }, [clearIntentToast]);
+
+    const openFileFromPill = useCallback((rawPath) => {
+        if (typeof rawPath !== 'string') return;
+        const path = rawPath.trim();
+        if (!path) {
+            showIntentToast('No file selected', 'Use a valid file path from a file pill.');
+            return;
+        }
+
+        if (!editorOpen) {
+            showIntentToast('Editor pane is not open', 'Open the editor pane to open files from pills.');
+            return;
+        }
+
+        const protocolMatch = /^[a-z][a-z0-9+.-]*:/i.test(path);
+        if (protocolMatch) {
+            showIntentToast('Cannot open external path from file pill', 'Use an in-workspace file path.');
+            return;
+        }
+
+        const context = { path, mode: 'edit' };
+        const editorExt = paneRegistry.resolve(context);
+        if (!editorExt) {
+            showIntentToast('No editor available', `No editor can open: ${path}`);
+            return;
+        }
+
+        openEditor(path);
+    }, [editorOpen, openEditor, showIntentToast]);
 
     const attachActiveEditorFile = useCallback(() => {
         const activeId = tabStripActiveId;
@@ -1436,7 +1489,7 @@ function App() {
                         <span>${currentHashtag ? `#${currentHashtag}` : `Search: ${searchQuery}`}</span>
                     </div>
                 `}
-                <${Timeline} 
+                <${Timeline}
                     posts=${posts}
                     hasMore=${hasMore}
                     onLoadMore=${loadMore}
@@ -1444,6 +1497,7 @@ function App() {
                     onHashtagClick=${handleHashtagClick}
                     onMessageRef=${addMessageRef}
                     onScrollToMessage=${scrollToMessage}
+                    onFileRef=${openFileFromPill}
                     onPostClick=${undefined}
                     onDeletePost=${handleDeletePost}
                     emptyMessage=${currentHashtag ? `No posts with #${currentHashtag}` : searchQuery ? `No results for "${searchQuery}"` : undefined}
@@ -1459,11 +1513,12 @@ function App() {
                     plan=${agentPlan}
                     thought=${agentThought}
                     pendingRequest=${pendingRequest}
+                    intent=${intentToast}
                     turnId=${currentTurnId}
                     steerQueued=${steerQueued}
                     onPanelToggle=${handlePanelToggle}
                 />
-                <${ComposeBox} 
+                <${ComposeBox}
                     onPost=${() => { loadPosts(); scrollToBottom(); }}
                     onFocus=${scrollToBottom}
                     searchMode=${searchOpen}
@@ -1478,6 +1533,7 @@ function App() {
                     onClearMessageRefs=${clearMessageRefs}
                     activeEditorPath=${tabStripActiveId}
                     onAttachEditorFile=${attachActiveEditorFile}
+                    onOpenFilePill=${openFileFromPill}
                     activeModel=${activeModel}
                     modelUsage=${activeModelUsage}
                     thinkingLevel=${activeThinkingLevel}

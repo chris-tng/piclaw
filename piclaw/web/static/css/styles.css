@@ -2859,6 +2859,24 @@ body {
     color: var(--text-primary);
 }
 
+.agent-status.agent-status-intent {
+    background: rgba(13, 110, 253, 0.10);
+    border-bottom-color: rgba(13, 110, 253, 0.32);
+    color: var(--text-primary);
+    align-items: flex-start;
+}
+
+.agent-status-intent-detail {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    margin-top: 2px;
+}
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
