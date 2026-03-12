@@ -26,9 +26,11 @@ import type { AgentQueue } from "../queue.js";
 import type { RuntimeState } from "./state.js";
 import { startToolOutputCleanup } from "../tool-output.js";
 import { createUuid } from "../utils/ids.js";
+import { patchConsoleTimestamps } from "./console-timestamps.js";
 
 /** Initialize directories, database, and persisted runtime state. */
 export function initializeRuntimeEnvironment(state: RuntimeState): void {
+  patchConsoleTimestamps();
   mkdirSync(STORE_DIR, { recursive: true });
   mkdirSync(DATA_DIR, { recursive: true });
   mkdirSync(WORKSPACE_DIR, { recursive: true });

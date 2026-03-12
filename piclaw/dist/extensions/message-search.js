@@ -21,6 +21,12 @@ const SearchMessagesSchema = Type.Object({
     ], {
         description: "Filter by sender role (user or assistant).",
     })),
+    after: Type.Optional(Type.String({
+        description: "Only return messages created after this ISO timestamp (exclusive).",
+    })),
+    before: Type.Optional(Type.String({
+        description: "Only return messages created before this ISO timestamp (exclusive).",
+    })),
     limit: Type.Optional(Type.Integer({ description: "Max results (1-50).", minimum: 1, maximum: 50 })),
     offset: Type.Optional(Type.Integer({ description: "Offset for pagination.", minimum: 0 })),
     details_max_chars: Type.Optional(Type.Integer({
@@ -73,17 +79,24 @@ function normalizeGetMessageDetailsMax(value) {
         return undefined;
     return Math.min(Math.max(num, 0), 200000);
 }
+function toCreatedAt(timestamp) {
+    if (!timestamp)
+        return null;
+    // Validate it looks like an ISO string; pass through as-is
+    return timestamp;
+}
 function applyDetailsLimit(row, maxChars) {
+    const created_at = toCreatedAt(row.timestamp);
     if (maxChars === undefined)
-        return row;
+        return { ...row, created_at };
     const fullLength = row.content?.length ?? 0;
     if (maxChars <= 0) {
-        return { ...row, content: "", content_truncated: fullLength > 0, content_full_length: fullLength };
+        return { ...row, created_at, content: "", content_truncated: fullLength > 0, content_full_length: fullLength };
     }
     if (fullLength <= maxChars)
-        return row;
+        return { ...row, created_at };
     const sliceLength = Math.max(0, maxChars - 1);
-    return { ...row, content: `${row.content.slice(0, sliceLength)}…`, content_truncated: true, content_full_length: fullLength };
+    return { ...row, created_at, content: `${row.content.slice(0, sliceLength)}…`, content_truncated: true, content_full_length: fullLength };
 }
 function truncate(text, max = 180) {
     if (!text)
@@ -180,54 +193,83 @@ function fetchContextRows(db, row, before, after, roleFilter) {
     }
     return { beforeRows, afterRows };
 }
-function searchMessages(db, query, chatJid, roleFilter, limit, offset) {
+function searchMessages(db, query, chatJid, roleFilter, limit, offset, afterTs, beforeTs) {
     const trimmed = query.trim();
     if (!trimmed)
         return [];
+    // Build time-range WHERE clauses
+    const timeConditions = [];
+    const timeParams = [];
+    if (afterTs) {
+        timeConditions.push("timestamp > ?");
+        timeParams.push(afterTs);
+    }
+    if (beforeTs) {
+        timeConditions.push("timestamp < ?");
+        timeParams.push(beforeTs);
+    }
+    const timeWhere = timeConditions.length > 0 ? ` AND ${timeConditions.join(" AND ")}` : "";
     if (trimmed.startsWith("#")) {
         const tag = trimmed.replace(/^#+/, "");
         if (!tag)
             return [];
         const pattern = `%#${tag}%`;
         const cols = "rowid, chat_jid, sender, sender_name, content, timestamp, is_bot_message";
-        if (chatJid && roleFilter !== null) {
-            return db.prepare(`SELECT ${cols} FROM messages WHERE chat_jid = ? AND is_bot_message = ? AND content LIKE ? COLLATE NOCASE ORDER BY rowid DESC LIMIT ? OFFSET ?`).all(chatJid, roleFilter, pattern, limit, offset);
-        }
+        const conditions = [];
+        const params = [];
         if (chatJid) {
-            return db.prepare(`SELECT ${cols} FROM messages WHERE chat_jid = ? AND content LIKE ? COLLATE NOCASE ORDER BY rowid DESC LIMIT ? OFFSET ?`).all(chatJid, pattern, limit, offset);
+            conditions.push("chat_jid = ?");
+            params.push(chatJid);
         }
         if (roleFilter !== null) {
-            return db.prepare(`SELECT ${cols} FROM messages WHERE is_bot_message = ? AND content LIKE ? COLLATE NOCASE ORDER BY rowid DESC LIMIT ? OFFSET ?`).all(roleFilter, pattern, limit, offset);
+            conditions.push("is_bot_message = ?");
+            params.push(roleFilter);
         }
-        return db.prepare(`SELECT ${cols} FROM messages WHERE content LIKE ? COLLATE NOCASE ORDER BY rowid DESC LIMIT ? OFFSET ?`).all(pattern, limit, offset);
+        conditions.push("content LIKE ? COLLATE NOCASE");
+        params.push(pattern);
+        params.push(...timeParams);
+        const where = conditions.join(" AND ") + timeWhere;
+        return db.prepare(`SELECT ${cols} FROM messages WHERE ${where} ORDER BY rowid DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
     }
     try {
-        const base = `SELECT messages.rowid, messages.chat_jid, messages.sender, messages.sender_name, messages.content, messages.timestamp, messages.is_bot_message
-           FROM messages JOIN messages_fts ON messages_fts.rowid = messages.rowid`;
-        if (chatJid && roleFilter !== null) {
-            return db.prepare(`${base} WHERE messages.chat_jid = ? AND messages.is_bot_message = ? AND messages_fts MATCH ? ORDER BY messages.rowid DESC LIMIT ? OFFSET ?`).all(chatJid, roleFilter, trimmed, limit, offset);
-        }
+        const cols = `messages.rowid, messages.chat_jid, messages.sender, messages.sender_name, messages.content, messages.timestamp, messages.is_bot_message`;
+        const base = `SELECT ${cols} FROM messages JOIN messages_fts ON messages_fts.rowid = messages.rowid`;
+        const conditions = [];
+        const params = [];
         if (chatJid) {
-            return db.prepare(`${base} WHERE messages.chat_jid = ? AND messages_fts MATCH ? ORDER BY messages.rowid DESC LIMIT ? OFFSET ?`).all(chatJid, trimmed, limit, offset);
+            conditions.push("messages.chat_jid = ?");
+            params.push(chatJid);
         }
         if (roleFilter !== null) {
-            return db.prepare(`${base} WHERE messages.is_bot_message = ? AND messages_fts MATCH ? ORDER BY messages.rowid DESC LIMIT ? OFFSET ?`).all(roleFilter, trimmed, limit, offset);
+            conditions.push("messages.is_bot_message = ?");
+            params.push(roleFilter);
         }
-        return db.prepare(`${base} WHERE messages_fts MATCH ? ORDER BY messages.rowid DESC LIMIT ? OFFSET ?`).all(trimmed, limit, offset);
+        conditions.push("messages_fts MATCH ?");
+        params.push(trimmed);
+        // Time conditions reference the messages table
+        const timeConditionsPrefixed = timeConditions.map(c => c.replace("timestamp", "messages.timestamp"));
+        const where = [...conditions, ...timeConditionsPrefixed].join(" AND ");
+        params.push(...timeParams);
+        return db.prepare(`${base} WHERE ${where} ORDER BY messages.rowid DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
     }
     catch {
         const pattern = `%${trimmed}%`;
         const cols = "rowid, chat_jid, sender, sender_name, content, timestamp, is_bot_message";
-        if (chatJid && roleFilter !== null) {
-            return db.prepare(`SELECT ${cols} FROM messages WHERE chat_jid = ? AND is_bot_message = ? AND content LIKE ? COLLATE NOCASE ORDER BY rowid DESC LIMIT ? OFFSET ?`).all(chatJid, roleFilter, pattern, limit, offset);
-        }
+        const conditions = [];
+        const params = [];
         if (chatJid) {
-            return db.prepare(`SELECT ${cols} FROM messages WHERE chat_jid = ? AND content LIKE ? COLLATE NOCASE ORDER BY rowid DESC LIMIT ? OFFSET ?`).all(chatJid, pattern, limit, offset);
+            conditions.push("chat_jid = ?");
+            params.push(chatJid);
         }
         if (roleFilter !== null) {
-            return db.prepare(`SELECT ${cols} FROM messages WHERE is_bot_message = ? AND content LIKE ? COLLATE NOCASE ORDER BY rowid DESC LIMIT ? OFFSET ?`).all(roleFilter, pattern, limit, offset);
+            conditions.push("is_bot_message = ?");
+            params.push(roleFilter);
         }
-        return db.prepare(`SELECT ${cols} FROM messages WHERE content LIKE ? COLLATE NOCASE ORDER BY rowid DESC LIMIT ? OFFSET ?`).all(pattern, limit, offset);
+        conditions.push("content LIKE ? COLLATE NOCASE");
+        params.push(pattern);
+        params.push(...timeParams);
+        const where = conditions.join(" AND ") + timeWhere;
+        return db.prepare(`SELECT ${cols} FROM messages WHERE ${where} ORDER BY rowid DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
     }
 }
 // ── Tool execute ──────────────────────────────────────────
@@ -257,13 +299,13 @@ async function execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
     if (!query) {
         return { content: [{ type: "text", text: "Provide a query or row_id." }], details: { count: 0, results: [] } };
     }
-    const rows = searchMessages(db, query, chatJid, roleFilter, limit, offset);
+    const rows = searchMessages(db, query, chatJid, roleFilter, limit, offset, params.after, params.before);
     if (!rows.length) {
         return { content: [{ type: "text", text: "No matching messages found." }], details: { count: 0, results: [] } };
     }
     const lines = rows.map(formatRow);
     const header = `Found ${rows.length} message${rows.length === 1 ? "" : "s"} (limit ${limit}, offset ${offset}).`;
-    const detailRows = detailsMaxChars === undefined ? rows : rows.map((row) => applyDetailsLimit(row, detailsMaxChars));
+    const detailRows = rows.map((row) => applyDetailsLimit(row, detailsMaxChars));
     const details = { count: rows.length, results: detailRows };
     if (detailsMaxChars !== undefined)
         details.details_max_chars = detailsMaxChars;
@@ -286,12 +328,8 @@ async function executeGetMessage(_toolCallId, params, _signal, _onUpdate, _ctx) 
     }
     const { beforeRows, afterRows } = fetchContextRows(db, row, before, after, roleFilter);
     const detailRow = applyDetailsLimit(row, detailsMaxChars);
-    const detailBefore = detailsMaxChars === undefined
-        ? beforeRows
-        : beforeRows.map((contextRow) => applyDetailsLimit(contextRow, detailsMaxChars));
-    const detailAfter = detailsMaxChars === undefined
-        ? afterRows
-        : afterRows.map((contextRow) => applyDetailsLimit(contextRow, detailsMaxChars));
+    const detailBefore = beforeRows.map((contextRow) => applyDetailsLimit(contextRow, detailsMaxChars));
+    const detailAfter = afterRows.map((contextRow) => applyDetailsLimit(contextRow, detailsMaxChars));
     const details = {
         found: true,
         result: detailRow,

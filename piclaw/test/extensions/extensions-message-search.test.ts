@@ -312,4 +312,100 @@ describe("message-search extension", () => {
     expect(result.details.result?.content_truncated).toBe(true);
     expect(result.details.details_max_chars).toBe(40000);
   });
+
+  test("search_messages results include created_at", async () => {
+    insertMessage("Timestamped message content");
+
+    const { search: tool } = await getTools();
+    const result = await executeWithContext(tool, "c1", { query: "Timestamped message" });
+    expect(result.details.count).toBe(1);
+    expect(result.details.results[0].created_at).toBeDefined();
+    expect(result.details.results[0].created_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  test("get_message result includes created_at", async () => {
+    insertMessage("Get message timestamp test");
+
+    const { search, getMessage } = await getTools();
+    const lookup = await executeWithContext(search, "c1", { query: "Get message timestamp" });
+    const rowid = lookup.details.results[0].rowid;
+
+    const result = await executeWithContext(getMessage, "c2", { row_id: rowid });
+    expect(result.details.found).toBe(true);
+    expect(result.details.result?.created_at).toBeDefined();
+    expect(result.details.result?.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  test("get_message context rows include created_at", async () => {
+    insertMessage("context before msg");
+    insertMessage("target msg for context ts");
+    insertMessage("context after msg");
+
+    const { search, getMessage } = await getTools();
+    const lookup = await executeWithContext(search, "c1", { query: "target msg for context" });
+    const rowid = lookup.details.results[0].rowid;
+
+    const result = await executeWithContext(getMessage, "c2", { row_id: rowid, before: 1, after: 1 });
+    expect(result.details.context_before.length).toBe(1);
+    expect(result.details.context_after.length).toBe(1);
+    expect(result.details.context_before[0].created_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(result.details.context_after[0].created_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  test("search_messages filters by after timestamp", async () => {
+    const oldTs = "2020-01-01T00:00:00.000Z";
+    const newTs = "2026-06-01T00:00:00.000Z";
+    insertMessage("Old message for after filter", { timestamp: oldTs });
+    insertMessage("New message for after filter", { timestamp: newTs });
+
+    const { search: tool } = await getTools();
+    const result = await executeWithContext(tool, "c1", {
+      query: "message for after filter",
+      after: "2025-01-01T00:00:00.000Z",
+    });
+    expect(result.details.count).toBe(1);
+    expect(result.details.results[0].content).toContain("New message");
+  });
+
+  test("search_messages filters by before timestamp", async () => {
+    const oldTs = "2020-01-01T00:00:00.000Z";
+    const newTs = "2026-06-01T00:00:00.000Z";
+    insertMessage("Old message for before filter", { timestamp: oldTs });
+    insertMessage("New message for before filter", { timestamp: newTs });
+
+    const { search: tool } = await getTools();
+    const result = await executeWithContext(tool, "c1", {
+      query: "message for before filter",
+      before: "2025-01-01T00:00:00.000Z",
+    });
+    expect(result.details.count).toBe(1);
+    expect(result.details.results[0].content).toContain("Old message");
+  });
+
+  test("search_messages filters by both after and before", async () => {
+    const ts1 = "2020-01-01T00:00:00.000Z";
+    const ts2 = "2024-06-15T12:00:00.000Z";
+    const ts3 = "2026-12-01T00:00:00.000Z";
+    insertMessage("Very old range msg", { timestamp: ts1 });
+    insertMessage("Middle range msg", { timestamp: ts2 });
+    insertMessage("Very new range msg", { timestamp: ts3 });
+
+    const { search: tool } = await getTools();
+    const result = await executeWithContext(tool, "c1", {
+      query: "range msg",
+      after: "2023-01-01T00:00:00.000Z",
+      before: "2025-01-01T00:00:00.000Z",
+    });
+    expect(result.details.count).toBe(1);
+    expect(result.details.results[0].content).toContain("Middle");
+  });
+
+  test("search_messages without after/before returns all (backward compat)", async () => {
+    insertMessage("Compat test one");
+    insertMessage("Compat test two");
+
+    const { search: tool } = await getTools();
+    const result = await executeWithContext(tool, "c1", { query: "Compat test" });
+    expect(result.details.count).toBe(2);
+  });
 });

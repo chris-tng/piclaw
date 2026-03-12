@@ -10,8 +10,10 @@ import { DATA_DIR, PUSHOVER_APP_TOKEN, PUSHOVER_DEVICE, PUSHOVER_PRIORITY, PUSHO
 import { initDatabase, storeChatMetadata, storeMessage } from "../db.js";
 import { startToolOutputCleanup } from "../tool-output.js";
 import { createUuid } from "../utils/ids.js";
+import { patchConsoleTimestamps } from "./console-timestamps.js";
 /** Initialize directories, database, and persisted runtime state. */
 export function initializeRuntimeEnvironment(state) {
+    patchConsoleTimestamps();
     mkdirSync(STORE_DIR, { recursive: true });
     mkdirSync(DATA_DIR, { recursive: true });
     mkdirSync(WORKSPACE_DIR, { recursive: true });
