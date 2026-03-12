@@ -156,29 +156,37 @@ jobs:
             const toDelete = releases.slice(keep);
             for (const release of toDelete) {
               core.info(`Deleting release ${release.tag_name} (id ${release.id})`);
-              await github.rest.repos.deleteRelease({
-                owner,
-                repo,
-                release_id: release.id,
-              });
+              try {
+                await github.rest.repos.deleteRelease({
+                  owner,
+                  repo,
+                  release_id: release.id,
+                });
+              } catch (error) {
+                core.warning(`Failed to delete release ${release.tag_name}: ${error.message}`);
+              }
               if (!release.tag_name) {
                 core.info(`Release ${release.id} has no tag.`);
                 continue;
               }
-              const refs = await github.rest.git.listMatchingRefs({
-                owner,
-                repo,
-                ref: `tags/${release.tag_name}`,
-              });
-              if (refs.data.length === 0) {
-                core.info(`Tag ${release.tag_name} not found; skipping.`);
-                continue;
+              try {
+                const refs = await github.rest.git.listMatchingRefs({
+                  owner,
+                  repo,
+                  ref: `tags/${release.tag_name}`,
+                });
+                if (refs.data.length === 0) {
+                  core.info(`Tag ${release.tag_name} not found; skipping.`);
+                  continue;
+                }
+                await github.rest.git.deleteRef({
+                  owner,
+                  repo,
+                  ref: `tags/${release.tag_name}`,
+                });
+              } catch (error) {
+                core.warning(`Failed to delete tag ${release.tag_name}: ${error.message}`);
               }
-              await github.rest.git.deleteRef({
-                owner,
-                repo,
-                ref: `tags/${release.tag_name}`,
-              });
             }
 
   cleanup:
