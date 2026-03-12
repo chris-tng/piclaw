@@ -87,6 +87,12 @@ const inferContentTypeFromPath = (filePath) => {
     const extension = extname(filePath).toLowerCase();
     return EXTENSION_MEDIA_TYPES[extension] || "application/octet-stream";
 };
+/**
+ * Service for validating and persisting uploaded media blobs.
+ *
+ * Used by web handlers and IPC path-based ingestion to create media rows and
+ * retrieve media payloads/metadata for rendering and downloads.
+ */
 export class MediaService {
     /**
      * Validate and store an uploaded file.

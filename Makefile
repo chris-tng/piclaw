@@ -34,7 +34,7 @@ GLOBAL_PKG := $(BUN_ROOT)/install/global/package.json
 GLOBAL_LOCK := $(BUN_ROOT)/install/global/bun.lock
 PI_AGENT_VERSION ?= 0.57.1
 
-.PHONY: help up down enter build build-piclaw build-web build-ts vendor pack \
+.PHONY: help up down enter build build-piclaw build-web build-ts vendor update-mermaid-vendor pack \
         local-install restart lint test test-coverage \
         dual-tag tag-ghcr sync-version bump-minor bump-patch push
 
@@ -57,9 +57,13 @@ build: ## Build Docker image
 
 # ── Build pipeline ───────────────────────────────────────────────────
 
-vendor: ## Bundle vendored mermaid (CodeMirror is now part of editor bundle)
+vendor: ## Build the checked-in beautiful-mermaid vendor bundle + metadata
 	cd piclaw && bun run build:vendor
-	@ls -lh piclaw/web/static/js/vendor/beautiful-mermaid.js
+	@ls -lh piclaw/web/static/js/vendor/beautiful-mermaid.js piclaw/web/static/js/vendor/beautiful-mermaid.meta.json
+
+update-mermaid-vendor: ## Rebuild or upgrade vendored mermaid (use MERMAID_VERSION=1.2.3 to upgrade)
+	cd piclaw && bun run update:vendor:mermaid $(if $(MERMAID_VERSION),--version $(MERMAID_VERSION),)
+	@ls -lh piclaw/web/static/js/vendor/beautiful-mermaid.js piclaw/web/static/js/vendor/beautiful-mermaid.meta.json
 
 build-web: ## Build web JS/CSS bundles (+ sourcemaps) into static/dist/ (includes vendor bundle)
 	cd piclaw && bun run build:web

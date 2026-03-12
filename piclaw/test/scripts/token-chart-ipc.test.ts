@@ -7,7 +7,7 @@
 
 import { expect, test } from "bun:test";
 import "../helpers.js";
-import { mkdirSync, writeFileSync, readdirSync, readFileSync, rmSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync, readdirSync, readFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
@@ -54,7 +54,16 @@ test("token chart --ipc writes JSON message safely", () => {
   const payload = JSON.parse(readFileSync(join(messagesDir, files[0]), "utf8"));
   expect(payload.type).toBe("message");
   expect(payload.chatJid).toBe("web:default");
-  expect(payload.text).toContain("![token-chart](data:image/svg+xml;base64,");
+  expect(payload.text).toContain("Token usage (all chats) — last 1 days");
+  expect(Array.isArray(payload.media)).toBe(true);
+  expect(payload.media).toHaveLength(1);
+  expect(payload.media[0]).toMatchObject({
+    content_type: "image/svg+xml",
+    inline: true,
+  });
+  expect(typeof payload.media[0].path).toBe("string");
+  expect(existsSync(payload.media[0].path)).toBe(true);
+  expect(readFileSync(payload.media[0].path, "utf8")).toContain("<svg");
 
   rmSync(base, { recursive: true, force: true });
 });

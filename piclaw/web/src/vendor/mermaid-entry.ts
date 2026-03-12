@@ -5,9 +5,11 @@
  * so markdown.ts can access it via `window.beautifulMermaid`.
  *
  * Build with:
- *   bun build web/src/vendor/mermaid-entry.ts \
- *     --target=browser --minify \
- *     --outfile web/static/js/vendor/beautiful-mermaid.js
+ *   bun run build:vendor:mermaid
+ *
+ * Rebuild or upgrade reproducibly with:
+ *   bun run update:vendor:mermaid
+ *   bun run update:vendor:mermaid --version 1.1.3
  */
 
 import {

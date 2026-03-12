@@ -189,11 +189,16 @@ export function ComposeBox({
     const notificationActive = notificationPermission === 'granted' && notificationsEnabled;
     const notificationTitle = notificationActive ? 'Disable notifications' : 'Enable notifications';
 
+    const modelHintLabel = activeModel || '';
     const modelHintSuffix = supportsThinking && thinkingLevel ? ` (${thinkingLevel})` : '';
-    const modelHintLabel = activeModel ? `${activeModel}${modelHintSuffix}` : '';
+    const modelThinkingLabel = modelHintSuffix.trim() ? `${thinkingLevel}` : '';
     const modelUsageLabel = typeof modelUsage?.hint_short === 'string' ? modelUsage.hint_short.trim() : '';
+    const modelUsageSectionLabel = [
+        modelThinkingLabel || null,
+        modelUsageLabel || null,
+    ].filter(Boolean).join(' • ');
     const modelUsageTitleParts = [
-        modelHintLabel ? `Current model: ${modelHintLabel}` : null,
+        modelHintLabel ? `Current model: ${modelHintLabel}${modelHintSuffix}` : null,
         modelUsage?.plan ? `Plan: ${modelUsage.plan}` : null,
         modelUsageLabel || null,
         modelUsage?.primary?.reset_description || null,
@@ -201,7 +206,7 @@ export function ComposeBox({
     ].filter(Boolean);
     const modelHintTitle = switchingModel
         ? 'Switching model…'
-        : (modelUsageTitleParts.join(' • ') || `Current model: ${modelHintLabel} (tap to open model picker)`);
+        : (modelUsageTitleParts.join(' • ') || `Current model: ${modelHintLabel}${modelHintSuffix} (tap to open model picker)`);
 
     const emitModelState = (payload) => {
         if (!payload || typeof payload !== 'object') return;
@@ -789,22 +794,26 @@ export function ComposeBox({
                 <div class="compose-footer">
                     ${!searchMode && activeModel && html`
                         <div class="compose-meta-row">
-                            <button
-                                ref=${modelHintRef}
-                                type="button"
-                                class="compose-model-hint compose-model-hint-btn"
-                                title=${modelHintTitle}
-                                aria-label="Open model picker"
-                                onClick=${toggleModelPopup}
-                                disabled=${loading || switchingModel}
-                            >
-                                ${switchingModel ? 'Switching…' : modelHintLabel}
-                            </button>
-                            ${!switchingModel && modelUsageLabel && html`
-                                <span class="compose-model-usage-hint" title=${modelHintTitle}>
-                                    ${modelUsageLabel}
-                                </span>
-                            `}
+                            <div class="compose-model-meta">
+                                <button
+                                    ref=${modelHintRef}
+                                    type="button"
+                                    class="compose-model-hint compose-model-hint-btn"
+                                    title=${modelHintTitle}
+                                    aria-label="Open model picker"
+                                    onClick=${toggleModelPopup}
+                                    disabled=${loading || switchingModel}
+                                >
+                                    ${switchingModel ? 'Switching…' : modelHintLabel}
+                                </button>
+                                <div class="compose-model-meta-subline">
+                                    ${!switchingModel && modelUsageSectionLabel && html`
+                                        <span class="compose-model-usage-hint" title=${modelHintTitle}>
+                                            ${modelUsageSectionLabel}
+                                        </span>
+                                    `}
+                                </div>
+                            </div>
                         </div>
                     `}
                     <div class="compose-actions ${searchMode ? 'search-mode' : ''}">

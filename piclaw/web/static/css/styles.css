@@ -1,5 +1,5 @@
 /*
- * styles.css – Main stylesheet for the PiClaw web UI.
+ * styles.css - Main stylesheet for the PiClaw web UI.
  *
  * Defines CSS custom properties for theming (light/dark mode), layout
  * for the timeline, compose box, status bar, workspace explorer, and
@@ -11,7 +11,7 @@
 /* CSS Variables for theming */
 :root {
     color-scheme: light dark;
-    
+
     /* Colors - Light mode */
     --bg-primary: #ffffff;
     --bg-secondary: #f7f9fa;
@@ -23,14 +23,14 @@
     --accent-hover: #1a8cd8;
     --danger-color: #f4212e;
     --success-color: #00ba7c;
-    
+
     /* Spacing */
     --spacing-xs: 4px;
     --spacing-sm: 8px;
     --spacing-md: 16px;
     --spacing-lg: 24px;
     --spacing-xl: 32px;
-    
+
     /* Typography */
     --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -39,13 +39,13 @@
     --font-size-lg: 20px;
     --font-size-xl: 24px;
     --line-height: 1.5;
-    
+
     /* Border radius */
     --radius-sm: 4px;
     --radius-md: 8px;
     --radius-lg: 16px;
     --radius-full: 9999px;
-    
+
     /* Shadows */
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
     --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -910,7 +910,7 @@ body {
     margin: 4px 0;
 }
 
-/* editor-header removed — tab strip serves as the header */
+/* editor-header removed - tab strip serves as the header */
 
 .editor-body {
     flex: 1;
@@ -1192,7 +1192,7 @@ body {
 }
 
 /* Dock panel layout (bottom panel) */
-/* Dock splitter — horizontal drag handle between editor and dock */
+/* Dock splitter - horizontal drag handle between editor and dock */
 .dock-splitter {
     height: 4px;
     cursor: row-resize;
@@ -1745,10 +1745,28 @@ body {
     min-width: 0;
 }
 
+.compose-model-meta {
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.compose-model-meta-subline {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+    width: 100%;
+}
+
 .compose-footer {
     display: flex;
     align-items: flex-end;
     gap: var(--spacing-xs);
+    min-width: 0;
 }
 
 .compose-model-hint {
@@ -1762,7 +1780,7 @@ body {
     font-family: var(--font-mono, monospace);
     letter-spacing: 0.01em;
     min-width: 0;
-    flex: 1;
+    flex: 0 0 auto;
 }
 
 .compose-model-hint-btn {
@@ -1772,6 +1790,7 @@ body {
     margin: 0;
     text-align: left;
     cursor: pointer;
+    align-self: flex-start;
 }
 
 .compose-model-hint-btn:hover,
@@ -1786,6 +1805,7 @@ body {
 }
 
 .compose-model-usage-hint {
+    display: block;
     font-size: 10.5px;
     color: var(--text-tertiary, var(--text-secondary));
     opacity: 0.82;
@@ -1905,6 +1925,8 @@ body {
     align-items: center;
     gap: calc(var(--spacing-xs) - 2px);
     margin-right: -2px;
+    flex-shrink: 0;
+    margin-left: auto;
 }
 
 .compose-actions.search-mode {
@@ -2289,7 +2311,7 @@ body {
     margin-bottom: 0;
 }
 
-.post-content h1, .post-content h2, .post-content h3, 
+.post-content h1, .post-content h2, .post-content h3,
 .post-content h4, .post-content h5, .post-content h6 {
     margin: 0.5em 0 0.25em 0;
     font-weight: 600;
@@ -3261,44 +3283,44 @@ body {
         border-color: #e0e0e0;
         box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
     }
-    
+
     .agent-request-title {
         color: #111111;
     }
-    
+
     .agent-request-description {
         color: #666666;
     }
-    
+
     .agent-request-command {
         color: #666666;
         background: #f0f0f0;
     }
-    
+
     .agent-request-btn {
         background-color: #f5f5f5;
         border-color: #e0e0e0;
         color: #111111;
     }
-    
+
     .agent-request-btn:hover {
         background-color: #eeeeee;
     }
-    
+
     .agent-request-btn.primary {
         background-color: var(--accent-color);
         border-color: var(--accent-color);
         color: #ffffff;
     }
-    
+
     .agent-request-btn.primary:hover {
         background-color: var(--accent-hover);
     }
-    
+
     .agent-request-btn.always-allow {
         color: #888888;
     }
-    
+
     .agent-request-btn.always-allow:hover {
         background-color: #f5f5f5;
         color: #111111;
@@ -3377,85 +3399,103 @@ body {
         --font-size-md: 14px;
         --font-size-lg: 18px;
     }
-    
+
     .container {
         border-left: none;
         border-right: none;
         min-width: 0;
     }
-    
+
     .header {
         padding: var(--spacing-sm) var(--spacing-md);
     }
-    
+
     .header h1 {
         font-size: var(--font-size-lg);
     }
-    
+
     .compose-box {
         padding: var(--spacing-sm) var(--spacing-md);
     }
-    
+
     .compose-box textarea {
         min-height: 50px;
         font-size: var(--font-size-md);
     }
 
+    .compose-footer {
+        flex-wrap: nowrap;
+        align-items: flex-end;
+        gap: 4px;
+    }
+
     .compose-meta-row {
-        flex-direction: column;
-        align-items: flex-start;
+        flex: 1;
+        min-width: 0;
         gap: 2px;
+    }
+
+    .compose-model-meta {
+        min-width: 0;
     }
 
     .compose-model-hint,
     .compose-model-usage-hint {
         max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .compose-model-usage-hint {
         line-height: 1.2;
+        white-space: nowrap;
     }
-    
+
+    .compose-actions {
+        margin-left: auto;
+        flex-shrink: 0;
+    }
+
     .post {
         padding: var(--spacing-sm) var(--spacing-md);
     }
-    
+
     .post-avatar {
         width: 36px;
         height: 36px;
         font-size: var(--font-size-sm);
         flex-shrink: 0;
     }
-    
+
     .post-header {
         gap: var(--spacing-sm);
     }
-    
+
     .post-content {
         margin-left: 0;
         margin-top: var(--spacing-sm);
     }
-    
+
     .post-content.agent {
         padding: var(--spacing-sm);
     }
-    
+
     .link-preview {
         min-height: 100px;
     }
-    
+
     .link-preview.has-image {
         min-height: 140px;
     }
-    
+
     .link-preview-title {
         font-size: var(--font-size-md);
     }
-    
+
     .thread-connector {
         margin-left: 17px;
     }
-    
+
     .connection-status {
         bottom: var(--spacing-sm);
         right: var(--spacing-sm);
@@ -3464,19 +3504,37 @@ body {
 }
 
 @media (max-width: 900px) and (orientation: portrait) {
+    .compose-footer {
+        flex-wrap: nowrap;
+        align-items: flex-end;
+        gap: 4px;
+    }
+
     .compose-meta-row {
-        flex-direction: column;
-        align-items: flex-start;
+        flex: 1;
+        min-width: 0;
         gap: 2px;
+    }
+
+    .compose-model-meta {
+        min-width: 0;
     }
 
     .compose-model-hint,
     .compose-model-usage-hint {
         max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .compose-model-usage-hint {
         line-height: 1.2;
+        white-space: nowrap;
+    }
+
+    .compose-actions {
+        margin-left: auto;
+        flex-shrink: 0;
     }
 }
 
@@ -3485,7 +3543,7 @@ body {
     .container {
         max-width: 90%;
     }
-    
+
     .post-avatar {
         width: 44px;
         height: 44px;
@@ -3503,12 +3561,12 @@ body {
         margin: 0;
         flex: 1;
     }
-    
+
     .post-avatar {
         width: 48px;
         height: 48px;
     }
-    
+
     .compose-box textarea {
         min-height: 70px;
     }
