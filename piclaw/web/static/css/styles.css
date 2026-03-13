@@ -3016,10 +3016,30 @@ body {
 }
 
 .agent-status.agent-status-intent {
-    background: rgba(13, 110, 253, 0.10);
-    border-bottom-color: rgba(13, 110, 253, 0.32);
+    --intent-accent: var(--accent-color);
+    background: rgba(29, 155, 240, 0.10);
+    border-bottom-color: rgba(29, 155, 240, 0.28);
     color: var(--text-primary);
     align-items: flex-start;
+    box-shadow: inset 3px 0 0 var(--intent-accent);
+}
+
+.agent-status.agent-status-intent.agent-status-intent-warning {
+    --intent-accent: #f59e0b;
+    background: rgba(245, 158, 11, 0.12);
+    border-bottom-color: rgba(245, 158, 11, 0.30);
+}
+
+.agent-status.agent-status-intent.agent-status-intent-error {
+    --intent-accent: var(--danger-color);
+    background: rgba(244, 33, 46, 0.10);
+    border-bottom-color: rgba(244, 33, 46, 0.26);
+}
+
+.agent-status.agent-status-intent.agent-status-intent-success {
+    --intent-accent: var(--success-color);
+    background: rgba(0, 186, 124, 0.10);
+    border-bottom-color: rgba(0, 186, 124, 0.26);
 }
 
 .agent-status-intent-detail {

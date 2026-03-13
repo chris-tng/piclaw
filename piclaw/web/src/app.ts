@@ -311,9 +311,9 @@ function App() {
     // - avoid forward references to uninitialized const callbacks,
     // - use useRef.current for mutable forward refs when needed.
     // See notes/piclaw-web-frontend-safety.md for the full checklist.
-    const showIntentToast = useCallback((title, detail = null, durationMs = 3000) => {
+    const showIntentToast = useCallback((title, detail = null, kind = 'info', durationMs = 3000) => {
         clearIntentToast();
-        setIntentToast({ title, detail: detail || null });
+        setIntentToast({ title, detail: detail || null, kind: kind || 'info' });
         intentToastTimerRef.current = setTimeout(() => {
             setIntentToast((current) => (current?.title === title ? null : current));
         }, durationMs);
@@ -323,25 +323,25 @@ function App() {
         if (typeof rawPath !== 'string') return;
         const path = rawPath.trim();
         if (!path) {
-            showIntentToast('No file selected', 'Use a valid file path from a file pill.');
+            showIntentToast('No file selected', 'Use a valid file path from a file pill.', 'warning');
             return;
         }
 
         if (!editorOpen) {
-            showIntentToast('Editor pane is not open', 'Open the editor pane to open files from pills.');
+            showIntentToast('Editor pane is not open', 'Open the editor pane to open files from pills.', 'warning');
             return;
         }
 
         const protocolMatch = /^[a-z][a-z0-9+.-]*:/i.test(path);
         if (protocolMatch) {
-            showIntentToast('Cannot open external path from file pill', 'Use an in-workspace file path.');
+            showIntentToast('Cannot open external path from file pill', 'Use an in-workspace file path.', 'warning');
             return;
         }
 
         const context = { path, mode: 'edit' };
         const editorExt = paneRegistry.resolve(context);
         if (!editorExt) {
-            showIntentToast('No editor available', `No editor can open: ${path}`);
+            showIntentToast('No editor available', `No editor can open: ${path}`, 'warning');
             return;
         }
 

@@ -76,6 +76,7 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, inte
     const dotClass = steerQueued ? 'turn-dot turn-dot-queued' : 'turn-dot';
     const panelTitle = (label) => label;
     const isLastActivity = Boolean(status?.last_activity || status?.lastActivity);
+    const intentKind = intent?.kind || 'info';
 
     let content = '';
     const title = status?.title;
@@ -152,7 +153,7 @@ export function AgentStatus({ status, draft, plan, thought, pendingRequest, inte
         <div class="agent-status-panel">
             ${intent && html`
                 <div
-                    class="agent-status agent-status-intent"
+                    class=${`agent-status agent-status-intent agent-status-intent-${intentKind}`}
                     aria-live="polite"
                     style=${turnColor ? `--turn-color: ${turnColor};` : ''}
                     title=${intent?.detail || ''}

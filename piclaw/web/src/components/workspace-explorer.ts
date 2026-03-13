@@ -1283,6 +1283,10 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
         return target?.parentElement || null;
     };
 
+    const isRowDragHandleTarget = (targetEl) => {
+        return Boolean(targetEl?.closest?.('.workspace-node-icon, .workspace-label'));
+    };
+
     // ── Double-click to open file in editor ────────────────────────────────
     const handleTreeDblClick = useRef((e) => {
         // Cancel pending rename from single-click
@@ -1522,7 +1526,8 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
     }, [clearSelection, deleteFileAtPath, expanded, rows, scrollRowIntoView, selectedPath]);
 
     const handleRowTouchStart = useCallback((event) => {
-        const row = event?.target?.closest?.('.workspace-row');
+        const targetEl = getEventTargetElement(event);
+        const row = targetEl?.closest?.('.workspace-row');
         if (!row) return;
         const type = row.dataset.type;
         const path = row.dataset.path;
@@ -1532,7 +1537,7 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
         if (!touch) return;
 
         touchDragRef.current = {
-            path,
+            path: isRowDragHandleTarget(targetEl) ? path : null,
             dragging: false,
             startX: touch.clientX,
             startY: touch.clientY,
@@ -1850,7 +1855,9 @@ export function WorkspaceExplorer({ onFileSelect, visible = true, active = undef
         const path = rowEl.dataset.path;
         if (!path || path === '.') return;
         if (renamingPathRef.current === path) return;
-        if (event.target?.closest?.('button, a, input, .workspace-caret')) return;
+        const targetEl = getEventTargetElement(event);
+        if (targetEl?.closest?.('button, a, input, .workspace-caret')) return;
+        if (!isRowDragHandleTarget(targetEl)) return;
 
         event.preventDefault();
         mouseDragRef.current = {
