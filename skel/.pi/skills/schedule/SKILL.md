@@ -1,32 +1,49 @@
 ---
 name: schedule
-description: Schedule a task to run later or on a recurring basis. Creates an IPC file that piclaw picks up to register the scheduled task.
+description: Schedule a task to run later or on a recurring basis. Prefer the schedule_task tool; fallback to IPC only if needed.
 ---
 
 # Schedule a Task
 
-Create a JSON file in the piclaw IPC directory to schedule work.
+Prefer the built-in `schedule_task` tool.
 
-## Usage
+## Preferred method (tool)
 
-Write a JSON file to `$PICLAW_DATA/ipc/tasks/`:
+Use `schedule_task` directly with:
+
+- `schedule_type`: `once` | `cron` | `interval`
+- `schedule_value`:
+  - `once`: ISO timestamp (UTC recommended)
+  - `cron`: cron expression
+  - `interval`: milliseconds
+- `task_kind`: `agent` or `shell`
+- `prompt` (agent) or `command` (shell)
+
+Examples:
+
+- One-time agent task at 09:00 UTC:
+  - `schedule_type=once`, `schedule_value=2026-03-09T09:00:00Z`
+- Daily shell task at 08:30 UTC:
+  - `schedule_type=cron`, `schedule_value=30 8 * * *`
+
+## Fallback method (IPC file)
+
+If tool access is unavailable, write an IPC JSON file to `$PICLAW_DATA/ipc/tasks/`:
 
 ```bash
 cat > "$PICLAW_DATA/ipc/tasks/schedule_$(date +%s).json" <<EOF
 {
   "type": "schedule_task",
   "chatJid": "$PICLAW_CHAT_JID",
+  "task_kind": "agent",
   "prompt": "Describe what should happen when this task fires",
-  "model": "gpt-5.1-codex-mini",
-  "schedule_type": "TYPE",
-  "schedule_value": "VALUE"
+  "schedule_type": "once",
+  "schedule_value": "2026-03-09T09:00:00Z"
 }
 EOF
 ```
 
-### Shell command tasks
-
-Schedule a shell command instead of an agent prompt:
+Shell command variant:
 
 ```bash
 cat > "$PICLAW_DATA/ipc/tasks/schedule_$(date +%s).json" <<EOF
@@ -43,54 +60,41 @@ cat > "$PICLAW_DATA/ipc/tasks/schedule_$(date +%s).json" <<EOF
 EOF
 ```
 
-Shell commands are pre-validated (no newlines, no destructive patterns, cwd must be inside /workspace).
+## Verify it was scheduled
 
-`model` is optional. When provided, the scheduler validates the model before creating the task and switches the session model before running the prompt. After the task completes, the original model is restored. If the model name is ambiguous, use `provider/modelId`.
+After scheduling, confirm with SQL introspection:
 
-## Session Isolation
-
-Scheduled tasks are isolated from the user's conversation using the **session tree**. Before a task executes, the scheduler saves the current tree position (leaf ID). The task's prompt and response are appended to the session normally, then the scheduler navigates the tree back to the saved position. This means:
-
-- The task's output lives in a **side branch** — it won't appear in the user's next conversation turn.
-- The full task history is preserved and can be inspected via the `/tree` command.
-- If the task used a different model, it is restored after navigation.
-
-## Schedule Types
-
-### Cron (recurring on a schedule)
-Use standard cron expressions. Example — every weekday at 9am:
-```json
-{ "schedule_type": "cron", "schedule_value": "0 9 * * 1-5" }
+```sql
+SELECT id, chat_jid, task_kind, schedule_type, schedule_value, status, next_run
+FROM scheduled_tasks
+ORDER BY created_at DESC
+LIMIT 5;
 ```
 
-### Interval (recurring, in milliseconds)
-Example — every hour:
-```json
-{ "schedule_type": "interval", "schedule_value": "3600000" }
+For execution history:
+
+```sql
+SELECT task_id, run_at, duration_ms, status
+FROM task_run_logs
+ORDER BY id DESC
+LIMIT 10;
 ```
 
-### Once (one-time at a specific time)
-Use an ISO 8601 timestamp:
-```json
-{ "schedule_type": "once", "schedule_value": "2025-02-01T09:00:00Z" }
-```
+## Managing existing tasks (IPC)
 
-## Managing Existing Tasks
+- Pause:    `{ "type": "pause_task", "taskId": "task-xxx" }`
+- Resume:   `{ "type": "resume_task", "taskId": "task-xxx" }`
+- Cancel:   `{ "type": "cancel_task", "taskId": "task-xxx" }`
+- Update:   `{ "type": "update_task", "taskId": "task-xxx", "prompt": "...", "model": "...", "schedule_value": "..." }`
+- Cleanup:  `{ "type": "cleanup_tasks", "chatJid": "web:default" }`
 
-Write to the same IPC directory:
+## Notes
 
-• Pause:    `{ "type": "pause_task", "taskId": "task-xxx" }`
-• Resume:   `{ "type": "resume_task", "taskId": "task-xxx" }`
-• Cancel:   `{ "type": "cancel_task", "taskId": "task-xxx" }`
-• Update:   `{ "type": "update_task", "taskId": "task-xxx", "prompt": "...", "model": "...", "schedule_value": "..." }`
-• Cleanup:  `{ "type": "cleanup_tasks", "chatJid": "web:default" }`
-
-Update accepts any combination of `prompt`, `model`, `schedule_type`, `schedule_value`. Only the fields you include are changed; the rest stay as-is. Set `"model": ""` to clear the model override. If the schedule is changed, `next_run` is recomputed automatically.
-
-Cleanup deletes all completed tasks and their run logs, then posts a confirmation message.
+- Shell tasks are pre-validated (no newlines, no destructive patterns, cwd inside `/workspace`).
+- Use UTC for human-facing schedules unless asked otherwise.
+- Always acknowledge the created schedule and include next run time if available.
 
 ## Environment
 
-The following environment variables are set by piclaw when it invokes you:
 - `PICLAW_DATA` — piclaw data directory (contains `ipc/`, `sessions/`)
-- `PICLAW_CHAT_JID` — JID of the chat that triggered this invocation
+- `PICLAW_CHAT_JID` — JID of the triggering chat

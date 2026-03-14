@@ -14,7 +14,14 @@ cat > "$PICLAW_DATA/ipc/messages/msg_$(date +%s).json" <<EOF
 {
   "type": "message",
   "chatJid": "$PICLAW_CHAT_JID",
-  "text": "Your message here"
+  "text": "Your message here",
+  "media": [
+    {
+      "path": "/absolute/path/to/chart.svg",
+      "content_type": "image/svg+xml",
+      "inline": true
+    }
+  ]
 }
 EOF
 ```
@@ -30,6 +37,12 @@ EOF
 - Messages are picked up by piclaw within ~1 second
 - The IPC file is deleted after the message is sent
 - Use WhatsApp-compatible formatting: *bold*, _italic_, • bullets, ```code```
+- You can attach local media files by adding an optional `media` array
+  - Each item: `{ path, content_type?, filename?, inline? }`
+  - `path` is filesystem path to an existing file
+  - `content_type` and `filename` override detected values
+  - `inline: true` hints image rendering inside the message card
+- Missing/unreadable media paths generate an inline warning, and message delivery continues for remaining files
 - Do NOT use this for your final response — just return that normally
 
 ## Environment

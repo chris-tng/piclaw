@@ -1,13 +1,11 @@
 #!/usr/bin/env bun
 /**
- * token-chart.ts – Skel copy of the token usage chart skill.
- *
- * Aggregates token usage from the SQLite DB and generates an SVG bar
- * chart posted to the web timeline via IPC.
+ * token-chart.ts – Generate an SVG bar chart of token usage over the last
+ * N days, sourced from the SQLite database or session log files.
  */
 
 import { readdirSync, statSync, readFileSync, mkdirSync, writeFileSync, existsSync } from "fs";
-import { join } from "path";
+import { basename, dirname, join } from "path";
 import Database from "bun:sqlite";
 
 const args = process.argv.slice(2);
@@ -33,6 +31,10 @@ const chatJidCandidate = chatJidIndex >= 0 ? args[chatJidIndex + 1] : undefined;
 const chatJid = chatJidCandidate && !chatJidCandidate.startsWith("--") ? chatJidCandidate : "web:default";
 const dataDir = process.env.PICLAW_DATA || "/workspace/.piclaw/data";
 const messagesDir = join(dataDir, "ipc", "messages");
+const mediaDir = join(dataDir, "ipc", "media");
+const outputSvgArgIndex = args.indexOf("--output-svg");
+const outputSvgCandidate = outputSvgArgIndex >= 0 ? args[outputSvgArgIndex + 1] : undefined;
+const outputSvg = outputSvgCandidate && !outputSvgCandidate.startsWith("--") ? outputSvgCandidate : undefined;
 const storeDir = process.env.PICLAW_STORE || "/workspace/.piclaw/store";
 const dbPath = join(storeDir, "messages.db");
 
@@ -375,11 +377,12 @@ const svg = `<?xml version="1.0" encoding="UTF-8"?>
   ${labels.join("\n  ")}
 </svg>`;
 
-const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+if (outputSvg) {
+  mkdirSync(dirname(outputSvg), { recursive: true });
+  writeFileSync(outputSvg, svg, "utf8");
+}
 
 const summaryLines = [
-  `![token-chart](${dataUrl})`,
-  "",
   `Token usage (all chats) — last ${targetDays} days, total ${formatCompact(sumValue)}`,
   `Input ${formatCompact(sumInput)} • Output ${formatCompact(sumOutput)} • Cache read ${formatCompact(sumCacheRead)} • Cache write ${formatCompact(sumCacheWrite)} (${cachedPct}% cached)`,
   ...dayDates.map((d, i) => {
@@ -395,10 +398,31 @@ const message = summaryLines.join("\n");
 
 if (ipcEnabled) {
   mkdirSync(messagesDir, { recursive: true });
+  mkdirSync(mediaDir, { recursive: true });
+
+  const svgPath = outputSvg || join(mediaDir, `token-chart-${Date.now()}.svg`);
+  if (!outputSvg) {
+    writeFileSync(svgPath, svg, "utf8");
+  }
+
   const outPath = join(messagesDir, `msg_${Date.now()}_tokenchart.json`);
-  const payload = { type: "message", chatJid, text: message, noNudge: !nudgeEnabled };
+  const payload = {
+    type: "message",
+    chatJid,
+    text: message,
+    noNudge: !nudgeEnabled,
+    media: [
+      {
+        path: svgPath,
+        content_type: "image/svg+xml",
+        filename: basename(svgPath),
+        inline: true,
+      },
+    ],
+  };
   writeFileSync(outPath, JSON.stringify(payload, null, 2));
   process.stdout.write(outPath);
 } else {
-  process.stdout.write(message);
+  const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+  process.stdout.write([`![token-chart](${dataUrl})`, "", ...summaryLines].join("\n"));
 }

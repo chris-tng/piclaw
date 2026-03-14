@@ -5,27 +5,19 @@ description: Search the web via SearXNG and optionally convert result pages to M
 
 # Web Search
 
-Search the web using a SearXNG instance and optionally fetch pages and convert HTML to Markdown.
+Use the local SearXNG instance to search the web and optionally fetch pages and convert HTML to Markdown.
 
-## Prerequisites
+## Steps
 
-The script depends on `turndown` and `linkedom`. Install them once:
+1. Run a search (JSON output):
+   ```bash
+   bun /workspace/.pi/skills/web-search/web-search.ts --query "your query"
+   ```
 
-```bash
-cd /workspace && bun add turndown linkedom
-```
-
-## Usage
-
-```bash
-bun /workspace/.pi/skills/web-search/web-search.ts --query "your query"
-```
-
-Fetch top results and convert to Markdown:
-
-```bash
-bun /workspace/.pi/skills/web-search/web-search.ts --query "your query" --fetch true --fetch-limit 2
-```
+2. Fetch top results and convert to Markdown:
+   ```bash
+   bun /workspace/.pi/skills/web-search/web-search.ts --query "your query" --fetch true --fetch-limit 2
+   ```
 
 ## Options
 
@@ -33,12 +25,8 @@ bun /workspace/.pi/skills/web-search/web-search.ts --query "your query" --fetch 
 - `--limit` Number of results to return (default 5).
 - `--fetch` When true, fetches top results and converts HTML to Markdown.
 - `--fetch-limit` How many results to fetch/convert (default 2).
-- `--searx-url` Override the SearXNG endpoint (default from `SEARXNG_URL` env var, or `http://localhost:8888/search`).
+- `--searx-url` Override the SearXNG endpoint (default http://192.168.1.100:3080/search).
 - `--timeout` Fetch timeout in milliseconds (default 15000).
-
-## Environment
-
-- `SEARXNG_URL` — Base URL for the SearXNG instance (e.g. `http://localhost:8888/search`).
 
 ## Notes
 

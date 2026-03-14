@@ -4,7 +4,7 @@ set -euo pipefail
 # Wrapper to run the Playwright-based twitter summary scraper.
 # Usage: ./run <handle> <hours> [out.json]
 
-HANDLE=${1:-example_user}
+HANDLE=${1:-badlogicgames}
 HOURS=${2:-16}
 OUT=${3:-/tmp/twitter_fetch.json}
 LOG=${LOG:-/tmp/twitter-summary.log}

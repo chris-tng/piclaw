@@ -1,6 +1,6 @@
 ---
 name: twitter-summary
-description: Fetch a user's recent tweets (tweets, replies, retweets) using Playwright + Nitter fallbacks and produce compact JSON summaries.
+description: Fetch a user's recent tweets (tweets, replies, retweets) using Playwright + Nitter fallbacks and produce compact JSON/Markdown summaries.
 ---
 
 # Twitter Summary
@@ -32,38 +32,28 @@ Using the wrapper script:
 Examples:
 
 ```bash
-# Fetch last 16 hours for a user
-/workspace/.pi/skills/twitter-summary/run example_user 16 /tmp/tweets.json
+# Fetch last 16 hours for @badlogicgames
+/workspace/.pi/skills/twitter-summary/run badlogicgames 16 /tmp/badlogic_fetch.json
 
 # Direct Playwright invocation
-bun /workspace/.pi/skills/twitter-summary/playwright-twitter-summary.ts --handle=example_user --hours=24
+bun /workspace/.pi/skills/twitter-summary/playwright-twitter-summary.ts --handle=badlogicgames --hours=24
 
 # Quick (no browser) invocation
-bun /workspace/.pi/skills/twitter-summary/quick-twitter-summary.ts --handle=example_user --hours=12
+bun /workspace/.pi/skills/twitter-summary/quick-twitter-summary.ts --handle=badlogicgames --hours=12
 ```
-
-## Options
-
-Both scripts accept:
-
-- `--handle` (or `--h`) Twitter handle to scrape (without @).
-- `--hours` (or `--hrs`) Time window in hours (default 16).
-- `--instances` Comma-separated list of Nitter instance URLs.
-
-The quick scraper also accepts:
-
-- `--max` / `--limit` Maximum tweets to return (default 200).
 
 ## Output
 
 JSON with `handle`, `instance`, `count`, and `items` array. Each item has:
 - `date` — ISO 8601 timestamp
 - `type` — `tweet`, `reply`, or `retweet`
-- `text` — Tweet content (truncated to 280 chars in quick mode)
+- `text` — Tweet content
 - `url` — Link to the tweet on the Nitter instance
 
 ## Notes
 
 - The scrapers try several public Nitter instances and use the first that responds.
+- Coverage varies by instance; combining outputs from multiple instances often yields the best results.
 - Network restrictions or anti-bot protections may affect results.
 - Logs are written to stderr; JSON output goes to stdout.
+- A log file is written to /tmp/twitter-summary.log when using the wrapper.

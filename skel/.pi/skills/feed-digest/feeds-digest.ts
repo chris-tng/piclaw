@@ -1,51 +1,92 @@
 #!/usr/bin/env bun
 /**
- * feeds-digest.ts – Build a deduped markdown digest from an RSS feed index.
- *
- * Fetches the feed index page, extracts individual feed URLs, fetches
- * and parses each feed, deduplicates entries using simhash, and writes
- * a markdown digest file plus a JSON links file.
+ * feeds-digest.ts — Fetch RSS feeds from feeds.carmo.io, deduplicate
+ * entries using SimHash, and output a markdown digest with a links index.
  */
 
 import { writeFileSync } from "fs";
 
-const DEFAULT_FEED_INDEX_URL = process.env.FEED_INDEX_URL || "http://localhost:8080/feeds/index.html";
-const DEFAULT_FEED_BASE_URL = process.env.FEED_BASE_URL || DEFAULT_FEED_INDEX_URL.replace(/\/[^/]*$/, "/");
+/** URL of the feed index page listing all RSS feed links. */
+const FEED_INDEX_URL = "https://feeds.carmo.io/feeds/index.html";
+/** Base URL prefix for resolving relative feed paths. */
+const FEED_BASE_URL = "https://feeds.carmo.io/feeds/";
+/** Default output path for the digest markdown file. */
 const DEFAULT_OUT = "/workspace/notes/feeds-digest.md";
+/** Default output path for the links JSON index. */
 const DEFAULT_LINKS_OUT = "/workspace/notes/feeds-digest-links.json";
+/** Default lookback window in hours. */
 const DEFAULT_HOURS = 12;
+/** Hamming distance threshold for near-duplicate detection. */
 const DEFAULT_SIMHASH_THRESHOLD = 8;
 
+/** Parse CLI arguments into a key-value options object. */
 function parseArgs(argv: string[]) {
   const args = argv.slice(2);
   let out = DEFAULT_OUT;
   let linksOut = DEFAULT_LINKS_OUT;
   let hours = DEFAULT_HOURS;
   let threshold = DEFAULT_SIMHASH_THRESHOLD;
-  let feedIndexUrl = DEFAULT_FEED_INDEX_URL;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
-    if (arg === "--out" || arg.startsWith("--out=")) {
-      out = arg.includes("=") ? arg.slice("--out=".length) : args[++i];
-    } else if (arg === "--links-out" || arg.startsWith("--links-out=")) {
-      linksOut = arg.includes("=") ? arg.slice("--links-out=".length) : args[++i];
-    } else if (arg === "--hours" || arg.startsWith("--hours=")) {
-      const val = arg.includes("=") ? arg.slice("--hours=".length) : args[++i];
-      const parsed = Number.parseInt(val, 10);
+    if (arg === "--out") {
+      const next = args[i + 1];
+      if (next) {
+        out = next;
+        i += 1;
+      }
+      continue;
+    }
+    if (arg.startsWith("--out=")) {
+      out = arg.slice("--out=".length);
+      continue;
+    }
+    if (arg === "--links-out") {
+      const next = args[i + 1];
+      if (next) {
+        linksOut = next;
+        i += 1;
+      }
+      continue;
+    }
+    if (arg.startsWith("--links-out=")) {
+      linksOut = arg.slice("--links-out=".length);
+      continue;
+    }
+    if (arg === "--hours") {
+      const next = args[i + 1];
+      if (next) {
+        const parsed = Number.parseInt(next, 10);
+        if (Number.isFinite(parsed) && parsed > 0) hours = parsed;
+        i += 1;
+      }
+      continue;
+    }
+    if (arg.startsWith("--hours=")) {
+      const parsed = Number.parseInt(arg.slice("--hours=".length), 10);
       if (Number.isFinite(parsed) && parsed > 0) hours = parsed;
-    } else if (arg === "--simhash" || arg.startsWith("--simhash=")) {
-      const val = arg.includes("=") ? arg.slice("--simhash=".length) : args[++i];
-      const parsed = Number.parseInt(val, 10);
+      continue;
+    }
+    if (arg === "--simhash") {
+      const next = args[i + 1];
+      if (next) {
+        const parsed = Number.parseInt(next, 10);
+        if (Number.isFinite(parsed) && parsed >= 0) threshold = parsed;
+        i += 1;
+      }
+      continue;
+    }
+    if (arg.startsWith("--simhash=")) {
+      const parsed = Number.parseInt(arg.slice("--simhash=".length), 10);
       if (Number.isFinite(parsed) && parsed >= 0) threshold = parsed;
-    } else if (arg === "--feed-url" || arg.startsWith("--feed-url=")) {
-      feedIndexUrl = arg.includes("=") ? arg.slice("--feed-url=".length) : args[++i];
+      continue;
     }
   }
 
-  return { out, linksOut, hours, threshold, feedIndexUrl };
+  return { out, linksOut, hours, threshold };
 }
 
+/** Decode common HTML entities (&amp; &lt; &gt; &quot;) in a string. */
 function decodeEntities(text: string): string {
   return text
     .replace(/&amp;/g, "&")
@@ -56,13 +97,14 @@ function decodeEntities(text: string): string {
     .replace(/&nbsp;/g, " ");
 }
 
-async function extractFeedUrls(indexHtml: string, baseUrl: string): Promise<string[]> {
+/** Extract RSS feed URLs from the feed index HTML page. */
+async function extractFeedUrls(indexHtml: string): Promise<string[]> {
   const urls: string[] = [];
   const rewriter = new HTMLRewriter().on("a", {
     element(el) {
       const href = el.getAttribute("href") || "";
       if (href.endsWith(".xml")) {
-        urls.push(new URL(href, baseUrl).toString());
+        urls.push(new URL(href, FEED_BASE_URL).toString());
       }
     },
   });
@@ -71,6 +113,7 @@ async function extractFeedUrls(indexHtml: string, baseUrl: string): Promise<stri
   return Array.from(new Set(urls));
 }
 
+/** Extract the text content of an XML/HTML tag from a string. */
 function extractTag(block: string, tag: string): string {
   const regex = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i");
   const match = regex.exec(block);
@@ -78,6 +121,7 @@ function extractTag(block: string, tag: string): string {
   return decodeEntities(match[1].trim());
 }
 
+/** Extract all <item> blocks from an RSS XML string. */
 function extractItemBlocks(xml: string): string[] {
   const blocks: string[] = [];
   const regex = /<item>([\s\S]*?)<\/item>/gi;
@@ -88,6 +132,7 @@ function extractItemBlocks(xml: string): string[] {
   return blocks;
 }
 
+/** Clean up summary text: collapse whitespace and strip empty lines. */
 function normalizeSummaryText(text: string): string {
   return text
     .replace(/\blink\s*\((https?:\/\/[^)]+)\)/gi, "$1")
@@ -95,6 +140,7 @@ function normalizeSummaryText(text: string): string {
     .trim();
 }
 
+/** Remove @@URL@@...@@URL@@ markers and collect the URLs. */
 function stripUrlMarkers(text: string): { text: string; urls: string[] } {
   const urls: string[] = [];
   const cleaned = text.replace(/@@URL@@([^@]+)@@URL@@/g, (_, url) => {
@@ -104,10 +150,12 @@ function stripUrlMarkers(text: string): { text: string; urls: string[] } {
   return { text: normalizeSummaryText(cleaned), urls };
 }
 
+/** Parse HTML content into titled sections with item lists. */
 async function extractSectionsFromContent(contentHtml: string): Promise<Array<{ title: string; items: Array<{ text: string; urls: string[] }> }>> {
   if (!contentHtml) return [];
   const decoded = decodeEntities(contentHtml);
 
+  const lines: string[] = [];
   const rewriter = new HTMLRewriter()
     .on("h2, h3, h4", {
       element(el) {
@@ -132,10 +180,10 @@ async function extractSectionsFromContent(contentHtml: string): Promise<Array<{ 
   const transformed = rewriter.transform(new Response(decoded));
   const raw = await transformed.text();
   const text = decodeEntities(raw).replace(/<[^>]+>/g, " ");
-  const lines: string[] = [];
   for (const line of text.split("\n")) {
     const trimmed = line.replace(/\s+/g, " ").trim();
-    if (trimmed) lines.push(trimmed);
+    if (!trimmed) continue;
+    lines.push(trimmed);
   }
 
   const sections: Array<{ title: string; items: Array<{ text: string; urls: string[] }> }> = [];
@@ -165,6 +213,7 @@ async function extractSectionsFromContent(contentHtml: string): Promise<Array<{ 
   return sections;
 }
 
+/** Split text into lowercase alphanumeric tokens for hashing. */
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
@@ -173,6 +222,7 @@ function tokenize(text: string): string[] {
     .filter((token) => token.length > 2);
 }
 
+/** Compute a 64-bit FNV-1a hash of a token string. */
 function hashToken(token: string): bigint {
   let hash = 14695981039346656037n;
   const prime = 1099511628211n;
@@ -183,6 +233,7 @@ function hashToken(token: string): bigint {
   return hash;
 }
 
+/** Compute a 64-bit SimHash fingerprint for near-duplicate detection. */
 function simhash(text: string): bigint {
   const weights = Array(64).fill(0);
   for (const token of tokenize(text)) {
@@ -201,6 +252,7 @@ function simhash(text: string): bigint {
   return result;
 }
 
+/** Count the number of differing bits between two SimHash values. */
 function hammingDistance(a: bigint, b: bigint): number {
   let x = a ^ b;
   let count = 0;
@@ -211,15 +263,15 @@ function hammingDistance(a: bigint, b: bigint): number {
   return count;
 }
 
+/** Fetch feeds, deduplicate, and write the digest markdown and links JSON. */
 async function main() {
-  const { out, linksOut, hours, threshold, feedIndexUrl } = parseArgs(process.argv);
-  const feedBaseUrl = process.env.FEED_BASE_URL || feedIndexUrl.replace(/\/[^/]*$/, "/");
-  const indexResponse = await fetch(feedIndexUrl);
+  const { out, linksOut, hours, threshold } = parseArgs(process.argv);
+  const indexResponse = await fetch(FEED_INDEX_URL);
   if (!indexResponse.ok) {
     throw new Error(`Failed to fetch feed index: ${indexResponse.status}`);
   }
   const indexHtml = await indexResponse.text();
-  const feedUrls = await extractFeedUrls(indexHtml, feedBaseUrl);
+  const feedUrls = await extractFeedUrls(indexHtml);
 
   const now = new Date();
   const windowStart = new Date(now.getTime() - hours * 60 * 60 * 1000);
@@ -236,7 +288,9 @@ async function main() {
 
   for (const url of feedUrls) {
     const response = await fetch(url);
-    if (!response.ok) continue;
+    if (!response.ok) {
+      continue;
+    }
     const xml = await response.text();
     const feedTitle = extractTag(xml, "title") || "Unknown Feed";
 
@@ -265,8 +319,10 @@ async function main() {
     const key = `${item.title}|${item.link}`;
     if (seenKey.has(key)) continue;
     seenKey.add(key);
+
     const duplicate = uniqueItems.find((existing) => hammingDistance(existing.simhash, item.simhash) <= threshold);
     if (duplicate) continue;
+
     uniqueItems.push(item);
   }
 

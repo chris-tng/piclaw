@@ -26,8 +26,8 @@ Generate a 7-day token usage chart (all chats) and post it to the web UI timelin
 
 ## Notes
 
-- The chart is rendered as an embedded SVG via markdown image syntax.
-- Styling is handled by the web UI CSS (token-chart image selector).
+- `--ipc` now uses the IPC `media` attachment mechanism and posts the chart as an inline SVG attachment instead of embedding a `data:` URL in markdown.
+- For local/export use, pass `--output-svg /workspace/tmp/token-chart.svg` to save the rendered SVG to disk.
 - Numbers are formatted using K/M in labels and summaries.
-- Uses the `token_usage` table by default; pass `--source sessions` (or `--sessions-dir`) to read session JSONL files.
+- Uses the `token_usage` table in `${PICLAW_STORE}/messages.db` by default; pass `--source sessions` (or `--sessions-dir`) to read session JSONL files.
 - Use this on demand (not scheduled yet).

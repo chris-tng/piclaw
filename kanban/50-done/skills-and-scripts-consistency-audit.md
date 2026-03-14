@@ -1,7 +1,7 @@
 ---
 id: skills-and-scripts-consistency-audit
 title: Audit skills and scripts for consistency
-status: inbox
+status: done
 priority: medium
 created: 2026-03-12
 updated: 2026-03-12
@@ -88,13 +88,33 @@ category-folder reorganisation, and consistent CLI flags/arguments.
 
 ## Updates
 
-### 2026-03-12
-- Created to track a consistency audit across skills, standalone scripts, archived utilities, and duplicated repo/workspace copies.
-- Added explicit subfolder re-filing requirement: the audit now includes a category-based model for reorganizing skills and scripts into canonical subfolders under `.pi/skills/` and `/workspace/piclaw/skills/`, including migration strategy and compatibility checks.
-- Refined from 5-question pass:
-  - first-pass priorities are dedupe, category subfolders, and consistent CLI flags/arguments
-  - canonical source of truth depends on category
-  - a subset may be public-facing and should be explicitly marked
-  - category-folder moves should happen in the first pass
-  - strict moves are preferred over compatibility wrappers
-  - first pass stays focused on structure, naming, and docs
+### 2026-03-14 (implemented and closed)
+- Full inventory performed across 4 surfaces:
+  - workspace skills (22 skills, 15 with scripts)
+  - skel copies (17 skills)
+  - workspace scripts (10 scripts)
+  - repo scripts (3 repo-level + 19 piclaw/piclaw build scripts)
+- **Skel sync:** all 17 skel skill copies synced from workspace (18 files
+  updated, 0 remaining drift)
+- **Dedup:** removed stale `scripts/graphite-power-chart.ts` from repo
+  (authoritative copy is skill-local)
+- **Kept distinct:** `scripts/token-chart.ts` (standalone, used by tests) vs
+  `skills/token-chart/token-chart.ts` (IPC-posting skill version)
+- **No cross-location duplicates** found between workspace scripts, repo
+  scripts, and piclaw/piclaw build scripts
+- **Source-of-truth model documented:**
+  - workspace `.pi/skills/` is authoritative for runtime skills
+  - `skel/` is the repo template copy, synced from workspace
+  - `piclaw/piclaw/scripts/` is for build/CI tooling only
+  - `scripts/` (workspace-level) is for operational/personal scripts
+  - repo `scripts/` is for repo-level utilities that don't belong in skills
+- **Workspace-only skills** (11) identified as instance-specific and
+  intentionally not in skel: azure-cost-chart, azure-metrics-chart,
+  azure-subscription-diagram, chat-history, close-of-day,
+  export-timeline-pdf, glovo-lunch, situate-daily-notes, timeline-cleanup,
+  totp-qr, visual-design
+- **CLI consistency:** `--help` support is inconsistent (present in ~40% of
+  scripts). Deferred to a follow-up pass to avoid scope creep.
+- **Category subfolder reorganisation:** deferred — current flat layout is
+  still manageable at 22 skills. Better to revisit when skill count grows or
+  when the packaging model (pi-packages style) is clearer.

@@ -1,13 +1,11 @@
 /**
- * web-search-summary.ts – Search via SearXNG, fetch top results, summarise.
- *
- * Queries a local SearXNG instance, fetches the top N result pages,
- * converts them to markdown via Turndown, and returns compact summaries.
+ * web-search-summary.ts — Search SearXNG, fetch top result pages,
+ * convert to markdown, and produce short summaries.
  */
-
 import TurndownService from "turndown";
 import { parseHTML } from "linkedom";
 
+/** Shape of a search result: url, title, snippet, optional markdown. */
 type SearchResult = {
   url: string;
   title: string;
@@ -15,6 +13,7 @@ type SearchResult = {
   summary?: string;
 };
 
+/** Shape of the SearXNG JSON API response. */
 type SearxResponse = {
   query: string;
   results: Array<{
@@ -24,13 +23,22 @@ type SearxResponse = {
   }>;
 };
 
-const DEFAULT_SEARX_URL = process.env.SEARXNG_URL || "http://localhost:8888/search";
+/** Default SearXNG instance URL. */
+const DEFAULT_SEARX_URL = "http://192.168.1.100:3080/search";
+/** Default max number of search results to return. */
 const DEFAULT_LIMIT = 5;
+/** Default max number of result pages to fetch and convert. */
 const DEFAULT_FETCH_LIMIT = 2;
+/** Default HTTP fetch timeout in milliseconds. */
 const DEFAULT_TIMEOUT = 15000;
+/** Default max sentences in a page summary. */
 const DEFAULT_MAX_SENTENCES = 3;
+/** Default max characters in a page summary. */
 const DEFAULT_MAX_CHARS = 600;
 
+const args = process.argv.slice(2);
+
+/** Parse CLI flags (--key value) into a key-value object. */
 function parseArgs(argv: string[]) {
   const parsed: Record<string, string> = {};
   for (let i = 0; i < argv.length; i += 1) {
@@ -53,13 +61,14 @@ function parseArgs(argv: string[]) {
   return parsed;
 }
 
+/** Parse a string to an integer, returning a fallback on failure. */
 function parseNumber(value: string | undefined, fallback: number) {
   if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-const options = parseArgs(process.argv.slice(2));
+const options = parseArgs(args);
 const query = options.query || options.q;
 const searxUrl = options["searx-url"] || options.searxUrl || DEFAULT_SEARX_URL;
 const limit = parseNumber(options.limit, DEFAULT_LIMIT);
@@ -70,7 +79,7 @@ const maxChars = parseNumber(options["max-chars"], DEFAULT_MAX_CHARS);
 const shouldFetch = options.fetch === "false" ? false : true;
 
 if (!query) {
-  console.error('Usage: bun web-search-summary.ts --query "your query" [--fetch-limit 2] [--max-sentences 3]');
+  console.error("Usage: bun run scripts/web-search-summary.ts --query \"your query\" [--fetch-limit 2] [--max-sentences 3]");
   process.exit(1);
 }
 
@@ -87,6 +96,7 @@ turndown.addRule("stripEmptyLinks", {
   replacement: () => "",
 });
 
+/** Select the main content element from a parsed HTML document. */
 function selectMain(document: Document) {
   return (
     document.querySelector("article") ||
@@ -97,6 +107,7 @@ function selectMain(document: Document) {
   );
 }
 
+/** Fetch a URL and parse the JSON response. */
 async function fetchJson(url: string) {
   const response = await fetch(url);
   if (!response.ok) {
@@ -105,6 +116,7 @@ async function fetchJson(url: string) {
   return response.json();
 }
 
+/** Fetch a URL with an AbortController timeout. */
 async function fetchWithTimeout(url: string, timeout: number) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -117,12 +129,14 @@ async function fetchWithTimeout(url: string, timeout: number) {
   }
 }
 
+/** Convert HTML to markdown using Turndown, selecting main content. */
 function htmlToMarkdown(html: string) {
   const { document } = parseHTML(html);
   const main = selectMain(document);
   return turndown.turndown(main);
 }
 
+/** Extract a short plain-text summary from markdown content. */
 function summarizeMarkdown(markdown: string) {
   const cleaned = markdown
     .replace(/```[\s\S]*?```/g, " ")
@@ -140,6 +154,7 @@ function summarizeMarkdown(markdown: string) {
   return selected.slice(0, maxChars).trim() + "…";
 }
 
+/** Search SearXNG, optionally fetch top pages, and output results as JSON. */
 async function run() {
   const params = new URLSearchParams({ q: query, format: "json" });
   const searchUrl = `${searxUrl}?${params.toString()}`;

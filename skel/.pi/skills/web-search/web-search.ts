@@ -1,19 +1,18 @@
 /**
- * web-search.ts – Search the web via SearXNG and convert pages to markdown.
- *
- * Queries a local SearXNG instance and optionally fetches individual
- * result pages, converting their HTML to markdown via Turndown.
+ * web-search.ts — Search SearXNG and optionally fetch/convert result pages
+ * to markdown. Outputs JSON with results and optional page content.
  */
-
 import TurndownService from "turndown";
 import { parseHTML } from "linkedom";
 
+/** Shape of a search result: url, title, snippet, optional markdown. */
 type SearchResult = {
   url: string;
   title: string;
   content?: string;
 };
 
+/** Shape of the SearXNG JSON API response. */
 type SearxResponse = {
   query: string;
   results: Array<{
@@ -23,11 +22,18 @@ type SearxResponse = {
   }>;
 };
 
-const DEFAULT_SEARX_URL = process.env.SEARXNG_URL || "http://localhost:8888/search";
+/** Default SearXNG instance URL. */
+const DEFAULT_SEARX_URL = "http://192.168.1.100:3080/search";
+/** Default max number of search results to return. */
 const DEFAULT_LIMIT = 5;
+/** Default max number of result pages to fetch and convert. */
 const DEFAULT_FETCH_LIMIT = 2;
+/** Default HTTP fetch timeout in milliseconds. */
 const DEFAULT_TIMEOUT = 15000;
 
+const args = process.argv.slice(2);
+
+/** Parse CLI flags (--key value) into a key-value object. */
 function parseArgs(argv: string[]) {
   const parsed: Record<string, string> = {};
   for (let i = 0; i < argv.length; i += 1) {
@@ -50,13 +56,14 @@ function parseArgs(argv: string[]) {
   return parsed;
 }
 
+/** Parse a string to an integer, returning a fallback on failure. */
 function parseNumber(value: string | undefined, fallback: number) {
   if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-const options = parseArgs(process.argv.slice(2));
+const options = parseArgs(args);
 const query = options.query || options.q;
 const searxUrl = options["searx-url"] || options.searxUrl || DEFAULT_SEARX_URL;
 const limit = parseNumber(options.limit, DEFAULT_LIMIT);
@@ -65,7 +72,7 @@ const shouldFetch = options.fetch === "true" || options.fetch === "1";
 const timeoutMs = parseNumber(options.timeout, DEFAULT_TIMEOUT);
 
 if (!query) {
-  console.error('Usage: bun web-search.ts --query "your query" [--fetch true] [--limit 5]');
+  console.error("Usage: bun run scripts/web-search.ts --query \"your query\" [--fetch true] [--limit 5]");
   process.exit(1);
 }
 
@@ -82,6 +89,7 @@ turndown.addRule("stripEmptyLinks", {
   replacement: () => "",
 });
 
+/** Select the main content element from a parsed HTML document. */
 function selectMain(document: Document) {
   return (
     document.querySelector("article") ||
@@ -92,6 +100,7 @@ function selectMain(document: Document) {
   );
 }
 
+/** Fetch a URL and parse the JSON response. */
 async function fetchJson(url: string) {
   const response = await fetch(url);
   if (!response.ok) {
@@ -100,6 +109,7 @@ async function fetchJson(url: string) {
   return response.json();
 }
 
+/** Fetch a URL with an AbortController timeout. */
 async function fetchWithTimeout(url: string, timeout: number) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -112,12 +122,14 @@ async function fetchWithTimeout(url: string, timeout: number) {
   }
 }
 
+/** Convert HTML to markdown using Turndown, selecting main content. */
 function htmlToMarkdown(html: string) {
   const { document } = parseHTML(html);
   const main = selectMain(document);
   return turndown.turndown(main);
 }
 
+/** Search SearXNG, optionally fetch and convert result pages, and print output. */
 async function run() {
   const params = new URLSearchParams({ q: query, format: "json" });
   const searchUrl = `${searxUrl}?${params.toString()}`;

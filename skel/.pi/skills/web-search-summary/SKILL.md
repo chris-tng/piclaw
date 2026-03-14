@@ -1,31 +1,23 @@
 ---
 name: web-search-summary
-description: Search via SearXNG, fetch top results, and return quick summaries plus Markdown.
+description: Search via SearXNG, fetch top results, and return quick summaries plus markdown.
 ---
 
 # Web Search + Summaries
 
 Search the web and generate lightweight summaries using HTML-to-Markdown conversion.
 
-## Prerequisites
+## Steps
 
-The script depends on `turndown` and `linkedom`. Install them once:
+1. Run a summarized search:
+   ```bash
+   bun /workspace/.pi/skills/web-search-summary/web-search-summary.ts --query "your query"
+   ```
 
-```bash
-cd /workspace && bun add turndown linkedom
-```
-
-## Usage
-
-```bash
-bun /workspace/.pi/skills/web-search-summary/web-search-summary.ts --query "your query"
-```
-
-Adjust fetch depth or summary length:
-
-```bash
-bun /workspace/.pi/skills/web-search-summary/web-search-summary.ts --query "your query" --fetch-limit 3 --max-sentences 4 --max-chars 800
-```
+2. Adjust fetch depth or summary length:
+   ```bash
+   bun /workspace/.pi/skills/web-search-summary/web-search-summary.ts --query "your query" --fetch-limit 3 --max-sentences 4 --max-chars 800
+   ```
 
 ## Options
 
@@ -33,14 +25,10 @@ bun /workspace/.pi/skills/web-search-summary/web-search-summary.ts --query "your
 - `--limit` Number of results to return (default 5).
 - `--fetch` Set to `false` to skip fetching pages (default true).
 - `--fetch-limit` How many results to fetch/convert (default 2).
-- `--searx-url` Override the SearXNG endpoint (default from `SEARXNG_URL` env var, or `http://localhost:8888/search`).
+- `--searx-url` Override the SearXNG endpoint (default http://192.168.1.100:3080/search).
 - `--timeout` Fetch timeout in milliseconds (default 15000).
 - `--max-sentences` Summary sentence limit (default 3).
 - `--max-chars` Summary character limit (default 600).
-
-## Environment
-
-- `SEARXNG_URL` — Base URL for the SearXNG instance (e.g. `http://localhost:8888/search`).
 
 ## Notes
 

@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# bootstrap-container.sh – First-run setup for a new Pibox workspace.
-#
-# Installs Playwright browsers, creates package.json if missing, and
-# ensures node_modules are present. Idempotent — skips steps already done.
 set -euo pipefail
 
 WORKSPACE="${PICLAW_WORKSPACE:-/workspace}"
@@ -10,14 +6,17 @@ BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$WORKSPACE/.cache/ms-playwright}"
 PACKAGE_JSON="$WORKSPACE/package.json"
 NODE_MODULES="$WORKSPACE/node_modules"
 
+# Print a timestamped bootstrap log message.
 log() {
   printf "[bootstrap] %s\n" "$*"
 }
 
+# Check whether a command exists on PATH.
 have() {
   command -v "$1" >/dev/null 2>&1
 }
 
+# Install required OS packages via apt-get if missing.
 ensure_apt_packages() {
   if ! have apt-get; then
     log "apt-get not found; skipping OS package install."
@@ -45,6 +44,7 @@ ensure_apt_packages() {
   "${sudo_cmd[@]}" apt-get install -y --no-install-recommends "${packages[@]}"
 }
 
+# Verify that Bun is installed, exit if not.
 ensure_bun() {
   if ! have bun; then
     log "bun is missing. Install Bun before continuing."
@@ -52,6 +52,7 @@ ensure_bun() {
   fi
 }
 
+# Initialize package.json and node_modules if missing.
 ensure_workspace_package() {
   if [ ! -f "$PACKAGE_JSON" ]; then
     log "package.json missing; initializing in $WORKSPACE"
@@ -64,6 +65,7 @@ ensure_workspace_package() {
   fi
 }
 
+# Install required Bun dependencies (linkedom, turndown, playwright).
 ensure_bun_dependencies() {
   local deps=(linkedom turndown)
   local missing=()
@@ -84,6 +86,7 @@ ensure_bun_dependencies() {
   fi
 }
 
+# Install Playwright Chromium browser and OS dependencies.
 ensure_playwright_browsers() {
   mkdir -p "$BROWSERS_PATH"
   if [ -d "$BROWSERS_PATH" ] && ls "$BROWSERS_PATH"/chromium-* >/dev/null 2>&1; then
@@ -94,6 +97,7 @@ ensure_playwright_browsers() {
   (cd "$WORKSPACE" && PLAYWRIGHT_BROWSERS_PATH="$BROWSERS_PATH" bunx playwright install chromium --with-deps)
 }
 
+# Print version info for all installed tools.
 report_versions() {
   log "Version summary:"
   bun --version || true
@@ -105,6 +109,7 @@ report_versions() {
   ssh -V 2>&1 || true
 }
 
+# Run all bootstrap steps in sequence.
 main() {
   log "Starting bootstrap for $WORKSPACE"
   ensure_apt_packages
