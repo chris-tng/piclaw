@@ -108,7 +108,10 @@ export function recoverInflightRuns(
   }
 
   for (const inflight of inflights) {
-    // Only re-enqueue if the cursor was actually rolled back (no agent replies existed)
+    // Re-enqueue a processChat task unless the run already completed
+    // (terminal agent reply exists). For rolled-back inflights, this retries
+    // the same message. For stale-cleared inflights (cursor not rolled back),
+    // processChat will pick up the NEXT pending message from the cursor.
     if (!store.hasAgentRepliesAfter(inflight.chatJid, inflight.startedAt)) {
       console.log(`[web] Recovering interrupted run for ${inflight.chatJid} (started ${inflight.startedAt})`);
       // Reuse the same stable resume key used by resume_pending IPC so
