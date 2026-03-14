@@ -1,12 +1,13 @@
 /**
  * agent-control/handlers/session.ts – Handlers for session management commands.
  *
- * Handles /session-name, /new-session, /switch-session, /fork, /forks,
- * and /export-html commands for managing the pi-agent session tree.
+ * Handles /session-name, /new-session, /switch-session, /session-rotate,
+ * /fork, /forks, and /export-html commands for managing the pi-agent session tree.
  *
  * Consumers: agent-control-handlers.ts dispatches to these handlers.
  */
 import { truncateText } from "../agent-control-helpers.js";
+import { rotateSession } from "../../session-rotation.js";
 /** Handle /session-name: rename the current session. */
 export async function handleSessionName(session, command) {
     if (!command.name) {
@@ -42,6 +43,17 @@ export async function handleSwitchSession(session, command) {
         return { status: "error", message: "Switch session cancelled." };
     }
     return { status: "success", message: `Switched to session: ${command.path.trim()}.` };
+}
+/** Handle /session-rotate: archive the current session file and start a compact carried-forward successor. */
+export async function handleSessionRotate(session, command) {
+    const result = await rotateSession(session, {
+        instructions: command.instructions,
+        reason: "manual",
+    });
+    return {
+        status: result.status,
+        message: result.message,
+    };
 }
 /** Handle /fork: fork the conversation from a specific entry. */
 export async function handleFork(session, command) {

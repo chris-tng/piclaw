@@ -39,6 +39,22 @@ export function formatShellBlock(command, output, meta = []) {
     }
     return ["```", ...lines, "```"].join("\n");
 }
+/** Format a byte count using human-readable binary units. */
+export function formatBytes(bytes) {
+    if (!Number.isFinite(bytes))
+        return String(bytes);
+    const abs = Math.abs(bytes);
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let value = abs;
+    let unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+        value /= 1024;
+        unitIndex += 1;
+    }
+    const formatted = value >= 10 || unitIndex === 0 ? value.toFixed(0) : value.toFixed(1);
+    const trimmed = formatted.endsWith(".0") ? formatted.slice(0, -2) : formatted;
+    return `${bytes < 0 ? "-" : ""}${trimmed} ${units[unitIndex]}`;
+}
 /** Format a number with K/M suffixes for compact display. */
 export function formatCompactNumber(value) {
     if (!Number.isFinite(value))

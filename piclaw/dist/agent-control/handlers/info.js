@@ -7,9 +7,11 @@
  *
  * Consumers: agent-control-handlers.ts dispatches to these handlers.
  */
-import { formatCompactNumber, formatCurrency } from "../agent-control-helpers.js";
+import { statSync } from "fs";
+import { formatBytes, formatCompactNumber, formatCurrency } from "../agent-control-helpers.js";
 import { CONTROL_COMMAND_DEFINITIONS } from "../command-registry.js";
 import { getChatJid } from "../../core/chat-context.js";
+import { SESSION_MAX_SIZE_BYTES, SESSION_MAX_SIZE_MB } from "../../core/config.js";
 import { getTokenUsageByModel, getTokenUsageByProvider, getTokenUsageTotals } from "../../db.js";
 import { searchWorkspace } from "../../workspace-search.js";
 /** Handle /state: display current session state summary. */
@@ -17,6 +19,17 @@ export async function handleState(session, _command) {
     const modelLabel = session.model ? `${session.model.provider}/${session.model.id}` : "none";
     const steeringCount = session.getSteeringMessages().length;
     const followUpCount = session.getFollowUpMessages().length;
+    const sessionFileSize = (() => {
+        if (!session.sessionFile)
+            return null;
+        try {
+            return statSync(session.sessionFile).size;
+        }
+        catch {
+            return null;
+        }
+    })();
+    const isOversizedSession = sessionFileSize !== null && sessionFileSize >= SESSION_MAX_SIZE_BYTES;
     const lines = [
         `Model: ${modelLabel}`,
         `Thinking level: ${session.thinkingLevel}${session.supportsThinking() ? "" : " (thinking off)"}`,
@@ -31,7 +44,11 @@ export async function handleState(session, _command) {
         `Session id: ${session.sessionId}`,
         `Session name: ${session.sessionName || "none"}`,
         `Session file: ${session.sessionFile || "none"}`,
+        `Session file size: ${sessionFileSize === null ? "unknown" : formatBytes(sessionFileSize)}`,
     ];
+    if (isOversizedSession && sessionFileSize !== null) {
+        lines.push(`Session file warning: exceeds configured threshold (${formatBytes(sessionFileSize)} >= ${SESSION_MAX_SIZE_MB} MB). Consider /session-rotate.`);
+    }
     return { status: "success", message: lines.join("\n") };
 }
 /** Handle /stats: display token usage and cost statistics. */

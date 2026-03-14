@@ -35,6 +35,7 @@ export const CONTROL_COMMAND_DEFINITIONS = [
     { name: "/session-name", description: "Set or show the session name" },
     { name: "/new-session", description: "Start a new session" },
     { name: "/switch-session", description: "Switch to a session file" },
+    { name: "/session-rotate", description: "Rotate the current persisted session into an archived file" },
     { name: "/fork", description: "Fork from a previous message" },
     { name: "/forks", description: "List forkable messages" },
     { name: "/tree", description: "List the session tree (default tail 10) and navigate branches" },

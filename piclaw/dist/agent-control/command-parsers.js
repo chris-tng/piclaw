@@ -178,6 +178,14 @@ export function parseSwitchSession(args, raw) {
         raw,
     };
 }
+/** Parse /session-rotate arguments: optional compaction instructions. */
+export function parseSessionRotate(args, raw) {
+    return {
+        type: "session_rotate",
+        instructions: args || undefined,
+        raw,
+    };
+}
 /** Parse /fork arguments: optional entry ID to fork from. */
 export function parseFork(args, raw) {
     return {
@@ -448,6 +456,7 @@ export const COMMAND_PARSERS = {
     "/session-name": parseSessionName,
     "/new-session": parseNewSession,
     "/switch-session": parseSwitchSession,
+    "/session-rotate": parseSessionRotate,
     "/fork": parseFork,
     "/forks": simple("forks"),
     "/export-html": parseExportHtml,

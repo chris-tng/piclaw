@@ -24,7 +24,7 @@ import { mkdirSync } from "fs";
 import { join } from "path";
 import { AuthStorage, createBashTool, createEditTool, createReadTool, createWriteTool, ModelRegistry, SettingsManager, getAgentDir, } from "@mariozechner/pi-coding-agent";
 import { applyControlCommand } from "./agent-control/index.js";
-import { AGENT_TIMEOUT, SESSIONS_DIR, WORKSPACE_DIR } from "./core/config.js";
+import { AGENT_TIMEOUT, SESSION_AUTO_ROTATE, SESSION_MAX_SIZE_BYTES, SESSIONS_DIR, WORKSPACE_DIR } from "./core/config.js";
 import { detectChannel } from "./router.js";
 import { createTrackedBashOperations } from "./tools/tracked-bash.js";
 import { getAttachmentRegistry } from "./agent-pool/attachments.js";
@@ -36,6 +36,7 @@ import { getProviderUsage } from "./agent-pool/provider-usage.js";
 import { recordMessageUsage } from "./agent-pool/usage.js";
 import { resolveModelLabel } from "./utils/model-utils.js";
 import { withChatContext } from "./core/chat-context.js";
+import { getSessionFileSize, rotateSession } from "./session-rotation.js";
 /** How long (ms) an idle session stays cached before being disposed. */
 const IDLE_TTL = 10 * 60 * 1000; // 10 minutes
 const CLEANUP_INTERVAL = 60 * 1000; // check every minute
@@ -79,12 +80,33 @@ export class AgentPool {
             }
         }
     }
+    /** Attempt safe automatic session rotation before the next prompt when configured. */
+    async maybeAutoRotateSession(session, chatJid) {
+        const autoRotateEnabled = SESSION_AUTO_ROTATE
+            || ["1", "true", "yes", "on"].includes((process.env.PICLAW_SESSION_AUTO_ROTATE || "").trim().toLowerCase());
+        if (!autoRotateEnabled)
+            return;
+        const envThresholdMb = parseInt(process.env.PICLAW_SESSION_MAX_SIZE_MB || "", 10);
+        const thresholdBytes = Number.isFinite(envThresholdMb) && envThresholdMb > 0
+            ? envThresholdMb * 1024 * 1024
+            : SESSION_MAX_SIZE_BYTES;
+        const sessionFileSize = getSessionFileSize(session.sessionFile);
+        if (sessionFileSize === null || sessionFileSize < thresholdBytes)
+            return;
+        const result = await rotateSession(session, { reason: "automatic" });
+        if (result.status === "success") {
+            console.log(`[agent-pool] Auto-rotated oversized session ${chatJid}: ${result.previousSize ?? sessionFileSize} -> ${result.nextSize ?? "unknown"}`);
+            return;
+        }
+        console.warn(`[agent-pool] Auto-rotation skipped for ${chatJid}: ${result.message}`);
+    }
     /** Run a prompt against the persistent session for `chatJid`. */
     async runAgent(prompt, chatJid, options = {}) {
         const startTime = Date.now();
         this.attachments.clear(chatJid);
         try {
             const session = await this.getOrCreate(chatJid);
+            await this.maybeAutoRotateSession(session, chatJid);
             pruneOrphanToolResults(session, chatJid);
             console.log(`[agent-pool] Prompting session ${chatJid} (${prompt.length} chars)`);
             const tracker = this.createTurnTracker(chatJid, options.onTurnComplete);

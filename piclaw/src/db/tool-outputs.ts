@@ -20,6 +20,7 @@
 
 import { getDb } from "./connection.js";
 import type { ToolOutputRecord } from "./types.js";
+import { prepareFtsQuery } from "../utils/fts-query.js";
 
 /** Insert or replace a tool output metadata record (without FTS content). */
 export function storeToolOutput(record: ToolOutputRecord): void {
@@ -83,9 +84,25 @@ export function deleteToolOutputsBefore(cutoffIso: string): ToolOutputRecord[] {
  */
 export function searchToolOutputSnippets(outputId: string, query: string, limit = 5): string[] {
   const db = getDb();
-  const stmt = db.prepare(
-    "SELECT snippet(tool_outputs_fts, 0, '[', ']', '…', 12) as snippet FROM tool_outputs_fts WHERE tool_outputs_fts MATCH ? AND output_id = ? LIMIT ?"
-  );
-  const rows = stmt.all(query, outputId, limit) as Array<{ snippet: string }>;
-  return rows.map((row) => row.snippet);
+  const ftsQuery = prepareFtsQuery(query);
+  if (!ftsQuery) return [];
+  try {
+    const stmt = db.prepare(
+      "SELECT snippet(tool_outputs_fts, 0, '[', ']', '…', 12) as snippet FROM tool_outputs_fts WHERE tool_outputs_fts MATCH ? AND output_id = ? LIMIT ?"
+    );
+    const rows = stmt.all(ftsQuery, outputId, limit) as Array<{ snippet: string }>;
+    return rows.map((row) => row.snippet);
+  } catch {
+    // FTS query still failed after sanitization — fall back to LIKE
+    try {
+      const pattern = `%${query.replace(/%/g, "").trim()}%`;
+      const stmt = db.prepare(
+        "SELECT substr(content, 1, 400) as snippet FROM tool_outputs_fts WHERE content LIKE ? AND output_id = ? LIMIT ?"
+      );
+      const rows = stmt.all(pattern, outputId, limit) as Array<{ snippet: string }>;
+      return rows.map((row) => row.snippet);
+    } catch {
+      return [];
+    }
+  }
 }
