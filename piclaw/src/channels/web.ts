@@ -354,11 +354,20 @@ export class WebChannel implements WebChannelLike {
       ...this.getDeferredQueuedFollowupItems(chatJid),
       ...this.followupPlaceholderStore.peek(chatJid),
     ];
+    // Deduplicate by rowId — the two stores use different ID spaces (negative
+    // for deferred, positive for placeholder), but guard against bugs that
+    // might put the same item in both stores.
+    const seen = new Set<number>();
     return rows
       .map((row) => ({
         ...row,
         queuedAt: row.queuedAt,
       }))
+      .filter((row) => {
+        if (seen.has(row.rowId)) return false;
+        seen.add(row.rowId);
+        return true;
+      })
       .sort((a, b) => String(a.queuedAt).localeCompare(String(b.queuedAt)));
   }
 

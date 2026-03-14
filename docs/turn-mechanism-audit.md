@@ -850,46 +850,43 @@ User clicks Steer button on queue stack item
 8. **Steer failure recovery**: If `storeMessage` fails during steer, the item
    is prepended back to the queue and the UI is notified via SSE.
 
-### ⚠️ Low-risk concerns
+### ⚠️ Low-risk concerns (resolved)
 
-1. **No deduplication on queue merge**: `getQueuedFollowupItems` concatenates
-   deferred + placeholder stores without deduplicating by `rowId`. The stores
-   use different ID spaces, so this is safe in practice, but there's no guard
-   against bugs that might put the same item in both stores.
+1. ~~**No deduplication on queue merge**~~ **Fixed**: `getQueuedFollowupItems`
+   now deduplicates by `rowId` using a `Set` before sorting.
 
-2. **No retry counter on deferred items**: If `materializeNextDeferredFollowup`
-   fails persistently (e.g., DB corruption), the item is prepended back and
-   tried again on the next turn. There's no max-retry counter — it could loop
-   forever. Risk: very low (DB write failure is rare and usually transient).
+2. ~~**No retry counter on deferred items**~~ **Fixed**: Added
+   `materializeRetries` field to `DeferredQueuedFollowupRecord`. The
+   `materializeNextDeferredFollowup` function increments the counter on failure
+   and drops the item after `MAX_MATERIALIZE_RETRIES` (5) attempts, broadcasting
+   `agent_followup_consumed` so the client cleans up.
 
 3. **`rollbackInflightRun` is not a single statement**: It's 3 statements
    (delete message_media, delete messages, update cursor). However, it's called
-   inside a transaction, so it's atomic at the SQLite level.
+   inside a transaction, so it's atomic at the SQLite level. (Not a bug.)
 
-4. **No user-visible feedback for failed queue operations**: If `removeAgentQueueItem`
-   or `steerAgentQueueItem` network calls fail, the dismissed set is cleared and
-   `refreshQueueState` restores the item — but no toast/notification tells the
-   user what happened. The item silently reappears.
+4. ~~**No user-visible feedback for failed queue operations**~~ **Fixed**: Both
+   `handleInjectQueuedFollowup` (steer) and `handleRemoveQueuedFollowup` (cancel)
+   now call `showIntentToast` with a warning message on failure, using the existing
+   intent toast pane system.
 
-5. **`consumeLatest` pending steering clears ALL entries**: If multiple steering
-   messages are queued and only some should advance the cursor, the others are
-   lost. However, the current design always takes the latest, which is correct
-   for the cursor-advance use case — all intermediate steering timestamps are
-   implicitly covered by the latest one.
+5. **`consumeLatest` pending steering clears ALL entries**: Correct behavior —
+   all intermediate steering timestamps are implicitly covered by the latest one.
+   (Not a bug.)
 
-### 🔴 Active issues
+### 🔴 Active issues (resolved)
 
-1. **No-op turns consume messages silently**: When the model returns zero output
-   (e.g., Azure API error, aborted session), the no-op path advances the cursor.
-   The user's message is consumed without a response. This is by design (prevents
-   infinite retry), but there is no user notification that the message was lost.
-   **Recommendation**: Post a system message to the timeline indicating the message
-   was skipped, with the original content quoted.
+1. ~~**No-op turns consume messages silently**~~ **Fixed**: When the model returns
+   zero output and no draft, a system notice is now stored in the timeline:
+   `"⚠️ Your message was received but the agent produced no response. You may
+   need to re-send it."` with a quoted preview of the original message content.
+   Stored as a terminal bot message and broadcast via `agent_response`.
 
-2. **183 MB session file**: The session JSONL file for `web:default` is 183 MB.
-   There is no automatic truncation or archival. Large sessions may degrade
-   `agentPool.runAgent` performance. **Recommendation**: Add session file rotation
-   or compaction-with-archival beyond a size threshold.
+2. ~~**183 MB session file**~~ **Tracked**: Created kanban ticket
+   `kanban/00-inbox/session-file-rotation.md` covering size monitoring, rotation,
+   archival, and queue validation during rotation. Includes acceptance criteria
+   to verify queued messages are preserved and that rotation does not occur
+   during inflight turns.
 
 ---
 

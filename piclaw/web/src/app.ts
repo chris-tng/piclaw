@@ -147,6 +147,7 @@ function App() {
     // refreshQueueState filters these out so the server can't re-add them
     // before the placeholder is actually consumed server-side.
     const dismissedQueueRowIdsRef = useRef(new Set());
+    const silentRecoveryRef = useRef({ inFlight: false, lastAttemptAt: 0, turnId: null });
     // Keep refs in sync during render for immediate access in stable callbacks
     followupQueueRowIdsRef.current = new Set(followupQueueItems.map((item) => item.row_id));
     followupQueueItemsRef.current = followupQueueItems;
@@ -487,6 +488,7 @@ function App() {
         lastAgentResponseRef.current = null;
         currentTurnIdRef.current = null;
         steerQueuedTurnIdRef.current = null;
+        silentRecoveryRef.current = { inFlight: false, lastAttemptAt: 0, turnId: null };
         clearLastActivityTimer();
         setCurrentTurnId(null);
         setSteerQueuedTurnId(null);
@@ -498,6 +500,7 @@ function App() {
         if (!turnId) return;
         if (currentTurnIdRef.current === turnId) return;
         currentTurnIdRef.current = turnId;
+        silentRecoveryRef.current = { inFlight: false, lastAttemptAt: 0, turnId };
         setCurrentTurnId(turnId);
         steerQueuedTurnIdRef.current = null;
         setSteerQueuedTurnId(null);
@@ -768,7 +771,15 @@ function App() {
             const silenceMs = now - lastEvent;
 
             if (silenceMs >= SILENCE_FINALIZE_MS) {
-                finalizeStalledResponse();
+                // Before inventing a local "incomplete" post, force a server
+                // re-sync. In practice most of these stalls are SSE visibility
+                // gaps: the backend is still active or the final reply is
+                // already persisted and a refresh surfaces it immediately.
+                setAgentStatus({
+                    type: 'waiting',
+                    title: 'Re-syncing after a quiet period…',
+                });
+                void reconcileSilentTurn();
                 return;
             }
 
@@ -780,12 +791,13 @@ function App() {
                         title: `Waiting for model… No events for ${seconds}s`,
                     });
                     lastSilenceNoticeRef.current = now;
+                    void reconcileSilentTurn();
                 }
             }
         }, intervalMs);
 
         return () => clearInterval(interval);
-    }, [finalizeStalledResponse]);
+    }, [reconcileSilentTurn]);
 
 
 
@@ -816,7 +828,7 @@ function App() {
                 setAgentThought({ text: '', totalLines: 0 });
                 setPendingRequest(null);
                 pendingRequestRef.current = null;
-                return;
+                return res ?? null;
             }
             wasAgentActiveRef.current = true;
             const payload = res.data;
@@ -842,10 +854,40 @@ function App() {
                     return { text: res.draft.text, totalLines: res.draft.totalLines || 0 };
                 });
             }
+            return res;
         } catch (err) {
             console.warn('Failed to fetch agent status:', err);
+            return null;
         }
     }, [clearAgentRunState, clearLastActivityFlag, noteAgentActivity, refreshTimeline, setActiveTurn]);
+
+    const reconcileSilentTurn = useCallback(async () => {
+        if (!isAgentRunningRef.current) return null;
+        if (pendingRequestRef.current) return null;
+
+        const activeTurnId = currentTurnIdRef.current || null;
+        const probe = silentRecoveryRef.current;
+        const now = Date.now();
+        if (probe.inFlight) return null;
+        if (probe.turnId === activeTurnId && now - probe.lastAttemptAt < SILENCE_REFRESH_MS) {
+            return null;
+        }
+
+        probe.inFlight = true;
+        probe.lastAttemptAt = now;
+        probe.turnId = activeTurnId;
+
+        try {
+            const { currentHashtag: activeHashtag, searchQuery: activeSearch } = viewStateRef.current || {};
+            if (!activeHashtag && !activeSearch) {
+                await refreshTimeline();
+            }
+            await refreshQueueState();
+            return await refreshAgentStatus();
+        } finally {
+            probe.inFlight = false;
+        }
+    }, [refreshAgentStatus, refreshQueueState, refreshTimeline]);
 
     const handleConnectionStatusChange = useCallback((status) => {
         setConnectionStatus(status);
@@ -1144,10 +1186,11 @@ function App() {
             })
             .catch((error) => {
                 console.warn('[queue] Failed to steer queued item:', error);
+                showIntentToast('Failed to steer message', 'The queued message could not be sent as steering.', 'warning');
                 dismissedQueueRowIdsRef.current.delete(rowId);
                 void refreshQueueState();
             });
-    }, [refreshQueueState, setFollowupQueueItems]);
+    }, [refreshQueueState, setFollowupQueueItems, showIntentToast]);
 
     const handleRemoveQueuedFollowup = useCallback((queuedItem) => {
         const rowId = queuedItem?.row_id;
@@ -1164,10 +1207,11 @@ function App() {
             })
             .catch((error) => {
                 console.warn('[queue] Failed to remove queued item:', error);
+                showIntentToast('Failed to remove message', 'The queued message could not be removed.', 'warning');
                 dismissedQueueRowIdsRef.current.delete(rowId);
                 void refreshQueueState();
             });
-    }, [refreshQueueState, setFollowupQueueItems]);
+    }, [refreshQueueState, setFollowupQueueItems, showIntentToast]);
 
     const handleMessageResponse = useCallback((response) => {
         if (!response || typeof response !== "object") return;

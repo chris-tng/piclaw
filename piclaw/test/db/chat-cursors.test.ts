@@ -124,6 +124,7 @@ describe("deferred queued follow-ups", () => {
       mediaIds: [1, 2],
       contentBlocks: [{ type: "markdown", text: "queued" }],
       linkPreviews: [{ url: "https://example.com" }],
+      materializeRetries: 0,
     }]);
   });
 
@@ -148,6 +149,7 @@ describe("deferred queued follow-ups", () => {
       queuedContent: "queued",
       threadId: null,
       queuedAt: "2024-03-10T00:00:00.000Z",
+      materializeRetries: 0,
     }]);
   });
 });

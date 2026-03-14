@@ -64,6 +64,8 @@ export interface DeferredQueuedFollowupRecord {
   mediaIds?: number[];
   contentBlocks?: unknown[];
   linkPreviews?: unknown[];
+  /** Number of times materializeNextDeferredFollowup has failed for this item. */
+  materializeRetries?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +118,7 @@ function sanitizeDeferredQueuedFollowupRecord(value: unknown): DeferredQueuedFol
       : undefined,
     contentBlocks: Array.isArray(record.contentBlocks) ? [...record.contentBlocks] : undefined,
     linkPreviews: Array.isArray(record.linkPreviews) ? [...record.linkPreviews] : undefined,
+    materializeRetries: Number.isFinite(record.materializeRetries) ? Number(record.materializeRetries) : 0,
   };
 }
 
@@ -148,6 +151,7 @@ export function setDeferredQueuedFollowups(chatJid: string, items: DeferredQueue
     mediaIds: item.mediaIds ? [...item.mediaIds] : undefined,
     contentBlocks: Array.isArray(item.contentBlocks) ? [...item.contentBlocks] : undefined,
     linkPreviews: Array.isArray(item.linkPreviews) ? [...item.linkPreviews] : undefined,
+    materializeRetries: item.materializeRetries || 0,
   })));
   db.prepare(`
     INSERT INTO chat_cursors (chat_jid, cursor_ts, queued_followups_json)

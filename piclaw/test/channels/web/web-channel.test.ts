@@ -1159,12 +1159,16 @@ test("processChat finalizes as no-op when no terminal output can be persisted", 
 
   // Empty output with no draft is treated as a no-op success (cursor
   // advances) to prevent infinite retry loops on restart recovery.
+  // A system notice is posted to the timeline so the user knows the message
+  // was consumed without a response.
   const failedRun = db.getFailedRun("web:default");
   expect(failedRun).toBeUndefined();
 
   const timeline = db.getTimeline("web:default", 10);
   const botMessages = timeline.filter((item: any) => item.data.type === "agent_response");
-  expect(botMessages.length).toBe(0);
+  expect(botMessages.length).toBe(1);
+  expect(botMessages[0].data.content).toContain("⚠️ Your message was received but the agent produced no response");
+  expect(botMessages[0].data.content).toContain("hello");
 });
 
 test("processChat drains queued follow-ups after a persisted timeout fallback", async () => {
