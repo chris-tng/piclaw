@@ -248,7 +248,7 @@ test("web channel queues normal message as follow-up when no mode is provided", 
   expect(timeline[0].data.content).toBe("root turn");
 });
 
-test("web channel still queues follow-ups while a turn is inflight but not actively streaming", async () => {
+test("web channel processes messages normally when a turn is inflight but not actively streaming", async () => {
   const ws = createTempWorkspace("piclaw-web-channel-");
   cleanupWorkspace = ws.cleanup;
   restoreEnv = setEnv({ PICLAW_WORKSPACE: ws.workspace, PICLAW_STORE: ws.store, PICLAW_DATA: ws.data });
@@ -272,15 +272,18 @@ test("web channel still queues follow-ups while a turn is inflight but not activ
     thread_id: null,
   });
   db.getDb().prepare("UPDATE messages SET thread_id = ? WHERE rowid = ?").run(rootRowId, rootRowId);
+  // Set an inflight marker WITHOUT an active streaming session — simulates
+  // a stale marker left after a restart or brief finalization gap.
   db.beginChatRun("web:default", rootTimestamp, {
     prevTs: "",
     messageId: rootMessageId,
     startedAt: new Date().toISOString(),
   });
 
+  let processChatEnqueued = false;
   const webMod = await import("../../../src/channels/web.js");
   const web = new (webMod.WebChannel as any)({
-    queue: { enqueue: () => {} },
+    queue: { enqueue: () => { processChatEnqueued = true; } },
     agentPool: {
       isStreaming: () => false,
       runAgent: async () => ({ status: "success", result: "ok" }),
@@ -291,24 +294,21 @@ test("web channel still queues follow-ups while a turn is inflight but not activ
   const req = new Request("http://test/agent/default/message", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content: "queue despite non-streaming gap" }),
+    body: JSON.stringify({ content: "should process immediately despite stale inflight" }),
   });
 
   const res = await (web as any).handleRequest(req);
   const payload = await res.json();
+  // Must NOT be queued — the stale DB inflight marker must not block processing
   expect(res.status).toBe(201);
-  expect(payload.queued).toBe("followup");
-  expect(payload.thread_id).toBe(rootRowId);
+  expect(payload.queued).toBeUndefined();
+  expect(payload.user_message).toBeTruthy();
+  expect(processChatEnqueued).toBe(true);
 
-  const queueStateRes = await (web as any).handleRequest(new Request("http://test/agent/queue-state"));
-  const queueState = await queueStateRes.json();
-  expect(queueState.count).toBe(1);
-  expect(queueState.items[0].content).toBe("queue despite non-streaming gap");
-  expect(queueState.items[0].thread_id).toBe(rootRowId);
-
+  // Message should be stored in the timeline (not deferred)
   const timeline = db.getTimeline("web:default", 10);
   const contents = timeline.map((item: any) => item.data.content);
-  expect(contents).toEqual(["root turn"]);
+  expect(contents).toContain("should process immediately despite stale inflight");
 });
 
 test("web channel exposes queued follow-up items from queue-state", async () => {
