@@ -760,46 +760,31 @@ function App() {
     }, [currentHashtag, searchQuery]);
 
 
-    useEffect(() => {
-        const intervalMs = Math.min(1000, Math.max(100, Math.floor(SILENCE_WARNING_MS / 2)));
-        const interval = setInterval(() => {
-            if (!isAgentRunningRef.current) return;
-            if (pendingRequestRef.current) return;
-            const lastEvent = lastAgentEventRef.current;
-            if (!lastEvent) return;
-            const now = Date.now();
-            const silenceMs = now - lastEvent;
-
-            if (silenceMs >= SILENCE_FINALIZE_MS) {
-                // Before inventing a local "incomplete" post, force a server
-                // re-sync. In practice most of these stalls are SSE visibility
-                // gaps: the backend is still active or the final reply is
-                // already persisted and a refresh surfaces it immediately.
-                setAgentStatus({
-                    type: 'waiting',
-                    title: 'Re-syncing after a quiet period…',
-                });
-                void reconcileSilentTurn();
-                return;
-            }
-
-            if (silenceMs >= SILENCE_WARNING_MS) {
-                if (now - lastSilenceNoticeRef.current >= SILENCE_REFRESH_MS) {
-                    const seconds = Math.floor(silenceMs / 1000);
-                    setAgentStatus({
-                        type: 'waiting',
-                        title: `Waiting for model… No events for ${seconds}s`,
+    const refreshQueueState = useCallback(() => {
+        getAgentQueueState()
+            .then((payload) => {
+                const dismissed = dismissedQueueRowIdsRef.current;
+                const items = Array.isArray(payload?.items)
+                    ? payload.items
+                        .map((item) => ({ ...item }))
+                        .filter((item) => !dismissed.has(item.row_id))
+                    : [];
+                if (items.length) {
+                    setFollowupQueueItems((prev) => {
+                        if (prev.length === items.length && prev.every((p, i) => p.row_id === items[i].row_id)) return prev;
+                        return items;
                     });
-                    lastSilenceNoticeRef.current = now;
-                    void reconcileSilentTurn();
+                    return;
                 }
-            }
-        }, intervalMs);
 
-        return () => clearInterval(interval);
-    }, [reconcileSilentTurn]);
-
-
+                // Server queue is empty (after filtering dismissed) — clear dismissed set
+                dismissed.clear();
+                setFollowupQueueItems((prev) => prev.length === 0 ? prev : []);
+            })
+            .catch(() => {
+                setFollowupQueueItems((prev) => prev.length === 0 ? prev : []);
+            });
+    }, [setFollowupQueueItems]);
 
     const refreshContextUsage = useCallback(async () => {
         try {
@@ -888,6 +873,44 @@ function App() {
             probe.inFlight = false;
         }
     }, [refreshAgentStatus, refreshQueueState, refreshTimeline]);
+
+    // Silence watchdog — detects when the agent stream goes quiet and
+    // triggers a server re-sync to surface missed terminal replies.
+    // Depends on reconcileSilentTurn which is defined above.
+    useEffect(() => {
+        const intervalMs = Math.min(1000, Math.max(100, Math.floor(SILENCE_WARNING_MS / 2)));
+        const interval = setInterval(() => {
+            if (!isAgentRunningRef.current) return;
+            if (pendingRequestRef.current) return;
+            const lastEvent = lastAgentEventRef.current;
+            if (!lastEvent) return;
+            const now = Date.now();
+            const silenceMs = now - lastEvent;
+
+            if (silenceMs >= SILENCE_FINALIZE_MS) {
+                setAgentStatus({
+                    type: 'waiting',
+                    title: 'Re-syncing after a quiet period…',
+                });
+                void reconcileSilentTurn();
+                return;
+            }
+
+            if (silenceMs >= SILENCE_WARNING_MS) {
+                if (now - lastSilenceNoticeRef.current >= SILENCE_REFRESH_MS) {
+                    const seconds = Math.floor(silenceMs / 1000);
+                    setAgentStatus({
+                        type: 'waiting',
+                        title: `Waiting for model… No events for ${seconds}s`,
+                    });
+                    lastSilenceNoticeRef.current = now;
+                    void reconcileSilentTurn();
+                }
+            }
+        }, intervalMs);
+
+        return () => clearInterval(interval);
+    }, [reconcileSilentTurn]);
 
     const handleConnectionStatusChange = useCallback((status) => {
         setConnectionStatus(status);
@@ -1145,32 +1168,6 @@ function App() {
             })
             .catch(() => {});
     }, [applyModelState]);
-    const refreshQueueState = useCallback(() => {
-        getAgentQueueState()
-            .then((payload) => {
-                const dismissed = dismissedQueueRowIdsRef.current;
-                const items = Array.isArray(payload?.items)
-                    ? payload.items
-                        .map((item) => ({ ...item }))
-                        .filter((item) => !dismissed.has(item.row_id))
-                    : [];
-                if (items.length) {
-                    setFollowupQueueItems((prev) => {
-                        if (prev.length === items.length && prev.every((p, i) => p.row_id === items[i].row_id)) return prev;
-                        return items;
-                    });
-                    return;
-                }
-
-                // Server queue is empty (after filtering dismissed) — clear dismissed set
-                dismissed.clear();
-                setFollowupQueueItems((prev) => prev.length === 0 ? prev : []);
-            })
-            .catch(() => {
-                setFollowupQueueItems((prev) => prev.length === 0 ? prev : []);
-            });
-    }, [setFollowupQueueItems]);
-
     const handleInjectQueuedFollowup = useCallback((queuedItem) => {
         const rowId = queuedItem?.row_id;
         if (rowId == null) return;

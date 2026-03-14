@@ -33,10 +33,18 @@ export async function serveStatic(relPath, notFound) {
     const contentType = relPath.endsWith("manifest.json")
         ? "application/manifest+json; charset=utf-8"
         : MIME_TYPES[ext] || "application/octet-stream";
+    // HTML: never cache so new deploys are picked up on next load.
+    // Dist bundles (JS/CSS): short cache, browser revalidates each visit.
+    // Everything else (fonts, icons, vendor libs): 1 hour cache.
+    const cacheControl = ext === ".html"
+        ? "no-cache, no-store, must-revalidate"
+        : relPath.includes("/dist/")
+            ? "public, max-age=300, must-revalidate"
+            : "public, max-age=3600";
     return new Response(file, {
         headers: {
             "Content-Type": contentType,
-            "Cache-Control": "no-cache",
+            "Cache-Control": cacheControl,
         },
     });
 }
