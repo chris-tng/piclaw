@@ -70,6 +70,9 @@ vendor: ## Build the checked-in vendored bundles + metadata
 		piclaw/web/static/js/marked.meta.json \
 		piclaw/web/static/js/vendor/katex.min.js \
 		piclaw/web/static/js/vendor/katex.meta.json \
+		piclaw/web/src/styles/katex.bundle.css \
+		piclaw/web/src/styles/katex.bundle.meta.json \
+		piclaw/web/static/fonts/KaTeX_*.woff2 \
 		piclaw/web/static/fonts/vendor/firacode-nerd-font-mono-regular.ttf \
 		piclaw/web/static/fonts/vendor/firacode-nerd-font-mono-bold.ttf \
 		piclaw/web/static/fonts/vendor/firacode-nerd-font.meta.json \

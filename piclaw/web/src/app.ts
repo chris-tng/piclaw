@@ -136,8 +136,6 @@ function App() {
     const [supportsThinking, setSupportsThinking] = useState(false);
     const [activeModelUsage, setActiveModelUsage] = useState(null);
     const [contextUsage, setContextUsage] = useState(null);
-    const [currentBranch, setCurrentBranch] = useState(null);
-    const [currentBranchRepoPath, setCurrentBranchRepoPath] = useState(null);
     const [followupQueueItems, setFollowupQueueItems] = useState([]);
     const [isAgentTurnActive, setIsAgentTurnActive] = useState(false);
     const followupQueueCount = followupQueueItems.length;
@@ -182,28 +180,6 @@ function App() {
     const [dockVisible, setDockVisible] = useState(false);
     const toggleDock = useCallback(() => setDockVisible((v) => !v), []);
     const showEditorPaneContainer = editorOpen || (hasDockPanes && dockVisible);
-
-    useEffect(() => {
-        let cancelled = false;
-
-        async function refreshWorkspaceBranch() {
-            try {
-                const payload = await api.getWorkspaceBranch(tabStripActiveId || '');
-                if (cancelled) return;
-                setCurrentBranch(payload?.branch || null);
-                setCurrentBranchRepoPath(payload?.repo_path || null);
-            } catch {
-                if (cancelled) return;
-                setCurrentBranch(null);
-                setCurrentBranchRepoPath(null);
-            }
-        }
-
-        void refreshWorkspaceBranch();
-        return () => {
-            cancelled = true;
-        };
-    }, [tabStripActiveId]);
 
     // Mount/dispose editor extension instance when active tab changes
     useEffect(() => {
@@ -1900,8 +1876,6 @@ function App() {
                     thinkingLevel=${activeThinkingLevel}
                     supportsThinking=${supportsThinking}
                     contextUsage=${contextUsage}
-                    currentBranch=${currentBranch}
-                    currentBranchRepoPath=${currentBranchRepoPath}
                     notificationsEnabled=${notificationsEnabled}
                     notificationPermission=${notificationPermission}
                     onToggleNotifications=${handleToggleNotifications}

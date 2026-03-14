@@ -18,7 +18,7 @@
  *   --message      Custom message text (default includes timestamp)
  */
 
-import { readdirSync, readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
+import { readdirSync, readFileSync, existsSync, writeFileSync, mkdirSync, statSync } from "fs";
 import { join, basename } from "path";
 
 // ── Config ──────────────────────────────────────────────────────
@@ -100,6 +100,7 @@ const SURFACE_OPACITY: Record<string, { board: string; lane: string }> = {
 
 const P = PALETTES[THEME_ARG] || PALETTES.dark;
 const OPACITY = SURFACE_OPACITY[THEME_ARG] || SURFACE_OPACITY.dark;
+const DONE_LANE_RENDER_LIMIT = 10;
 
 // ── Ticket model ────────────────────────────────────────────────
 
@@ -110,6 +111,10 @@ interface Ticket {
   status: string;
   tags: string[];
   file: string;
+  created?: string;
+  updated?: string;
+  completed?: string;
+  sortTimestamp: number;
   /** Progress percentage (0-100), parsed from ticket body. */
   progress?: number;
   /** Short status note for doing/blocked cards. */
@@ -135,6 +140,12 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 // ── Parse tickets ───────────────────────────────────────────────
+
+function parseDateValue(value: string): number {
+  if (!value) return 0;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 function parseTicket(filepath: string): Ticket | null {
   const raw = readFileSync(filepath, "utf-8");
@@ -175,6 +186,11 @@ function parseTicket(filepath: string): Ticket | null {
   const updateMatch = raw.match(/### \d{4}-\d{2}-\d{2}\n-\s*(.+)/);
   if (updateMatch) statusNote = updateMatch[1].trim();
 
+  const created = get("created");
+  const updated = get("updated");
+  const completed = get("completed");
+  const fileMtime = statSync(filepath).mtimeMs;
+
   return {
     id: get("id"),
     title: get("title") || basename(filepath, ".md"),
@@ -182,6 +198,10 @@ function parseTicket(filepath: string): Ticket | null {
     status: get("status") || "inbox",
     tags,
     file: filepath,
+    created,
+    updated,
+    completed,
+    sortTimestamp: parseDateValue(completed) || parseDateValue(updated) || parseDateValue(created) || fileMtime,
     progress,
     statusNote,
     blockedOn,
@@ -197,6 +217,15 @@ function loadLane(dir: string): Ticket[] {
     const t = parseTicket(join(fullPath, f));
     if (t) tickets.push(t);
   }
+  if (dir === "50-done") {
+    tickets.sort((a, b) => {
+      const byDate = b.sortTimestamp - a.sortTimestamp;
+      if (byDate !== 0) return byDate;
+      return a.title.localeCompare(b.title);
+    });
+    return tickets;
+  }
+
   const order: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
   tickets.sort((a, b) => (order[a.priority] ?? 9) - (order[b.priority] ?? 9));
   return tickets;
@@ -317,10 +346,17 @@ function renderCard(ticket: Ticket, x: number, y: number, laneKey: string, refNu
 }
 
 function generate(): string {
-  const lanes = LANES.map((lane) => ({
-    ...lane,
-    tickets: loadLane(lane.dir),
-  }));
+  const lanes = LANES.map((lane) => {
+    const allTickets = loadLane(lane.dir);
+    const tickets = lane.key === "done"
+      ? allTickets.slice(0, DONE_LANE_RENDER_LIMIT)
+      : allTickets;
+    return {
+      ...lane,
+      tickets,
+      totalCount: allTickets.length,
+    };
+  });
 
   // Only show lanes with tickets (always show doing/next)
   const visibleLanes = lanes.filter(
@@ -368,7 +404,7 @@ function generate(): string {
   <g transform="translate(${lx},${MARGIN})">
     <rect width="${LANE_W}" height="${laneH}" rx="8" fill="${P.bgLane}" fill-opacity="${OPACITY.lane}"/>
     <text x="${LANE_W / 2}" y="28" text-anchor="middle" class="col-header" fill="${P.textSecondary}">${escapeXml(lane.label)}</text>
-    <text x="${LANE_W - 14}" y="28" text-anchor="end" class="count">${lane.tickets.length}</text>`;
+    <text x="${LANE_W - 14}" y="28" text-anchor="end" class="count">${lane.totalCount > lane.tickets.length ? `${lane.tickets.length}/${lane.totalCount}` : lane.tickets.length}</text>`;
 
     let cy = HEADER_H;
     lane.tickets.forEach((ticket) => {
@@ -477,7 +513,12 @@ const svg = generate();
 writeFileSync(OUTPUT, svg, "utf-8");
 console.log(`✅ Kanban board SVG written to ${OUTPUT} (${(svg.length / 1024).toFixed(1)} KB)`);
 console.log(`🎨 Theme: ${THEME_ARG}${THEME_ARG_RAW === "auto" ? " (auto by local time)" : " (from --theme)"}`);
-console.log(`   ${LANES.map((l) => `${l.key}: ${loadLane(l.dir).length}`).join(", ")}`);
+console.log(`   ${LANES.map((l) => {
+  const total = loadLane(l.dir).length;
+  return l.key === "done"
+    ? `${l.key}: ${Math.min(total, DONE_LANE_RENDER_LIMIT)} shown (${total} total)`
+    : `${l.key}: ${total}`;
+}).join(", ")}`);
 
 if (POST_TO_IPC) {
   try {

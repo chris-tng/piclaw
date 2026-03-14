@@ -123,8 +123,6 @@ export function ComposeBox({
     thinkingLevel = null,
     supportsThinking = false,
     contextUsage = null,
-    currentBranch = null,
-    currentBranchRepoPath = null,
     notificationsEnabled = false,
     notificationPermission = 'default',
     onToggleNotifications,
@@ -201,10 +199,6 @@ export function ComposeBox({
     const modelHintSuffix = supportsThinking && thinkingLevel ? ` (${thinkingLevel})` : '';
     const modelThinkingLabel = modelHintSuffix.trim() ? `${thinkingLevel}` : '';
     const modelUsageLabel = typeof modelUsage?.hint_short === 'string' ? modelUsage.hint_short.trim() : '';
-    const branchLabel = typeof currentBranch === 'string' ? currentBranch.trim() : '';
-    const branchTitle = currentBranchRepoPath && currentBranchRepoPath !== '.'
-        ? `Git branch: ${branchLabel} (${currentBranchRepoPath})`
-        : `Git branch: ${branchLabel}`;
     const modelUsageSectionLabel = [
         modelThinkingLabel || null,
         modelUsageLabel || null,
@@ -914,17 +908,6 @@ export function ComposeBox({
                                     ${!switchingModel && modelUsageSectionLabel && html`
                                         <span class="compose-model-usage-hint" title=${modelHintTitle}>
                                             ${modelUsageSectionLabel}
-                                        </span>
-                                    `}
-                                    ${branchLabel && html`
-                                        <span class="compose-branch-hint" title=${branchTitle}>
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                <path d="M6 3v12"/>
-                                                <circle cx="18" cy="6" r="3"/>
-                                                <circle cx="6" cy="18" r="3"/>
-                                                <path d="M18 9a9 9 0 0 1-9 9"/>
-                                            </svg>
-                                            <span class="compose-branch-label">${branchLabel}</span>
                                         </span>
                                     `}
                                 </div>

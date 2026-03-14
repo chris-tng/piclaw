@@ -384,9 +384,11 @@ When refining a ticket, use this structure:
 
 ## 9. Board Visualisation
 
-Primary board renderer for this skill is:
+Primary board renderer for this skill lives alongside this `SKILL.md` file in the same skill directory:
 
 - `/workspace/.pi/skills/kanban-management/kanban-board-svg.ts`
+
+When following relative-path references for this skill, resolve them against the skill directory and use the co-located renderer as the single authoritative copy. Do not keep or invoke a separate workspace-level duplicate.
 
 When asked to render/share the board in chat, **always run the script with `--post`**.
 

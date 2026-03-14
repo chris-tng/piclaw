@@ -1225,8 +1225,43 @@ body {
     gap: 8px;
 }
 
+.editor-status-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+}
+
+.editor-branch-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    max-width: min(32vw, 280px);
+    font-size: 11px;
+    color: var(--text-secondary);
+    opacity: 0.82;
+    font-family: var(--font-mono, monospace);
+    line-height: 1.1;
+    flex: 0 1 auto;
+}
+
+.editor-branch-hint svg {
+    flex: 0 0 auto;
+}
+
+.editor-branch-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .editor-status-text {
     min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .editor-status-actions {
@@ -1870,7 +1905,7 @@ body {
     resize: none;
     field-sizing: content;
     font-family: inherit;
-    font-size: var(--font-size-md);
+    font-size: var(--font-size-sm);
     color: var(--text-primary);
     background-color: transparent;
     outline: none;
@@ -1970,29 +2005,6 @@ body {
     gap: 2px;
     min-width: 0;
     width: 100%;
-}
-
-.compose-branch-hint {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    min-width: 0;
-    font-size: 11px;
-    color: var(--text-secondary);
-    opacity: 0.82;
-    font-family: var(--font-mono, monospace);
-    line-height: 1.1;
-}
-
-.compose-branch-hint svg {
-    flex: 0 0 auto;
-}
-
-.compose-branch-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: min(28vw, 220px);
 }
 
 .compose-footer {

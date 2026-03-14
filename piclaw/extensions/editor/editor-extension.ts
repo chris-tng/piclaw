@@ -54,7 +54,7 @@ import {
     githubLight,
     githubDark,
 } from './vendor/codemirror.js';
-import { getWorkspaceFile, updateWorkspaceFile } from '../../web/src/api.js';
+import { getWorkspaceBranch, getWorkspaceFile, updateWorkspaceFile } from '../../web/src/api.js';
 import type { WebPaneExtension, PaneContext, PaneInstance, PaneCapability } from '../../web/src/panes/pane-types.js';
 
 // ── Constants ───────────────────────────────────────────────────
@@ -230,6 +230,8 @@ export class StandaloneEditorInstance implements PaneInstance {
         // Global keyboard shortcuts
         this.handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
         document.addEventListener('keydown', this.handleGlobalKeydown);
+
+        void this.refreshBranchHint();
     }
 
     // ── DOM builders ────────────────────────────────────────────
@@ -238,10 +240,31 @@ export class StandaloneEditorInstance implements PaneInstance {
         const row = document.createElement('div');
         row.className = 'editor-status editor-status-row';
 
+        const meta = document.createElement('div');
+        meta.className = 'editor-status-meta';
+
+        const branch = document.createElement('span');
+        branch.className = 'editor-branch-hint';
+        branch.hidden = true;
+        branch.innerHTML = `
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M6 3v12"></path>
+                <circle cx="18" cy="6" r="3"></circle>
+                <circle cx="6" cy="18" r="3"></circle>
+                <path d="M18 9a9 9 0 0 1-9 9"></path>
+            </svg>
+            <span class="editor-branch-label"></span>
+        `;
+        this._branchHint = branch;
+        this._branchLabel = branch.querySelector('.editor-branch-label');
+
         const text = document.createElement('span');
         text.className = 'editor-status-text';
         text.textContent = 'Ready';
         this._statusText = text;
+
+        meta.appendChild(branch);
+        meta.appendChild(text);
 
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'editor-status-actions';
@@ -270,14 +293,17 @@ export class StandaloneEditorInstance implements PaneInstance {
         actionsDiv.appendChild(wsBtn);
         actionsDiv.appendChild(vimBtn);
         actionsDiv.appendChild(saveBtn);
-        row.appendChild(text);
+        row.appendChild(meta);
         row.appendChild(actionsDiv);
         return row;
     }
+    private _branchHint: HTMLElement | null = null;
+    private _branchLabel: HTMLElement | null = null;
     private _statusText: HTMLElement | null = null;
     private _wsBtn: HTMLButtonElement | null = null;
     private _vimBtn: HTMLButtonElement | null = null;
     private _saveBtn: HTMLButtonElement | null = null;
+    private branchRequestToken = 0;
 
     // ── File I/O ────────────────────────────────────────────────
 
@@ -546,6 +572,39 @@ export class StandaloneEditorInstance implements PaneInstance {
         this._saveBtn.title = this.dirty ? 'Save changes' : 'No changes to save';
     }
 
+    private async refreshBranchHint(): Promise<void> {
+        const token = ++this.branchRequestToken;
+        const path = this.path || '';
+        if (!path) {
+            this.setBranchHint(null, null);
+            return;
+        }
+        try {
+            const payload = await getWorkspaceBranch(path);
+            if (this.disposed || token !== this.branchRequestToken) return;
+            this.setBranchHint(payload?.branch || null, payload?.repo_path || null);
+        } catch {
+            if (this.disposed || token !== this.branchRequestToken) return;
+            this.setBranchHint(null, null);
+        }
+    }
+
+    private setBranchHint(branch: string | null, repoPath: string | null): void {
+        if (!this._branchHint || !this._branchLabel) return;
+        const label = typeof branch === 'string' ? branch.trim() : '';
+        if (!label) {
+            this._branchHint.hidden = true;
+            this._branchHint.removeAttribute('title');
+            this._branchLabel.textContent = '';
+            return;
+        }
+        this._branchLabel.textContent = label;
+        this._branchHint.title = repoPath && repoPath !== '.'
+            ? `Git branch: ${label} (${repoPath})`
+            : `Git branch: ${label}`;
+        this._branchHint.hidden = false;
+    }
+
     private updateStatusText(text: string): void {
         if (this._statusText) this._statusText.textContent = text;
     }
@@ -659,6 +718,7 @@ export class StandaloneEditorInstance implements PaneInstance {
     /** Update the file path (after rename). */
     setPath(newPath: string): void {
         this.path = newPath;
+        void this.refreshBranchHint();
     }
 }
 

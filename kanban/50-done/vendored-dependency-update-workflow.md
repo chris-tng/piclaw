@@ -1,10 +1,11 @@
 ---
 id: vendored-dependency-update-workflow
 title: General-purpose vendored dependency update workflow
-status: doing
+status: done
 priority: medium
 created: 2026-03-12
 updated: 2026-03-14
+completed: 2026-03-14
 target_release: next
 estimate: M
 risk: medium
@@ -30,13 +31,13 @@ This should generalize the beautiful-mermaid flow into a reusable pattern that c
 
 ## Acceptance Criteria
 
-- [ ] Define a standard vendored-dependency workflow that covers source entry, build/export command, output path, version pinning, and verification metadata.
-- [ ] Decide whether the primary interface should be a script, a skill, a Make target, or a combination.
-- [ ] Support at least one reusable manifest/config format for vendored dependencies.
-- [ ] Document how vendored assets are rebuilt, upgraded, verified, and committed.
-- [ ] Identify which currently vendored assets should migrate to the common workflow first.
-- [ ] Split follow-up migration work into separate tickets if more than one dependency needs non-trivial conversion.
-- [ ] Prove the workflow on at least one real vendored dependency beyond the current one-off Mermaid path, or explicitly document why Mermaid is the only initial adopter.
+- [x] Define a standard vendored-dependency workflow that covers source entry, build/export command, output path, version pinning, and verification metadata.
+- [x] Decide whether the primary interface should be a script, a skill, a Make target, or a combination.
+- [x] Support at least one reusable manifest/config format for vendored dependencies.
+- [x] Document how vendored assets are rebuilt, upgraded, verified, and committed.
+- [x] Identify which currently vendored assets should migrate to the common workflow first.
+- [x] Split follow-up migration work into separate tickets if more than one dependency needs non-trivial conversion.
+- [x] Prove the workflow on at least one real vendored dependency beyond the current one-off Mermaid path, or explicitly document why Mermaid is the only initial adopter.
 
 ## Implementation Paths
 
@@ -78,16 +79,16 @@ Use **Path A**: define a reusable script-first workflow, then optionally expose 
 
 ## Definition of Done
 
-- [ ] All acceptance criteria satisfied and verified
-- [ ] Generic vendored-dependency updater exists and is documented
-- [ ] Manifest/config format committed with at least one real example
-- [ ] Metadata/checksum output verified for the example dependency
-- [ ] Package / Make / skill entry points (as chosen) are wired and documented
-- [ ] Follow-up migration tickets created for additional vendored assets
-- [ ] Update history complete with evidence
-- [ ] Quality score ≥ 9 recorded in final update
-- [ ] Ticket front matter updated (`status`, `updated`, `completed`)
-- [ ] Ticket moved to `50-done/`
+- [x] All acceptance criteria satisfied and verified
+- [x] Generic vendored-dependency updater exists and is documented
+- [x] Manifest/config format committed with at least one real example
+- [x] Metadata/checksum output verified for the example dependency
+- [x] Package / Make / skill entry points (as chosen) are wired and documented
+- [x] Follow-up migration tickets created for additional vendored assets
+- [x] Update history complete with evidence
+- [x] Quality score ≥ 9 recorded in final update
+- [x] Ticket front matter updated (`status`, `updated`, `completed`)
+- [x] Ticket moved to `50-done/`
 
 ## Updates
 
@@ -153,6 +154,12 @@ Use **Path A**: define a reusable script-first workflow, then optionally expose 
   - `cd /workspace/piclaw/piclaw && bun run build:web` → pass
   - `cd /workspace/piclaw/piclaw && bun run quality` → pass (`824 pass, 0 fail`)
 - Remaining scoped gap after this pass: KaTeX CSS/font provenance is still managed separately from the JS vendor manifest flow, so a small follow-up ticket is warranted rather than silently pretending that part is fully standardized.
+
+### 2026-03-14 (closure)
+- Marking this workflow ticket complete and moving it to `50-done/`.
+- Outcome: the shared manifest-driven workflow now covers Mermaid, CodeMirror, Preact/HTM, Marked, KaTeX JS, Ghostty Web frontend assets, and the self-hosted terminal font path, with package / Make integration and regression coverage.
+- Follow-up gaps were split out rather than left implicit, including `kanban/50-done/katex-css-font-vendor-provenance.md`.
+- Quality: ★★★★★ 9/10 (problem: 2, scope: 2, test: 2, deps: 2, risk: 1)
 
 ### 2026-03-12
 - Lane change: `inbox` → `next`.
