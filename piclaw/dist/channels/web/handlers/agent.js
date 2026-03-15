@@ -11,6 +11,7 @@ import { AGENT_TIMEOUT, ASSISTANT_AVATAR, ASSISTANT_NAME, BACKGROUND_AGENT_TIMEO
 import { parseControlCommand } from "../../../agent-control/index.js";
 import { normalizeAgentMessagePayload, parseAgentMessageRequest, storeAgentUserMessage, } from "../agent-message-service.js";
 import { handleUiThemeCommand } from "../ui-theme-commands.js";
+import { handleAdaptiveCardTestCommand } from "../adaptive-card-test-command.js";
 import { beginChatRun, endChatRun, endChatRunWithError, getChatCursor, getInflightMessageId, getMessageRowIdById, getMessagesSince, getDb, rollbackInflightRun, setChatCursor, } from "../../../db.js";
 import { detectChannel, formatMessages, formatOutbound } from "../../../router.js";
 import { createAgentProfileBuilder } from "../agent-utils.js";
@@ -38,6 +39,7 @@ export async function handleAgentMessage(channel, req, pathname, chatJid, defaul
     const requestMode = normalized.mode ?? "auto";
     const trimmed = content.trim();
     const themeCommand = handleUiThemeCommand(trimmed);
+    const testCardCommand = handleAdaptiveCardTestCommand(trimmed);
     const isStreaming = typeof channel.agentPool.isStreaming === "function"
         ? channel.agentPool.isStreaming(chatJid)
         : false;
@@ -83,7 +85,7 @@ export async function handleAgentMessage(channel, req, pathname, chatJid, defaul
     // Normal in-turn user messages should remain out of the timeline until the
     // current turn fully finalizes. Queue them in server state first, then
     // persist/broadcast the real user message only when consumed.
-    const shouldDeferQueuedFollowup = !command && !themeCommand && isStreaming && (requestMode === "queue" || requestMode === "auto");
+    const shouldDeferQueuedFollowup = !command && !themeCommand && !testCardCommand && isStreaming && (requestMode === "queue" || requestMode === "auto");
     console.log(`[web] handleAgentMessage ${chatJid}: mode=${requestMode}, isStreaming=${isStreaming}, ` +
         `shouldDefer=${shouldDeferQueuedFollowup}, hasCommand=${!!command}, ` +
         `content=${content.slice(0, 60)}`);
@@ -118,6 +120,19 @@ export async function handleAgentMessage(channel, req, pathname, chatJid, defaul
             channel.broadcastEvent("ui_theme", { chat_jid: chatJid, ...themeCommand.payload });
         }
         return channel.json({ thread_id: null, command: themeCommand, ui_only: true }, 200);
+    }
+    if (testCardCommand) {
+        if (testCardCommand.status === "error") {
+            return channel.json({ thread_id: null, command: testCardCommand }, 400);
+        }
+        if (testCardCommand.emit === false) {
+            return channel.json({ thread_id: null, command: testCardCommand, emitted: false }, 200);
+        }
+        await channel.sendMessage(chatJid, testCardCommand.content, {
+            forceRoot: true,
+            contentBlocks: testCardCommand.contentBlocks,
+        });
+        return channel.json({ thread_id: null, command: testCardCommand, emitted: true }, 201);
     }
     const interaction = storeAgentUserMessage(channel, chatJid, {
         content,

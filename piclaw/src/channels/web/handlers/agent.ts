@@ -26,6 +26,7 @@ import {
   storeAgentUserMessage,
 } from "../agent-message-service.js";
 import { handleUiThemeCommand } from "../ui-theme-commands.js";
+import { handleAdaptiveCardTestCommand } from "../adaptive-card-test-command.js";
 import {
   beginChatRun,
   endChatRun,
@@ -73,6 +74,7 @@ export async function handleAgentMessage(
   const requestMode = normalized.mode ?? "auto";
   const trimmed = content.trim();
   const themeCommand = handleUiThemeCommand(trimmed);
+  const testCardCommand = handleAdaptiveCardTestCommand(trimmed);
   const isStreaming = typeof channel.agentPool.isStreaming === "function"
     ? channel.agentPool.isStreaming(chatJid)
     : false;
@@ -123,7 +125,7 @@ export async function handleAgentMessage(
   // Normal in-turn user messages should remain out of the timeline until the
   // current turn fully finalizes. Queue them in server state first, then
   // persist/broadcast the real user message only when consumed.
-  const shouldDeferQueuedFollowup = !command && !themeCommand && isStreaming && (requestMode === "queue" || requestMode === "auto");
+  const shouldDeferQueuedFollowup = !command && !themeCommand && !testCardCommand && isStreaming && (requestMode === "queue" || requestMode === "auto");
 
   console.log(
     `[web] handleAgentMessage ${chatJid}: mode=${requestMode}, isStreaming=${isStreaming}, ` +
@@ -167,6 +169,26 @@ export async function handleAgentMessage(
     return channel.json(
       { thread_id: null, command: themeCommand, ui_only: true },
       200
+    );
+  }
+
+  if (testCardCommand) {
+    if (testCardCommand.status === "error") {
+      return channel.json({ thread_id: null, command: testCardCommand }, 400);
+    }
+
+    if (testCardCommand.emit === false) {
+      return channel.json({ thread_id: null, command: testCardCommand, emitted: false }, 200);
+    }
+
+    await channel.sendMessage(chatJid, testCardCommand.content, {
+      forceRoot: true,
+      contentBlocks: testCardCommand.contentBlocks,
+    });
+
+    return channel.json(
+      { thread_id: null, command: testCardCommand, emitted: true },
+      201
     );
   }
 

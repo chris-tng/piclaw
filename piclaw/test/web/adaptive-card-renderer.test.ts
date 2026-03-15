@@ -6,6 +6,8 @@ import {
   isAdaptiveCardBlock,
   isSupportedVersion,
   extractCardBlocks,
+  normalizeAdaptiveCardAction,
+  describeAdaptiveCardState,
 } from "../../web/src/ui/adaptive-card-renderer.js";
 
 describe("isAdaptiveCardBlock", () => {
@@ -98,5 +100,58 @@ describe("extractCardBlocks", () => {
     expect(extractCardBlocks(null)).toHaveLength(0);
     expect(extractCardBlocks(undefined)).toHaveLength(0);
     expect(extractCardBlocks("string")).toHaveLength(0);
+  });
+});
+
+describe("normalizeAdaptiveCardAction", () => {
+  test("normalizes submit actions from JSON-like objects", () => {
+    const action = normalizeAdaptiveCardAction({
+      getJsonTypeName: () => "Action.Submit",
+      title: "Approve",
+      data: { ok: true },
+      toJSON: () => ({ type: "Action.Submit", title: "Approve", data: { ok: true } }),
+    });
+    expect(action.type).toBe("Action.Submit");
+    expect(action.title).toBe("Approve");
+    expect(action.data).toEqual({ ok: true });
+  });
+
+  test("normalizes open url actions", () => {
+    const action = normalizeAdaptiveCardAction({
+      getJsonTypeName: () => "Action.OpenUrl",
+      title: "Docs",
+      url: "https://adaptivecards.io/",
+    });
+    expect(action.type).toBe("Action.OpenUrl");
+    expect(action.url).toBe("https://adaptivecards.io/");
+  });
+});
+
+describe("describeAdaptiveCardState", () => {
+  test("returns null for active cards", () => {
+    expect(describeAdaptiveCardState({
+      type: "adaptive_card",
+      card_id: "card-1",
+      schema_version: "1.5",
+      state: "active",
+      payload: {},
+    })).toBeNull();
+  });
+
+  test("describes completed cards with submission summary", () => {
+    const meta = describeAdaptiveCardState({
+      type: "adaptive_card",
+      card_id: "card-1",
+      schema_version: "1.5",
+      state: "completed",
+      payload: {},
+      last_submission: {
+        title: "Submit choices",
+        data: { priority: "high", targets: ["docs", "tests"] },
+      },
+    });
+    expect(meta?.label).toBe("Submitted");
+    expect(meta?.detail).toContain("Submit choices");
+    expect(meta?.detail).toContain("priority: high");
   });
 });

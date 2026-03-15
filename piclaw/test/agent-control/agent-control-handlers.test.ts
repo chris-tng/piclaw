@@ -331,8 +331,13 @@ test("agent control info and mode commands", async () => {
   const last = await applyControlCommand(session as any, registry, { type: "last", raw: "/last" });
   expect(last.message).toContain("last response");
 
+  const testCard = await applyControlCommand(session as any, registry, { type: "test_card", variant: "choices", raw: "/test-card choices" });
+  expect(testCard.status).toBe("error");
+  expect(testCard.message).toContain("only available in the web UI");
+
   const commands = await applyControlCommand(session as any, registry, { type: "commands", raw: "/commands" });
   expect(commands.message).toContain("/model");
+  expect(commands.message).toContain("/test-card");
   expect(commands.message).not.toContain("/exit");
   expect(commands.message).toContain("/session-rotate");
   expect(commands.message).toContain("/ext");

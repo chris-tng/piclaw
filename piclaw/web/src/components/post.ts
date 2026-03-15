@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { html, useEffect, useMemo, useRef, useState } from '../vendor/preact-htm.js';
-import { getMediaInfo, getMediaUrl, getThumbnailUrl } from '../api.js';
+import { getMediaInfo, getMediaUrl, getThumbnailUrl, submitAdaptiveCardAction } from '../api.js';
 import { renderMarkdown, renderMermaidDiagrams, sanitizeUrl } from '../markdown.js';
 import { formatCount, formatFileSize, formatTime, formatTimestamp } from '../utils/format.js';
 import { DEFAULT_AGENT_NAME, getAvatarInfo } from '../ui/agent-utils.js';
@@ -596,19 +596,27 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
         }
         : null;
 
+    const blocks = data.content_blocks || [];
+    const mediaIds = data.media_ids || [];
+
     // Keep original message text even when link previews are available.
     let displayContent = getDisplayContent(data.content, data.link_previews);
     const { content: cleanedContent, fileRefs } = extractFileRefs(displayContent);
     const { content: cleanedWithMsgRefs, messageRefs } = extractMessageRefs(cleanedContent);
     const { content: cleanedWithAttachments, attachments } = extractAttachmentRefs(cleanedWithMsgRefs);
     displayContent = cleanedWithAttachments;
-    const shouldRenderContent = Boolean(displayContent) && !isHardTruncated;
+    const directCardBlocks = extractCardBlocks(blocks);
+    const singleCardFallback = directCardBlocks.length === 1 && typeof directCardBlocks[0]?.fallback_text === 'string'
+        ? directCardBlocks[0].fallback_text.trim()
+        : '';
+    const hideRenderedFallback = Boolean(singleCardFallback) && displayContent?.trim() === singleCardFallback;
+    const shouldRenderContent = Boolean(displayContent) && !isHardTruncated && !hideRenderedFallback;
     const highlightQueryText = typeof highlightQuery === 'string' ? highlightQuery.trim() : '';
     const renderedHtml = useMemo(() => {
-        if (!displayContent) return '';
+        if (!displayContent || hideRenderedFallback) return '';
         const baseHtml = renderMarkdown(displayContent, onHashtagClick);
         return highlightQueryText ? highlightHtml(baseHtml, highlightQueryText) : baseHtml;
-    }, [displayContent, highlightQueryText]);
+    }, [displayContent, hideRenderedFallback, highlightQueryText]);
 
     const handleImageClick = (e, mediaId) => {
         e.stopPropagation();
@@ -657,8 +665,6 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
     const resourceLinks = [];
     const resources = [];
     const textAnnotations = [];
-    const blocks = data.content_blocks || [];
-    const mediaIds = data.media_ids || [];
     let mediaIndex = 0;
 
     if (blocks.length > 0) {
@@ -737,12 +743,37 @@ export function Post({ post, onClick, onHashtagClick, onMessageRef, onScrollToMe
         for (const block of cardBlocks) {
             const cardEl = document.createElement('div');
             container.appendChild(cardEl);
-            renderAdaptiveCard(cardEl, block).catch((err) => {
+            renderAdaptiveCard(cardEl, block, {
+                onAction: async (action) => {
+                    if (action.type === 'Action.OpenUrl') {
+                        const safeUrl = sanitizeUrl(action.url || '');
+                        if (!safeUrl) throw new Error('Invalid URL');
+                        window.open(safeUrl, '_blank', 'noopener,noreferrer');
+                        return;
+                    }
+
+                    if (action.type === 'Action.Submit') {
+                        await submitAdaptiveCardAction({
+                            post_id: post.id,
+                            thread_id: data.thread_id || post.id,
+                            card_id: block.card_id,
+                            action: {
+                                type: action.type,
+                                title: action.title || '',
+                                data: action.data,
+                            },
+                        });
+                        return;
+                    }
+
+                    console.warn('[post] unsupported adaptive card action:', action.type, action);
+                },
+            }).catch((err) => {
                 console.error('[post] adaptive card render error:', err);
                 cardEl.textContent = block.fallback_text || 'Card failed to render.';
             });
         }
-    }, [cardBlocks]);
+    }, [cardBlocks, data.thread_id, post.id]);
 
     return html`
         <div id=${`post-${post.id}`} class="post ${isAgent ? 'agent-post' : ''} ${isThreadReply ? 'thread-reply' : ''} ${isThreadPrev ? 'thread-prev' : ''} ${isThreadNext ? 'thread-next' : ''} ${isRemoving ? 'removing' : ''}" onClick=${onClick}>

@@ -112,6 +112,16 @@ import {
   handleWorkspaceVisibilityRequest,
 } from "./web/ui-endpoints.js";
 import {
+  buildAdaptiveCardSubmissionText,
+  buildAdaptiveCardSubmitBlock,
+  getAdaptiveCardSubmitBehavior,
+  getAdaptiveCardSubmitState,
+  getAdaptiveCardTestFailure,
+  markAdaptiveCardState,
+  sanitizeAdaptiveCardActionPayload,
+  sanitizeAdaptiveCardSubmissionData,
+} from "./web/adaptive-card-actions.js";
+import {
   createWebChannelEndpointContexts,
   type WebChannelEndpointContexts,
 } from "./web/channel-endpoint-context-factory.js";
@@ -860,6 +870,130 @@ export class WebChannel implements WebChannelLike {
    */
   async handleAgentRespond(req: Request): Promise<Response> {
     return await handleAgentRespondRequest(req, this.endpointContexts.ui());
+  }
+
+  async handleAdaptiveCardAction(req: Request): Promise<Response> {
+    let payload: {
+      post_id?: number | string;
+      thread_id?: number | string | null;
+      card_id?: string;
+      chat_jid?: string;
+      action?: { type?: string; title?: string; data?: unknown; url?: string };
+    };
+    try {
+      payload = await req.json();
+    } catch {
+      return this.json({ error: "Invalid JSON" }, 400);
+    }
+
+    const normalized = sanitizeAdaptiveCardActionPayload(payload);
+    const chatJid = normalized.chatJid ?? DEFAULT_CHAT_JID;
+    if (!normalized.postId || normalized.postId <= 0) {
+      return this.json({ error: "Missing or invalid post_id" }, 400);
+    }
+    if (!normalized.cardId) {
+      return this.json({ error: "Missing or invalid card_id" }, 400);
+    }
+    if (!normalized.actionType) {
+      return this.json({ error: "Missing or invalid action.type" }, 400);
+    }
+
+    if (normalized.actionType === "Action.OpenUrl") {
+      return this.json({ status: "ok", handled: "client", action_type: normalized.actionType, url: normalized.actionUrl || null }, 200);
+    }
+
+    if (normalized.actionType !== "Action.Submit") {
+      return this.json({ error: `Unsupported action type: ${normalized.actionType}` }, 400);
+    }
+
+    const sourceInteraction = getMessageByRowId(chatJid, normalized.postId);
+    if (!sourceInteraction) {
+      return this.json({ error: "Source post not found" }, 404);
+    }
+
+    const simulatedFailure = getAdaptiveCardTestFailure(normalized.cardId, normalized.actionData);
+    if (simulatedFailure) {
+      return this.json({ error: simulatedFailure }, 422);
+    }
+
+    const submittedAt = new Date().toISOString();
+    const sanitizedSubmissionData = sanitizeAdaptiveCardSubmissionData(normalized.actionData);
+    const submissionMeta = {
+      action_type: normalized.actionType,
+      title: normalized.actionTitle || undefined,
+      data: sanitizedSubmissionData,
+      submitted_at: submittedAt,
+    };
+    const submitBehavior = getAdaptiveCardSubmitBehavior(sourceInteraction.data?.content_blocks, normalized.cardId);
+    const targetState = getAdaptiveCardSubmitState(normalized.actionData);
+    const updatedCardBlocks = submitBehavior === "keep_active"
+      ? sourceInteraction.data?.content_blocks ?? null
+      : markAdaptiveCardState(
+          sourceInteraction.data?.content_blocks,
+          normalized.cardId,
+          targetState,
+          submittedAt,
+          submissionMeta,
+        );
+    if (!updatedCardBlocks) {
+      return this.json({ error: "Adaptive card not found or no longer active" }, 409);
+    }
+
+    const threadId = normalized.threadId ?? sourceInteraction.data?.thread_id ?? sourceInteraction.id;
+    const submissionText = buildAdaptiveCardSubmissionText(
+      normalized.actionTitle,
+      normalized.cardId,
+      sanitizedSubmissionData,
+    );
+    const submissionBlock = buildAdaptiveCardSubmitBlock({
+      cardId: normalized.cardId,
+      sourcePostId: normalized.postId,
+      title: normalized.actionTitle || undefined,
+      data: sanitizedSubmissionData,
+      submittedAt,
+    });
+
+    const forwardReq = new Request(`http://internal/agent/${DEFAULT_AGENT_ID}/message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: submissionText,
+        thread_id: threadId,
+        content_blocks: [submissionBlock],
+      }),
+    });
+
+    const forwardRes = await handleAgentMessageRequest(this, forwardReq, `/agent/${DEFAULT_AGENT_ID}/message`, chatJid, DEFAULT_AGENT_ID);
+    if (!forwardRes.ok) {
+      return forwardRes;
+    }
+
+    const updatedInteraction = submitBehavior === "keep_active"
+      ? null
+      : replaceMessageContent(
+          chatJid,
+          normalized.postId,
+          sourceInteraction.data?.content || "",
+          {
+            contentBlocks: updatedCardBlocks,
+            linkPreviews: Array.isArray(sourceInteraction.data?.link_previews) ? sourceInteraction.data.link_previews : undefined,
+            mediaIds: Array.isArray(sourceInteraction.data?.media_ids) ? sourceInteraction.data.media_ids : undefined,
+          },
+        );
+    if (updatedInteraction) {
+      this.interactionBroadcaster.broadcastInteractionUpdated(updatedInteraction);
+    }
+
+    const responseBody = await forwardRes.json().catch(() => ({} as Record<string, unknown>));
+
+    return this.json({
+      ...responseBody,
+      card_updated: Boolean(updatedInteraction),
+      source_post_id: normalized.postId,
+      card_id: normalized.cardId,
+      card_state: submitBehavior === "keep_active" ? "active" : (updatedInteraction ? targetState : null),
+      submitted_at: submittedAt,
+    }, forwardRes.status);
   }
 
   async handleAgentMessage(req: Request, pathname: string): Promise<Response> {

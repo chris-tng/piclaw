@@ -8,17 +8,24 @@
 /** Build an Adaptive Cards HostConfig from computed CSS variables. */
 export function buildHostConfig(): Record<string, unknown> {
   const style = getComputedStyle(document.documentElement);
-  const get = (name: string, fallback: string) =>
-    style.getPropertyValue(name).trim() || fallback;
+  const getAny = (names: string[], fallback: string) => {
+    for (const name of names) {
+      const value = style.getPropertyValue(name).trim();
+      if (value) return value;
+    }
+    return fallback;
+  };
 
-  const fg = get("--color-text", "#e0e0e0");
-  const fgMuted = get("--color-text-muted", "#999");
-  const bg = get("--color-bg-secondary", "#1e1e2e");
-  const accent = get("--color-accent", "#89b4fa");
-  const good = get("--color-success", "#a6e3a1");
-  const warning = get("--color-warning", "#f9e2af");
-  const attention = get("--color-error", "#f38ba8");
-  const fontFamily = get("--font-family", "system-ui, sans-serif");
+  const fg = getAny(["--text-primary", "--color-text"], "#0f1419");
+  const fgMuted = getAny(["--text-secondary", "--color-text-muted"], "#536471");
+  const bg = getAny(["--bg-secondary", "--color-bg-secondary"], "#f7f9fa");
+  const bgEmphasis = getAny(["--bg-hover", "--bg-tertiary", "--color-bg-tertiary"], "#e8ebed");
+  const accent = getAny(["--accent-color", "--color-accent"], "#1d9bf0");
+  const good = getAny(["--success-color", "--color-success"], "#00ba7c");
+  const warning = getAny(["--warning-color", "--color-warning", "--accent-color"], "#f0b429");
+  const attention = getAny(["--danger-color", "--color-error"], "#f4212e");
+  const border = getAny(["--border-color", "--color-border"], "#eff3f4");
+  const fontFamily = getAny(["--font-family"], "system-ui, sans-serif");
 
   return {
     fontFamily,
@@ -34,7 +41,7 @@ export function buildHostConfig(): Record<string, unknown> {
         },
       },
       emphasis: {
-        backgroundColor: get("--color-bg-tertiary", "#2a2a3e"),
+        backgroundColor: bgEmphasis,
         foregroundColors: {
           default: { default: fg, subtle: fgMuted },
           accent: { default: accent, subtle: accent },
@@ -65,7 +72,7 @@ export function buildHostConfig(): Record<string, unknown> {
     },
     separator: {
       lineThickness: 1,
-      lineColor: fgMuted,
+      lineColor: border,
     },
     fontSizes: {
       small: 12,

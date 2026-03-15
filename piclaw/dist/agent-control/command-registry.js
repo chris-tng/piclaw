@@ -15,6 +15,7 @@ export const CONTROL_COMMAND_DEFINITIONS = [
     { name: "/cycle-model", description: "Cycle to the next available model" },
     { name: "/thinking", description: "Show or set thinking level" },
     { name: "/cycle-thinking", description: "Cycle thinking level" },
+    { name: "/test-card", description: "Emit a built-in Adaptive Card test message in the web UI" },
     { name: "/state", description: "Show current session state" },
     { name: "/stats", description: "Show session token and cost stats" },
     { name: "/context", description: "Show context window usage", aliases: ["/ctx"] },

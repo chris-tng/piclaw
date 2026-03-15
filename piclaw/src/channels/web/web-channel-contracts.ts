@@ -153,6 +153,7 @@ export interface WebChannelLike
   handleAgentQueueSteer(req: Request): Promise<Response>;
   handleAgentModels(req: Request): Promise<Response>;
   handleAgentRespond(req: Request): Promise<Response>;
+  handleAdaptiveCardAction(req: Request): Promise<Response>;
   handleAgentMessage(req: Request, pathname: string): Promise<Response>;
   resumeChat(chatJid: string, threadRootId?: number | null): void;
 

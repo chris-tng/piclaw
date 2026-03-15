@@ -1890,3 +1890,336 @@ test("web channel reports /model errors without queueing agent", async () => {
   const last = timeline[timeline.length - 1];
   expect(last.data.content).toContain("Model not found");
 });
+
+test("web channel handles adaptive card submit actions", async () => {
+  const ws = createTempWorkspace("piclaw-web-channel-");
+  cleanupWorkspace = ws.cleanup;
+  restoreEnv = setEnv({ PICLAW_WORKSPACE: ws.workspace, PICLAW_STORE: ws.store, PICLAW_DATA: ws.data });
+
+  const db = await import("../../../src/db.js");
+  db.initDatabase();
+  db.getDb().exec("DELETE FROM message_media; DELETE FROM messages; DELETE FROM chats; DELETE FROM chat_cursors;");
+  db.storeChatMetadata("web:default", new Date().toISOString(), "Web");
+
+  const sourceRowId = db.storeMessage({
+    id: `msg-${Math.random()}`,
+    chat_jid: "web:default",
+    sender: "web-agent",
+    sender_name: "Pi",
+    content: "Adaptive Card fallback",
+    timestamp: new Date().toISOString(),
+    is_from_me: false,
+    is_bot_message: true,
+    content_blocks: [{
+      type: "adaptive_card",
+      card_id: "card-1",
+      schema_version: "1.5",
+      state: "active",
+      payload: { type: "AdaptiveCard", version: "1.5", body: [] },
+      fallback_text: "Adaptive Card fallback",
+    }],
+    thread_id: null,
+  });
+  db.getDb().prepare("UPDATE messages SET thread_id = ? WHERE rowid = ?").run(sourceRowId, sourceRowId);
+
+  const webMod = await import("../../../src/channels/web.js");
+  const web = new (webMod.WebChannel as any)({
+    queue: { enqueue: () => {} },
+    agentPool: {
+      isStreaming: () => false,
+      runAgent: async () => ({ status: "success", result: "ok" }),
+      getContextUsageForChat: async () => null,
+    },
+  });
+
+  const req = new Request("http://test/agent/card-action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      post_id: sourceRowId,
+      thread_id: sourceRowId,
+      card_id: "card-1",
+      action: {
+        type: "Action.Submit",
+        title: "Approve",
+        data: { env: "prod", dryRun: false },
+      },
+    }),
+  });
+
+  const res = await (web as any).handleRequest(req);
+  expect(res.status).toBe(201);
+  const updated = db.getMessageByRowId("web:default", sourceRowId);
+  expect((updated?.data.content_blocks?.[0] as any)?.state).toBe("completed");
+
+  const timeline = db.getTimeline("web:default", 10);
+  const submission = timeline.find((entry: any) => entry.id !== sourceRowId && entry.data?.content?.includes("Card submission: Approve"));
+  expect(submission).toBeDefined();
+  expect(submission?.data?.content_blocks?.[0]?.type).toBe("adaptive_card_submission");
+});
+
+test("web channel strips internal submit metadata before persisting completion state", async () => {
+  const db = await import("../../../src/db.js");
+  db.initDatabase();
+  db.getDb().exec("DELETE FROM message_media; DELETE FROM messages; DELETE FROM chats; DELETE FROM chat_cursors;");
+  db.storeChatMetadata("web:default", new Date().toISOString(), "Web");
+
+  const sourceRowId = db.storeMessage({
+    id: `msg-${Math.random()}`,
+    chat_jid: "web:default",
+    sender: "web-agent",
+    sender_name: "Pi",
+    content: "Adaptive Card fallback",
+    timestamp: new Date().toISOString(),
+    is_from_me: false,
+    is_bot_message: true,
+    content_blocks: [{
+      type: "adaptive_card",
+      card_id: "card-2",
+      schema_version: "1.5",
+      state: "active",
+      payload: { type: "AdaptiveCard", version: "1.5", body: [] },
+      fallback_text: "Adaptive Card fallback",
+    }],
+    thread_id: null,
+  });
+  db.getDb().prepare("UPDATE messages SET thread_id = ? WHERE rowid = ?").run(sourceRowId, sourceRowId);
+
+  const webMod = await import("../../../src/channels/web.js");
+  const web = new (webMod.WebChannel as any)({
+    queue: { enqueue: () => {} },
+    agentPool: {
+      isStreaming: () => false,
+      runAgent: async () => ({ status: "success", result: "ok" }),
+      getContextUsageForChat: async () => null,
+    },
+  });
+
+  const req = new Request("http://test/agent/card-action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      post_id: sourceRowId,
+      thread_id: sourceRowId,
+      card_id: "card-2",
+      action: {
+        type: "Action.Submit",
+        title: "Approve",
+        data: { env: "prod", nested: { keep: true, __secret: "x" }, __internal: "drop" },
+      },
+    }),
+  });
+
+  const res = await (web as any).handleRequest(req);
+  expect(res.status).toBe(201);
+
+  const updated = db.getMessageByRowId("web:default", sourceRowId);
+  expect((updated?.data.content_blocks?.[0] as any)?.last_submission?.data).toEqual({
+    env: "prod",
+    nested: { keep: true },
+  });
+
+  const timeline = db.getTimeline("web:default", 10);
+  const submission = timeline.find((entry: any) => entry.id !== sourceRowId && entry.data?.content?.includes("Card submission: Approve"));
+  expect(submission?.data?.content).toContain("env: prod");
+  expect(submission?.data?.content).not.toContain("__internal");
+  expect(submission?.data?.content_blocks?.[0]?.data).toEqual({
+    env: "prod",
+    nested: { keep: true },
+  });
+});
+
+test("web channel rejects simulated /test-card submit failures without completing the card", async () => {
+  const db = await import("../../../src/db.js");
+  db.initDatabase();
+  db.getDb().exec("DELETE FROM message_media; DELETE FROM messages; DELETE FROM chats; DELETE FROM chat_cursors;");
+  db.storeChatMetadata("web:default", new Date().toISOString(), "Web");
+
+  const sourceRowId = db.storeMessage({
+    id: `msg-${Math.random()}`,
+    chat_jid: "web:default",
+    sender: "web-agent",
+    sender_name: "Pi",
+    content: "Adaptive Card fallback",
+    timestamp: new Date().toISOString(),
+    is_from_me: false,
+    is_bot_message: true,
+    content_blocks: [{
+      type: "adaptive_card",
+      card_id: "test-card-submit-error-1",
+      schema_version: "1.5",
+      state: "active",
+      payload: { type: "AdaptiveCard", version: "1.5", body: [] },
+      fallback_text: "Adaptive Card fallback",
+    }],
+    thread_id: null,
+  });
+  db.getDb().prepare("UPDATE messages SET thread_id = ? WHERE rowid = ?").run(sourceRowId, sourceRowId);
+
+  const webMod = await import("../../../src/channels/web.js");
+  const web = new (webMod.WebChannel as any)({
+    queue: { enqueue: () => {} },
+    agentPool: {
+      isStreaming: () => false,
+      runAgent: async () => ({ status: "success", result: "ok" }),
+      getContextUsageForChat: async () => null,
+    },
+  });
+
+  const req = new Request("http://test/agent/card-action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      post_id: sourceRowId,
+      thread_id: sourceRowId,
+      card_id: "test-card-submit-error-1",
+      action: {
+        type: "Action.Submit",
+        title: "Trigger submit error",
+        data: { variant: "submit-error", __test_error: "submit" },
+      },
+    }),
+  });
+
+  const res = await (web as any).handleRequest(req);
+  expect(res.status).toBe(422);
+  expect(await res.json()).toEqual({ error: "Simulated /test-card submit failure." });
+
+  const updated = db.getMessageByRowId("web:default", sourceRowId);
+  expect((updated?.data.content_blocks?.[0] as any)?.state).toBe("active");
+
+  const timeline = db.getTimeline("web:default", 10);
+  const submission = timeline.find((entry: any) => entry.id !== sourceRowId && entry.data?.content?.includes("Card submission:"));
+  expect(submission).toBeUndefined();
+});
+
+test("web channel supports keep-active submit behavior without completing the card", async () => {
+  const db = await import("../../../src/db.js");
+  db.initDatabase();
+  db.getDb().exec("DELETE FROM message_media; DELETE FROM messages; DELETE FROM chats; DELETE FROM chat_cursors;");
+  db.storeChatMetadata("web:default", new Date().toISOString(), "Web");
+
+  const sourceRowId = db.storeMessage({
+    id: `msg-${Math.random()}`,
+    chat_jid: "web:default",
+    sender: "web-agent",
+    sender_name: "Pi",
+    content: "Adaptive Card fallback",
+    timestamp: new Date().toISOString(),
+    is_from_me: false,
+    is_bot_message: true,
+    content_blocks: [{
+      type: "adaptive_card",
+      card_id: "card-stay-open",
+      schema_version: "1.5",
+      state: "active",
+      submit_behavior: "keep_active",
+      payload: { type: "AdaptiveCard", version: "1.5", body: [] },
+      fallback_text: "Adaptive Card fallback",
+    }],
+    thread_id: null,
+  });
+  db.getDb().prepare("UPDATE messages SET thread_id = ? WHERE rowid = ?").run(sourceRowId, sourceRowId);
+
+  const webMod = await import("../../../src/channels/web.js");
+  const web = new (webMod.WebChannel as any)({
+    queue: { enqueue: () => {} },
+    agentPool: {
+      isStreaming: () => false,
+      runAgent: async () => ({ status: "success", result: "ok" }),
+      getContextUsageForChat: async () => null,
+    },
+  });
+
+  const req = new Request("http://test/agent/card-action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      post_id: sourceRowId,
+      thread_id: sourceRowId,
+      card_id: "card-stay-open",
+      action: {
+        type: "Action.Submit",
+        title: "Submit without closing",
+        data: { note: "keep going" },
+      },
+    }),
+  });
+
+  const res = await (web as any).handleRequest(req);
+  expect(res.status).toBe(201);
+  const body = await res.json();
+  expect(body.card_state).toBe("active");
+  expect(body.card_updated).toBe(false);
+
+  const updated = db.getMessageByRowId("web:default", sourceRowId);
+  expect((updated?.data.content_blocks?.[0] as any)?.state).toBe("active");
+  expect((updated?.data.content_blocks?.[0] as any)?.last_submission).toBeUndefined();
+
+  const timeline = db.getTimeline("web:default", 10);
+  const submission = timeline.find((entry: any) => entry.id !== sourceRowId && entry.data?.content?.includes("Card submission: Submit without closing"));
+  expect(submission).toBeDefined();
+  expect(submission?.data?.content_blocks?.[0]?.type).toBe("adaptive_card_submission");
+});
+
+test("web channel can transition a card to cancelled via Action.Submit metadata", async () => {
+  const db = await import("../../../src/db.js");
+  db.initDatabase();
+  db.getDb().exec("DELETE FROM message_media; DELETE FROM messages; DELETE FROM chats; DELETE FROM chat_cursors;");
+  db.storeChatMetadata("web:default", new Date().toISOString(), "Web");
+
+  const sourceRowId = db.storeMessage({
+    id: `msg-${Math.random()}`,
+    chat_jid: "web:default",
+    sender: "web-agent",
+    sender_name: "Pi",
+    content: "Adaptive Card fallback",
+    timestamp: new Date().toISOString(),
+    is_from_me: false,
+    is_bot_message: true,
+    content_blocks: [{
+      type: "adaptive_card",
+      card_id: "card-cancelled",
+      schema_version: "1.5",
+      state: "active",
+      payload: { type: "AdaptiveCard", version: "1.5", body: [] },
+      fallback_text: "Adaptive Card fallback",
+    }],
+    thread_id: null,
+  });
+  db.getDb().prepare("UPDATE messages SET thread_id = ? WHERE rowid = ?").run(sourceRowId, sourceRowId);
+
+  const webMod = await import("../../../src/channels/web.js");
+  const web = new (webMod.WebChannel as any)({
+    queue: { enqueue: () => {} },
+    agentPool: {
+      isStreaming: () => false,
+      runAgent: async () => ({ status: "success", result: "ok" }),
+      getContextUsageForChat: async () => null,
+    },
+  });
+
+  const req = new Request("http://test/agent/card-action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      post_id: sourceRowId,
+      thread_id: sourceRowId,
+      card_id: "card-cancelled",
+      action: {
+        type: "Action.Submit",
+        title: "Cancel",
+        data: { reason: "user", __card_state: "cancelled" },
+      },
+    }),
+  });
+
+  const res = await (web as any).handleRequest(req);
+  expect(res.status).toBe(201);
+  const body = await res.json();
+  expect(body.card_state).toBe("cancelled");
+
+  const updated = db.getMessageByRowId("web:default", sourceRowId);
+  expect((updated?.data.content_blocks?.[0] as any)?.state).toBe("cancelled");
+  expect((updated?.data.content_blocks?.[0] as any)?.last_submission?.data).toEqual({ reason: "user" });
+});

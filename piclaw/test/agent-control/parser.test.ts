@@ -78,6 +78,14 @@ describe("parseControlCommand", () => {
     expect(parseControlCommand("/state")).toEqual({ type: "state", raw: "/state" });
   });
 
+  test("/test-card", () => {
+    expect(parseControlCommand("/test-card")).toEqual({ type: "test_card", variant: undefined, raw: "/test-card" });
+  });
+
+  test("/test-card choices", () => {
+    expect(parseControlCommand("/test-card choices")).toEqual({ type: "test_card", variant: "choices", raw: "/test-card choices" });
+  });
+
   test("/stats", () => {
     expect(parseControlCommand("/stats")).toEqual({ type: "stats", raw: "/stats" });
   });

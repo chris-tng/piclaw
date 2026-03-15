@@ -37,6 +37,9 @@ export async function handleAgentRoutes(channel, req, pathname, url) {
     if (req.method === "POST" && pathname === "/agent/respond") {
         return await channel.handleAgentRespond(req);
     }
+    if (req.method === "POST" && pathname === "/agent/card-action") {
+        return await channel.handleAdaptiveCardAction(req);
+    }
     // /agent/whitelist — deprecated no-op stub, removed for security hygiene.
     if (req.method === "POST" && pathname === "/agent/whitelist") {
         return channel.json({ error: "Not found" }, 404);

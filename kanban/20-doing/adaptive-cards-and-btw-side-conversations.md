@@ -204,3 +204,25 @@ Normal `content` stays as human-readable fallback text for search/export.
   (`adopt-openclaw-ui.md`) and `/btw` investigation.
 - Phased plan: cards rendering → card actions → side-LLM engine → /btw.
 - Phase 1 implementation started.
+- Added a built-in web `/test-card` command with persistent `basic`,
+  `choices`, `approval`, and `completed` variants so Adaptive Card
+  rendering/action styling can be validated without relying on transient ad hoc
+  test posts.
+- `/test-card` is handled locally in the web message path (no LLM turn, no
+  queued follow-up semantics) and emits agent timeline messages with
+  `adaptive_card` content blocks.
+- Promoted `/test-card` into core command discovery so `/commands` and parser /
+  handler coverage recognize it consistently, while web still intercepts it
+  locally for actual card emission.
+- Expanded built-in validation variants to cover `failed`, `cancelled`,
+  `bad-url`, `submit-error`, `stay-open`, `terminal-actions`, and `list`.
+- Added inline notice validation paths for invalid `Action.OpenUrl` and failed
+  `Action.Submit` flows.
+- Action submission persistence now strips internal `__*` metadata from
+  summaries and stored submission payloads.
+- Added iterative card lifecycle support via `submit_behavior: keep_active` so
+  a card can remain active after `Action.Submit`.
+- Added submit-driven terminal state transitions so `Action.Submit` can end a
+  card as `completed`, `cancelled`, or `failed`.
+- Current Phase 2 status is effectively feature-complete enough to begin Phase
+  3 groundwork for the independent side-LLM engine.

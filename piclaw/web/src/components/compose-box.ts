@@ -15,6 +15,7 @@ const SLASH_COMMANDS = [
   { name: "/cycle-thinking", description: "Cycle thinking level" },
   { name: "/theme", description: "Set UI theme (use /theme list for options)" },
   { name: "/tint", description: "Tint default light/dark UI (usage: /tint #hex or /tint off)" },
+  { name: "/test-card", description: "Emit a built-in Adaptive Card test message (/test-card list for variants)" },
   { name: "/state", description: "Show current session state" },
   { name: "/stats", description: "Show session token and cost stats" },
   { name: "/context", description: "Show context window usage" },

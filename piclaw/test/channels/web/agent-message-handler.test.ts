@@ -119,4 +119,93 @@ describe("web agent message handler", () => {
     expect(sentMessages[0]?.content).toContain("Cannot rotate the session while a response");
     expect(broadcasts.some((entry) => entry.event === "new_post")).toBe(true);
   });
+
+  test("handles /test-card as a local card emission without queueing or agent execution", async () => {
+    const queuedFollowups: Array<{ chatJid: string; content: string }> = [];
+    const sentMessages: Array<{ chatJid: string; content: string; options: unknown }> = [];
+    let storeMessageCalls = 0;
+    let applyCalls = 0;
+
+    const channel = {
+      agentPool: {
+        isStreaming: () => true,
+        applyControlCommand: async () => {
+          applyCalls += 1;
+          return { status: "success", message: "should not run" };
+        },
+      },
+      json: (payload: unknown, status = 200) =>
+        new Response(JSON.stringify(payload), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        }),
+      enqueueQueuedFollowupItem: (chatJid: string, _rowId: number, content: string) => {
+        queuedFollowups.push({ chatJid, content });
+        return 999;
+      },
+      broadcastEvent: () => {},
+      storeMessage: () => {
+        storeMessageCalls += 1;
+        return null;
+      },
+      sendMessage: async (chatJid: string, content: string, options: unknown) => {
+        sentMessages.push({ chatJid, content, options });
+      },
+    } as any;
+
+    const req = new Request("https://example.com/agent/default/message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "/test-card choices" }),
+    });
+
+    const response = await handleAgentMessage(channel, req, "/agent/default/message", "web:default", "default");
+    expect(response.status).toBe(201);
+
+    const body = await response.json();
+    expect(body.emitted).toBe(true);
+    expect(body.command?.status).toBe("success");
+    expect(body.command?.variant).toBe("choices");
+    expect(queuedFollowups).toHaveLength(0);
+    expect(storeMessageCalls).toBe(0);
+    expect(applyCalls).toBe(0);
+    expect(sentMessages).toHaveLength(1);
+    expect(sentMessages[0]?.content).toContain("Adaptive Card test: choices");
+    expect((sentMessages[0]?.options as any)?.forceRoot).toBe(true);
+    expect((sentMessages[0]?.options as any)?.contentBlocks?.[0]?.type).toBe("adaptive_card");
+  });
+
+  test("handles /test-card list locally without emitting a card", async () => {
+    const sentMessages: Array<unknown> = [];
+
+    const channel = {
+      agentPool: {
+        isStreaming: () => true,
+      },
+      json: (payload: unknown, status = 200) =>
+        new Response(JSON.stringify(payload), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        }),
+      enqueueQueuedFollowupItem: () => 999,
+      broadcastEvent: () => {},
+      storeMessage: () => null,
+      sendMessage: async (_chatJid: string, _content: string, options: unknown) => {
+        sentMessages.push(options);
+      },
+    } as any;
+
+    const req = new Request("https://example.com/agent/default/message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "/test-card list" }),
+    });
+
+    const response = await handleAgentMessage(channel, req, "/agent/default/message", "web:default", "default");
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.emitted).toBe(false);
+    expect(body.command?.message).toContain("Available /test-card variants");
+    expect(sentMessages).toHaveLength(0);
+  });
 });

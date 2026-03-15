@@ -66,6 +66,11 @@ export type AgentControlCommand =
       raw: string;
     }
   | {
+      type: "test_card";
+      variant?: string;
+      raw: string;
+    }
+  | {
       type: "stats";
       raw: string;
     }

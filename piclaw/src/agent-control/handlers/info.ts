@@ -22,6 +22,7 @@ type StateCommand = Extract<AgentControlCommand, { type: "state" }>;
 type StatsCommand = Extract<AgentControlCommand, { type: "stats" }>;
 type ContextCommand = Extract<AgentControlCommand, { type: "context" }>;
 type LastCommand = Extract<AgentControlCommand, { type: "last" }>;
+type TestCardCommand = Extract<AgentControlCommand, { type: "test_card" }>;
 type CommandsCommand = Extract<AgentControlCommand, { type: "commands" }>;
 type SearchCommand = Extract<AgentControlCommand, { type: "search_workspace" }>;
 
@@ -143,6 +144,15 @@ export async function handleLast(session: AgentSession, _command: LastCommand): 
     return { status: "error", message: "No assistant messages yet." };
   }
   return { status: "success", message: `Last assistant response:\n\n${last}` };
+}
+
+/** Handle /test-card outside the web UI. */
+export async function handleTestCard(_session: AgentSession, command: TestCardCommand): Promise<AgentControlResult> {
+  const variant = command.variant?.trim() || "basic";
+  return {
+    status: "error",
+    message: `/test-card ${variant} is only available in the web UI. Use it from the web compose box to emit a built-in Adaptive Card test message.`,
+  };
 }
 
 /** Handle /search-workspace: full-text search across workspace files. */

@@ -211,6 +211,24 @@ export async function respondToAgentRequest(requestId, outcome) {
 }
 
 /**
+ * Submit an Adaptive Card action back to the web channel.
+ */
+export async function submitAdaptiveCardAction(payload) {
+    const response = await fetch(API_BASE + '/agent/card-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Adaptive Card action failed' }));
+        throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+}
+
+/**
  * Add pattern to permission whitelist
  */
 export async function addToWhitelist(pattern, description) {

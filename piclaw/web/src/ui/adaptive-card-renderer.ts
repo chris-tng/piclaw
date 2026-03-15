@@ -19,6 +19,16 @@ export interface AdaptiveCardBlock {
   state: "active" | "completed" | "cancelled" | "failed";
   payload: Record<string, unknown>;
   fallback_text?: string;
+  completed_at?: string;
+  last_submission?: unknown;
+}
+
+export interface AdaptiveCardActionInfo {
+  type: string;
+  title: string;
+  data?: unknown;
+  url?: string;
+  raw: unknown;
 }
 
 /** Supported Adaptive Card schema versions. */
@@ -26,6 +36,18 @@ const SUPPORTED_VERSIONS = new Set(["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1
 
 let sdkLoaded = false;
 let sdkLoadPromise: Promise<void> | null = null;
+
+function clearAdaptiveCardNotice(container: HTMLElement): void {
+  container.querySelector(".adaptive-card-notice")?.remove();
+}
+
+function showAdaptiveCardNotice(container: HTMLElement, message: string, tone: "error" | "info" = "error"): void {
+  clearAdaptiveCardNotice(container);
+  const notice = document.createElement("div");
+  notice.className = `adaptive-card-notice adaptive-card-notice-${tone}`;
+  notice.textContent = message;
+  container.appendChild(notice);
+}
 
 /** Lazy-load the vendored adaptivecards SDK. */
 async function ensureSdk(): Promise<void> {
@@ -81,6 +103,74 @@ export function extractCardBlocks(contentBlocks: unknown): AdaptiveCardBlock[] {
   return contentBlocks.filter(isAdaptiveCardBlock);
 }
 
+export function normalizeAdaptiveCardAction(action: any): AdaptiveCardActionInfo {
+  const json = typeof action?.toJSON === "function" ? action.toJSON() : null;
+  const type =
+    (typeof action?.getJsonTypeName === "function" ? action.getJsonTypeName() : "") ||
+    action?.constructor?.name ||
+    json?.type ||
+    "Unknown";
+  const title =
+    (typeof action?.title === "string" ? action.title : "") ||
+    (typeof json?.title === "string" ? json.title : "") ||
+    "";
+  const url =
+    (typeof action?.url === "string" ? action.url : "") ||
+    (typeof json?.url === "string" ? json.url : "") ||
+    undefined;
+  const data = action?.data ?? json?.data;
+  return { type, title, data, url, raw: action };
+}
+
+function formatSubmissionValue(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number") return String(value);
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (Array.isArray(value)) {
+    return value.map((item) => formatSubmissionValue(item)).filter(Boolean).join(", ");
+  }
+  if (typeof value === "object") {
+    const pairs = Object.entries(value as Record<string, unknown>)
+      .map(([key, inner]) => `${key}: ${formatSubmissionValue(inner)}`)
+      .filter((entry) => !entry.endsWith(": "));
+    return pairs.join(", ");
+  }
+  return String(value).trim();
+}
+
+function formatAdaptiveCardTimestamp(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+export function describeAdaptiveCardState(block: AdaptiveCardBlock): { label: string; detail: string | null } | null {
+  if (block.state === "active") return null;
+
+  const label = block.state === "completed"
+    ? "Submitted"
+    : block.state === "cancelled"
+      ? "Cancelled"
+      : "Failed";
+
+  const submission = block.last_submission && typeof block.last_submission === "object"
+    ? (block.last_submission as Record<string, unknown>)
+    : null;
+  const title = submission && typeof submission.title === "string" ? submission.title.trim() : "";
+  const dataSummary = submission ? formatSubmissionValue(submission.data) : "";
+  const when = formatAdaptiveCardTimestamp(block.completed_at || (submission?.submitted_at as string | undefined));
+  const detail = [title || null, dataSummary || null, when || null].filter(Boolean).join(" · ") || null;
+
+  return { label, detail };
+}
+
 /**
  * Render an Adaptive Card into a container element.
  *
@@ -92,7 +182,7 @@ export async function renderAdaptiveCard(
   block: AdaptiveCardBlock,
   options?: {
     /** Called when a card action is executed (Phase 2). */
-    onAction?: (action: unknown) => void;
+    onAction?: (action: AdaptiveCardActionInfo) => void | Promise<void>;
   },
 ): Promise<boolean> {
   if (!isSupportedVersion(block.schema_version)) {
@@ -119,12 +209,21 @@ export async function renderAdaptiveCard(
     // Parse the card payload
     card.parse(block.payload);
 
-    // Wire up action handler (Phase 2 — currently logs only)
+    // Wire up action handler (Phase 2)
     card.onExecuteAction = (action: any) => {
+      const normalizedAction = normalizeAdaptiveCardAction(action);
       if (options?.onAction) {
-        options.onAction(action);
+        clearAdaptiveCardNotice(container);
+        container.classList.add("adaptive-card-busy");
+        void Promise.resolve(options.onAction(normalizedAction)).catch((error) => {
+          console.error("[adaptive-card] Action failed:", error);
+          const message = error instanceof Error ? error.message : String(error || "Action failed.");
+          showAdaptiveCardNotice(container, message || "Action failed.", "error");
+        }).finally(() => {
+          container.classList.remove("adaptive-card-busy");
+        });
       } else {
-        console.log("[adaptive-card] Action executed (not wired yet):", action);
+        console.log("[adaptive-card] Action executed (not wired yet):", normalizedAction);
       }
     };
 
@@ -138,11 +237,28 @@ export async function renderAdaptiveCard(
     // Style the container
     container.classList.add("adaptive-card-container");
 
-    // For completed/cancelled/failed cards, disable interactions
-    if (block.state !== "active") {
+    const stateMeta = describeAdaptiveCardState(block);
+    if (stateMeta) {
       container.classList.add("adaptive-card-finished");
+      const banner = document.createElement("div");
+      banner.className = `adaptive-card-status adaptive-card-status-${block.state}`;
+
+      const label = document.createElement("span");
+      label.className = "adaptive-card-status-label";
+      label.textContent = stateMeta.label;
+      banner.appendChild(label);
+
+      if (stateMeta.detail) {
+        const detail = document.createElement("span");
+        detail.className = "adaptive-card-status-detail";
+        detail.textContent = stateMeta.detail;
+        banner.appendChild(detail);
+      }
+
+      container.appendChild(banner);
     }
 
+    clearAdaptiveCardNotice(container);
     container.appendChild(rendered);
     return true;
   } catch (err) {

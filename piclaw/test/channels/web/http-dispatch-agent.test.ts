@@ -30,6 +30,7 @@ describe("web http agent dispatch", () => {
       handleAgentQueueSteer: async () => new Response("queue-steer", { status: 204 }),
       handleAgentModels: async () => new Response("models"),
       handleAgentRespond: async () => new Response("respond"),
+      handleAdaptiveCardAction: async () => new Response("card-action", { status: 205 }),
       json: (_payload: unknown, status: number) => new Response("err", { status }),
     } as any;
 
@@ -59,6 +60,9 @@ describe("web http agent dispatch", () => {
 
     const respondReq = new Request("https://example.com/agent/respond", { method: "POST" });
     expect(await (await handleAgentRoutes(channel, respondReq, "/agent/respond", new URL(respondReq.url)))?.text()).toBe("respond");
+
+    const cardReq = new Request("https://example.com/agent/card-action", { method: "POST" });
+    expect((await handleAgentRoutes(channel, cardReq, "/agent/card-action", new URL(cardReq.url)))?.status).toBe(205);
 
     const whitelistReq = new Request("https://example.com/agent/whitelist", { method: "POST" });
     expect((await handleAgentRoutes(channel, whitelistReq, "/agent/whitelist", new URL(whitelistReq.url)))?.status).toBe(404);

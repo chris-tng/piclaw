@@ -116,6 +116,14 @@ export async function handleLast(session, _command) {
     }
     return { status: "success", message: `Last assistant response:\n\n${last}` };
 }
+/** Handle /test-card outside the web UI. */
+export async function handleTestCard(_session, command) {
+    const variant = command.variant?.trim() || "basic";
+    return {
+        status: "error",
+        message: `/test-card ${variant} is only available in the web UI. Use it from the web compose box to emit a built-in Adaptive Card test message.`,
+    };
+}
 /** Handle /search-workspace: full-text search across workspace files. */
 export async function handleSearchWorkspace(_session, command) {
     const query = command.query?.trim();

@@ -86,6 +86,16 @@ export function parseThinking(args: string, raw: string): AgentControlCommand {
   };
 }
 
+/** Parse /test-card arguments: optional variant name. */
+export function parseTestCard(args: string, raw: string): AgentControlCommand {
+  const variant = args.split(/\s+/).filter(Boolean)[0];
+  return {
+    type: "test_card",
+    variant: variant || undefined,
+    raw,
+  };
+}
+
 /** Parse /shell arguments: optional command string. */
 export function parseShell(args: string, raw: string): AgentControlCommand {
   return {
@@ -453,6 +463,7 @@ export function parseSearch(args: string, raw: string): AgentControlCommand {
 export const COMMAND_PARSERS: Record<string, CommandParser> = {
   "/model": parseModel,
   "/thinking": parseThinking,
+  "/test-card": parseTestCard,
   "/commands": simple("commands"),
   "/restart": simple("restart"),
   "/exit": simple("exit"),
