@@ -6,6 +6,7 @@ import { join } from "path";
 import { WebChannel } from "../channels/web.js";
 import { PushoverChannel } from "../channels/pushover.js";
 import { WhatsAppChannel } from "../channels/whatsapp.js";
+import { setMessagesPostFn } from "../extensions/messages-crud.js";
 import { DATA_DIR, PUSHOVER_APP_TOKEN, PUSHOVER_DEVICE, PUSHOVER_PRIORITY, PUSHOVER_SOUND, PUSHOVER_USER_KEY, STORE_DIR, TOOL_OUTPUT_CLEANUP_INTERVAL_MS, TOOL_OUTPUT_RETENTION_DAYS, WHATSAPP_PHONE, WORKSPACE_DIR, } from "../core/config.js";
 import { initDatabase, storeChatMetadata, storeMessage } from "../db.js";
 import { startToolOutputCleanup } from "../tool-output.js";
@@ -27,6 +28,16 @@ export async function startWebChannel(queue, agentPool) {
     const web = new WebChannel({ queue, agentPool });
     await web.start();
     web.recoverInflightRuns();
+    // Wire the messages tool post action to use the web channel for broadcast.
+    setMessagesPostFn((chatJid, content, isBot, mediaIds, contentBlocks) => {
+        const interaction = web.storeMessage(chatJid, content, isBot, mediaIds, {
+            contentBlocks,
+        });
+        if (!interaction)
+            return null;
+        web.broadcastEvent("new_post", interaction);
+        return interaction.id;
+    });
     return web;
 }
 /**

@@ -147,7 +147,7 @@ body {
     height: 100%;
     display: flex;
     flex-direction: column;
-    overflow-x: hidden;
+    overflow: hidden;
 }
 
 /* Layout */
@@ -3077,7 +3077,7 @@ body {
     overflow: hidden;
 }
 .adaptive-card-container .ac-textBlock {
-    color: var(--text-color) !important;
+    color: var(--text-primary) !important;
 }
 .adaptive-card-container .ac-pushButton {
     background: var(--accent-color) !important;
@@ -4305,6 +4305,7 @@ body {
         max-width: none;
         margin: 0;
         flex: 1;
+        height: 100%;
     }
 
     .post-avatar {

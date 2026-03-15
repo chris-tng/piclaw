@@ -11,6 +11,7 @@ const MessagesSchema = Type.Object({
         Type.Literal("search"),
         Type.Literal("get"),
         Type.Literal("add"),
+        Type.Literal("post"),
         Type.Literal("delete"),
     ])),
     query: Type.Optional(Type.String({ description: "Full-text query string (search action)." })),
@@ -40,6 +41,9 @@ const MessagesSchema = Type.Object({
     })),
     media_ids: Type.Optional(Type.Array(Type.Integer({ minimum: 1 }), {
         description: "Media IDs to attach to a newly added message.",
+    })),
+    content_blocks: Type.Optional(Type.Array(Type.Unknown(), {
+        description: "Structured content blocks (e.g. adaptive_card) for post action.",
     })),
     dry_run: Type.Optional(Type.Boolean({ description: "For delete action, report planned changes without applying." })),
     force: Type.Optional(Type.Boolean({ description: "For delete action, ignore attachment-safety checks." })),
@@ -393,6 +397,66 @@ function executeAdd(params, defaultChat) {
         },
     };
 }
+function executePost(params, defaultChat, postFn) {
+    const content = params.content?.trim() ?? "";
+    if (!content) {
+        return {
+            content: [{ type: "text", text: "Provide content for action=post." }],
+            details: { action: "post", posted: 0 },
+        };
+    }
+    const chatJid = normalizeChatJid(params.chat_jid, defaultChat);
+    if (!chatJid) {
+        return {
+            content: [{ type: "text", text: "Cannot infer target chat. Provide chat_jid." }],
+            details: { action: "post", posted: 0 },
+        };
+    }
+    const isBot = params.type === "agent";
+    const mediaIds = Array.from(new Set((params.media_ids ?? []).filter((id) => Number.isInteger(id) && id > 0)));
+    const contentBlocks = Array.isArray(params.content_blocks) ? params.content_blocks : undefined;
+    if (postFn) {
+        const rowId = postFn(chatJid, content, isBot, mediaIds, contentBlocks);
+        if (!rowId) {
+            return {
+                content: [{ type: "text", text: "Failed to post message." }],
+                details: { action: "post", posted: 0 },
+            };
+        }
+        return {
+            content: [{ type: "text", text: `Posted message ${rowId} to ${chatJid} (broadcast).` }],
+            details: { action: "post", posted: 1, row_id: rowId, chat_jid: chatJid, broadcast: true },
+        };
+    }
+    // Fallback: plain DB insert without broadcast (same as add but with content_blocks)
+    const timestamp = new Date().toISOString();
+    const rowId = storeMessage({
+        id: createUuid("msg"),
+        chat_jid: chatJid,
+        sender: isBot ? "web-agent" : "web-user",
+        sender_name: isBot ? "Pi" : "You",
+        content,
+        timestamp,
+        is_from_me: false,
+        is_bot_message: isBot,
+        content_blocks: contentBlocks,
+        link_previews: undefined,
+        thread_id: null,
+    });
+    if (rowId <= 0) {
+        return {
+            content: [{ type: "text", text: "Failed to post message." }],
+            details: { action: "post", posted: 0 },
+        };
+    }
+    if (mediaIds.length > 0) {
+        attachMediaToMessage(rowId, mediaIds);
+    }
+    return {
+        content: [{ type: "text", text: `Posted message ${rowId} to ${chatJid} (no broadcast — channel not available).` }],
+        details: { action: "post", posted: 1, row_id: rowId, chat_jid: chatJid, broadcast: false },
+    };
+}
 function executeDelete(params, defaultChat) {
     const requested = Array.from(new Set((params.row_ids ?? []).filter((id) => Number.isInteger(id) && id > 0)));
     if (requested.length === 0) {
@@ -481,8 +545,12 @@ function executeDelete(params, defaultChat) {
 /**
  * Shared helper for external callers that want direct access to message-tool
  * semantics without an agent extension context.
+ *
+ * @param postFn Optional callback for action=post that stores + broadcasts
+ *               a message through the web channel pipeline. If not provided,
+ *               action=post falls back to a plain DB insert (like add).
  */
-export function runMessagesTool(params, defaultChat = "web:default") {
+export function runMessagesTool(params, defaultChat = "web:default", postFn) {
     const action = params.action || "search";
     if (action === "search")
         return executeSearch(params, defaultChat);
@@ -490,6 +558,8 @@ export function runMessagesTool(params, defaultChat = "web:default") {
         return executeGet(params, defaultChat);
     if (action === "add")
         return executeAdd(params, defaultChat);
+    if (action === "post")
+        return executePost(params, defaultChat, postFn);
     if (action === "delete")
         return executeDelete(params, defaultChat);
     return {
@@ -502,14 +572,22 @@ export function runMessagesTool(params, defaultChat = "web:default") {
 }
 const MESSAGES_TOOL_HINT = [
     "## Messages",
-    "Use the messages tool to search, retrieve, add, and delete chat messages.",
+    "Use the messages tool to search, retrieve, add, post, and delete chat messages.",
     "Read operations are safe by default; delete requires explicit action=delete and can be dry-run with dry_run=true.",
+    "The post action stores a message with content_blocks and broadcasts it to connected clients.",
     "Example:",
     "- search: { action: \"search\", query: \"keyword\", limit: 10 }",
     "- get: { action: \"get\", row_ids: [123], context_before: 2, context_after: 1 }",
     "- add: { action: \"add\", type: \"agent\", content: \"Hello\" }",
+    "- post: { action: \"post\", type: \"agent\", content: \"Card fallback\", content_blocks: [...] }",
     "- delete: { action: \"delete\", row_ids: [123, 124], dry_run: true, force: true }",
 ].join("\n");
+/** Optional post function injected by the web channel for broadcast support. */
+let registeredPostFn;
+/** Set the post function for the messages tool. Called by web channel wiring. */
+export function setMessagesPostFn(fn) {
+    registeredPostFn = fn;
+}
 export const messagesCrud = (pi) => {
     pi.on("before_agent_start", async (event) => ({
         systemPrompt: `${event.systemPrompt}\n\n${MESSAGES_TOOL_HINT}`,
@@ -517,11 +595,11 @@ export const messagesCrud = (pi) => {
     pi.registerTool({
         name: "messages",
         label: "messages",
-        description: "Search, retrieve, add, or delete messages via shared store.",
+        description: "Search, retrieve, add, post, or delete messages via shared store.",
         parameters: MessagesSchema,
         async execute(_toolCallId, params) {
             const defaultChat = getChatJid("web:default");
-            return runMessagesTool(params, defaultChat);
+            return runMessagesTool(params, defaultChat, registeredPostFn);
         },
     });
 };
