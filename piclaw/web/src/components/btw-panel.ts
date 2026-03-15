@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { html, useEffect, useRef } from '../vendor/preact-htm.js';
 import { renderMarkdown, renderMermaidDiagrams, renderThinkingMarkdown } from '../markdown.js';
+import { shouldShowBtwAnswer, shouldShowBtwControls } from '../ui/btw.js';
 
 export function BtwPanel({ session, onClose, onInject, onRetry }) {
     const thinkingRef = useRef(null);
@@ -25,6 +26,8 @@ export function BtwPanel({ session, onClose, onInject, onRetry }) {
     const running = session.status === 'running';
     const hasAnswer = Boolean(String(session.answer || '').trim());
     const hasThinking = Boolean(String(session.thinking || '').trim());
+    const showAnswer = shouldShowBtwAnswer(session);
+    const showControls = shouldShowBtwControls(session);
     const canInject = !running && hasAnswer;
 
     const statusLabel = running
@@ -60,33 +63,33 @@ export function BtwPanel({ session, onClose, onInject, onRetry }) {
                     ></div>
                 </details>
             `}
-            ${(running || hasAnswer) && html`
+            ${showAnswer && html`
                 <div class="btw-block btw-answer">
                     <div class="btw-answer-label">Answer</div>
-                    ${hasAnswer ? html`
-                        <div
-                            class="btw-answer-body post-content"
-                            ref=${answerRef}
-                            dangerouslySetInnerHTML=${{ __html: renderedAnswer }}
-                        ></div>
-                    ` : html`<div class="btw-answer-body">${running ? '…' : ''}</div>`}
+                    <div
+                        class="btw-answer-body post-content"
+                        ref=${answerRef}
+                        dangerouslySetInnerHTML=${{ __html: renderedAnswer }}
+                    ></div>
                 </div>
             `}
 
-            <div class="btw-panel-footer">
-                <div class="btw-panel-footer-left">
-                    ${session.question && html`
-                        <button class="btw-btn btw-btn-secondary" onClick=${() => onRetry?.()} disabled=${running}>
-                            Retry
+            ${showControls && html`
+                <div class="btw-panel-footer">
+                    <div class="btw-panel-footer-left">
+                        ${session.question && html`
+                            <button class="btw-btn btw-btn-secondary" onClick=${() => onRetry?.()}>
+                                Retry
+                            </button>
+                        `}
+                    </div>
+                    <div class="btw-panel-footer-right">
+                        <button class="btw-btn btw-btn-primary" onClick=${() => onInject?.()} disabled=${!canInject}>
+                            Inject into chat
                         </button>
-                    `}
+                    </div>
                 </div>
-                <div class="btw-panel-footer-right">
-                    <button class="btw-btn btw-btn-primary" onClick=${() => onInject?.()} disabled=${!canInject}>
-                        Inject into chat
-                    </button>
-                </div>
-            </div>
+            `}
         </section>
     `;
 }

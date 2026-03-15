@@ -208,4 +208,44 @@ describe("web agent message handler", () => {
     expect(body.command?.message).toContain("Available /test-card variants");
     expect(sentMessages).toHaveLength(0);
   });
+
+  test("defers a normal user turn while the chat is still active even if streaming already settled", async () => {
+    const queuedFollowups: Array<{ chatJid: string; content: string }> = [];
+    let storeMessageCalls = 0;
+
+    const channel = {
+      agentPool: {
+        isStreaming: () => false,
+        isActive: () => true,
+      },
+      json: (payload: unknown, status = 200) =>
+        new Response(JSON.stringify(payload), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        }),
+      enqueueQueuedFollowupItem: (chatJid: string, _rowId: number, content: string) => {
+        queuedFollowups.push({ chatJid, content });
+        return 777;
+      },
+      broadcastEvent: () => {},
+      storeMessage: () => {
+        storeMessageCalls += 1;
+        return null;
+      },
+      sendMessage: async () => {},
+    } as any;
+
+    const req = new Request("https://example.com/agent/default/message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "follow up while compacting" }),
+    });
+
+    const response = await handleAgentMessage(channel, req, "/agent/default/message", "web:default", "default");
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.queued).toBe("followup");
+    expect(queuedFollowups).toEqual([{ chatJid: "web:default", content: "follow up while compacting" }]);
+    expect(storeMessageCalls).toBe(0);
+  });
 });

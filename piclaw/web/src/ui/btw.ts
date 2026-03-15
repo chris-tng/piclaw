@@ -19,6 +19,17 @@ export function parseBtwCommand(input) {
     };
 }
 
+export function shouldShowBtwAnswer(session) {
+    if (!session) return false;
+    const answer = String(session.answer || '').trim();
+    return session.status !== 'running' && Boolean(answer);
+}
+
+export function shouldShowBtwControls(session) {
+    if (!session) return false;
+    return session.status !== 'running';
+}
+
 export function buildBtwInjectionText(session) {
     const question = String(session?.question || '').trim();
     const answer = String(session?.answer || '').trim();

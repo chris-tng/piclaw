@@ -650,6 +650,12 @@ export class AgentPool {
     return this.pool.get(chatJid)?.session.isStreaming ?? false;
   }
 
+  isActive(chatJid: string): boolean {
+    const session = this.pool.get(chatJid)?.session;
+    if (!session) return false;
+    return Boolean(session.isStreaming || session.isCompacting || session.isRetrying || session.isBashRunning);
+  }
+
   async queueStreamingMessage(
     chatJid: string,
     text: string,

@@ -3699,8 +3699,25 @@ body {
 }
 
 .btw-answer-body {
-    white-space: pre-wrap;
     overflow-wrap: anywhere;
+}
+
+.btw-answer-body > :first-child {
+    margin-top: 0;
+}
+
+.btw-answer-body > :last-child {
+    margin-bottom: 0;
+}
+
+.btw-answer-body ul,
+.btw-answer-body ol {
+    margin: 0.35em 0;
+    padding-left: 1.25em;
+}
+
+.btw-answer-body li {
+    margin: 0.15em 0;
 }
 
 .btw-error {

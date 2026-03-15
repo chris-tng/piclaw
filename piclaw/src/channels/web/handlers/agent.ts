@@ -78,12 +78,16 @@ export async function handleAgentMessage(
   const isStreaming = typeof channel.agentPool.isStreaming === "function"
     ? channel.agentPool.isStreaming(chatJid)
     : false;
-  // NOTE: we intentionally use the in-memory isStreaming() flag—not the DB
+  const isActive = typeof (channel.agentPool as { isActive?: (chatJid: string) => boolean }).isActive === "function"
+    ? (channel.agentPool as { isActive: (chatJid: string) => boolean }).isActive(chatJid)
+    : isStreaming;
+  // NOTE: we intentionally use the in-memory active-run flags—not the DB
   // inflight marker—to decide whether to queue/defer. The DB marker survives
   // restarts and can be stale (cleared only when recovery runs), so trusting
   // it here would silently defer messages against ghost turns that no
-  // processChat is actively draining. isStreaming() resets on restart and
-  // accurately reflects whether the agent pool has an active run.
+  // processChat is actively draining. The in-memory session state resets on
+  // restart and reflects whether the agent pool still has an active run,
+  // including streaming/compaction/retry phases of the same turn.
 
 
   const queueDeferredFollowup = (
@@ -125,10 +129,10 @@ export async function handleAgentMessage(
   // Normal in-turn user messages should remain out of the timeline until the
   // current turn fully finalizes. Queue them in server state first, then
   // persist/broadcast the real user message only when consumed.
-  const shouldDeferQueuedFollowup = !command && !themeCommand && !testCardCommand && isStreaming && (requestMode === "queue" || requestMode === "auto");
+  const shouldDeferQueuedFollowup = !command && !themeCommand && !testCardCommand && isActive && (requestMode === "queue" || requestMode === "auto");
 
   console.log(
-    `[web] handleAgentMessage ${chatJid}: mode=${requestMode}, isStreaming=${isStreaming}, ` +
+    `[web] handleAgentMessage ${chatJid}: mode=${requestMode}, isStreaming=${isStreaming}, isActive=${isActive}, ` +
       `shouldDefer=${shouldDeferQueuedFollowup}, hasCommand=${!!command}, ` +
       `content=${content.slice(0, 60)}`
   );
