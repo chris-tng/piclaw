@@ -215,6 +215,86 @@ Key environment variables:
 
 For the full list, auth setup (TOTP/passkeys), and reverse proxy configuration, see [docs/configuration.md](docs/configuration.md).
 
+### Auth quick notes
+
+- Run `/totp` in the web UI to initialize TOTP with a single card that shows the QR code, manual entry code, and confirmation input.
+- The secret is committed only after that same card is confirmed with a valid live TOTP code.
+- `/totp reset <current-code>` stages a new secret, then commits it only after the new code is confirmed; existing web sessions are invalidated only after that succeeds.
+- `/passkey enrol` still requires a TOTP-authenticated session.
+
+### Reverse proxies / tunnels
+
+> [!IMPORTANT]
+> If piclaw runs behind a reverse proxy or tunnel (Cloudflare Tunnel, Caddy, Nginx, etc.), enable proxy trust.
+
+```bash
+PICLAW_TRUST_PROXY=1
+```
+
+See [docs/reverse-proxy.md](docs/reverse-proxy.md) for forwarded-header requirements, examples, and troubleshooting.
+
+## Development
+
+Run build/package commands from the **repo root**:
+
+```bash
+make build-piclaw    # full build: vendor bundle + web assets + TypeScript
+make vendor          # rebuild vendored assets
+make lint            # ESLint
+make test            # full test suite
+make local-install   # pack, install globally, restart piclaw
+```
+
+The implementation lives under `runtime/`, so direct Bun test runs should target that subtree. Sequential mode is recommended for SQLite safety:
+
+```bash
+cd runtime && bun test --max-concurrency=1
+```
+
+### Local-only `pi` authority (recommended)
+
+To avoid global-vs-local CLI drift, this repo enforces project-local `pi` via `.envrc`:
+
+```bash
+# one-time
+cd /path/to/piclaw
+direnv allow
+
+# verify authority and version alignment
+make check-pi-local
+```
+
+Expected behavior inside the repo:
+- `which pi` resolves to `./node_modules/.bin/pi`
+- local installed `@mariozechner/pi-coding-agent` matches `package.json`
+
+If the check fails, re-align local dependencies:
+
+```bash
+bun install --frozen-lockfile
+```
+
+## Release
+
+Pushing a version tag triggers `.github/workflows/publish.yml` and publishes multi-arch GHCR images:
+
+- `ghcr.io/rcarmo/piclaw:<tag>`
+- `ghcr.io/rcarmo/piclaw:latest`
+
+```bash
+make bump-patch
+make bump-minor
+make push
+```
+
+## Container runtime
+
+PiClaw works with any OCI-compliant runtime.
+
+- **Preferred image source:** `ghcr.io/rcarmo/piclaw`
+- **Primary target:** Docker / Docker Desktop
+- Also works with Apple Containers, Podman, nerdctl, and similar runtimes
+
 ## Documentation
 
 - [Configuration](docs/configuration.md)

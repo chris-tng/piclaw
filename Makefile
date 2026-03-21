@@ -39,7 +39,7 @@ PI_AGENT_VERSION ?= $(shell jq -r '.dependencies["@mariozechner/pi-coding-agent"
 WEB_BUILD_TEST_TIMEOUT_MS ?= 20000
 
 .PHONY: help up down enter build build-piclaw build-web build-ts vendor update-mermaid-vendor pack \
-        local-install restart lint test test-coverage ci-fast publish-smoke \
+        local-install restart lint test test-coverage check-pi-local ci-fast publish-smoke \
         dual-tag tag-ghcr sync-version bump-minor bump-patch push
 
 help: ## Show this help
@@ -173,6 +173,9 @@ test: ## Run piclaw tests
 
 test-coverage: ## Run piclaw tests with coverage
 	cd runtime && bun run test:coverage
+
+check-pi-local: ## Verify project-local pi authority + version alignment
+	./scripts/check-pi-local-authority.sh
 
 ci-fast: ## Run the canonical fast CI contract used by GitHub Actions
 	bun run ci:fast
