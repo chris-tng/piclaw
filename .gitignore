@@ -20,6 +20,8 @@ docker-compose.override.yml
 home/
 workspaces/
 node_modules/
+runtime/extensions/node_modules
+runtime/extensions/drawio-editor/
 coverage/
 .bun/
 

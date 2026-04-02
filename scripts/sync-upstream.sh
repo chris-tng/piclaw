@@ -15,7 +15,7 @@ Options:
   --main <branch>             Main branch name (default: main)
   --overrides <branch>        Overrides branch name (default: chris/overrides)
   --no-push                   Skip pushing branches to origin
-  --skip-typecheck            Skip bun typecheck in ./piclaw
+  --skip-typecheck            Skip bun typecheck (repo root or runtime/)
   -h, --help                  Show this help
 
 Examples:
@@ -118,16 +118,26 @@ git rebase "${UPSTREAM_REMOTE}/${MAIN_BRANCH}"
 
 if [[ "$NO_PUSH" != "true" ]]; then
   echo "[sync] Pushing ${MAIN_BRANCH} -> ${ORIGIN_REMOTE}/${MAIN_BRANCH}"
-  git push "$ORIGIN_REMOTE" "$MAIN_BRANCH"
+  if ! git push "$ORIGIN_REMOTE" "$MAIN_BRANCH"; then
+    echo "[sync] Non-fast-forward push rejected for ${MAIN_BRANCH}; retrying with --force-with-lease (mirror branch policy)."
+    git push --force-with-lease "$ORIGIN_REMOTE" "$MAIN_BRANCH"
+  fi
 fi
 
 echo "[sync] Rebasing ${OVERRIDES_BRANCH} onto ${MAIN_BRANCH}"
 git switch "$OVERRIDES_BRANCH"
 git rebase "$MAIN_BRANCH"
 
-if [[ "$SKIP_TYPECHECK" != "true" && -f "${REPO_ROOT}/piclaw/package.json" ]]; then
-  echo "[sync] Running typecheck in ${REPO_ROOT}/piclaw"
-  (cd "${REPO_ROOT}/piclaw" && bun run typecheck)
+if [[ "$SKIP_TYPECHECK" != "true" ]]; then
+  if [[ -f "${REPO_ROOT}/package.json" ]]; then
+    echo "[sync] Running typecheck in ${REPO_ROOT}"
+    (cd "${REPO_ROOT}" && bun run typecheck)
+  elif [[ -f "${REPO_ROOT}/runtime/package.json" ]]; then
+    echo "[sync] Running typecheck in ${REPO_ROOT}/runtime"
+    (cd "${REPO_ROOT}/runtime" && bun run typecheck)
+  else
+    echo "[sync] Skipping typecheck: no package.json found at repo root or runtime/"
+  fi
 fi
 
 if [[ "$NO_PUSH" != "true" ]]; then
